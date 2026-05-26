@@ -1,0 +1,66 @@
+# ---- secrets & runtime data ----
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+ADMIN_CREDENTIALS.txt
+*safe heaven*
+**/data/*.db
+**/data/*.db-journal
+**/data/*.db-wal
+**/data/*.db-shm
+
+# ---- huge knowledge-base inputs (not part of the app) ----
+mocks/
+extraction/extracted/
+extraction/docs/
+extraction/cache/
+extraction/output/
+extraction/*.log
+extraction/ingestion_report.md
+extraction/ingestion_report.csv
+extraction/INDEX.md
+extraction/manifest.json
+
+# ---- node ----
+node_modules/
+.next/
+out/
+build/
+dist/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
+coverage/
+
+# ---- editor / OS junk ----
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# ---- screenshots, scratchpads, design docs that aren't source ----
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.doc
+*.docx
+New Text Document.txt
+probe400.txt
+
+# ---- local Claude config ----
+.claude/
+
+# ---- logs ----
+*.log
+/tmp/
