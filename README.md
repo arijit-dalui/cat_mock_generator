@@ -198,6 +198,40 @@ CAT_Mock_Generator_Plan.md   design + roadmap
 
 ---
 
+## Deploying to Vercel + Supabase + Groq
+
+The `cloud-deploy` branch contains a Postgres adapter and a Vercel Cron
+worker so the whole thing can run on free tiers with a public URL.
+
+1. **Groq**: sign up at https://console.groq.com, create an API key.
+2. **Supabase**: create a project (region nearest you). Open Project
+   Settings → Database → Connection string → URI mode; copy the
+   `postgresql://...` URL.
+3. **Vercel**: import the GitHub repo. Set **Root Directory** to `app`.
+4. In Vercel project settings → Environment Variables, add:
+   - `DATABASE_URL` = Supabase URI
+   - `LLM_PROVIDER` = `groq`
+   - `GROQ_API_KEY` = `gsk_...`
+   - `GROQ_MODEL` = `llama-3.1-70b-versatile`
+   - `SESSION_SECRET` = 64 random hex chars
+   - `WORKER_TOKEN` = 64 random hex chars (also reused as CRON_SECRET)
+   - `CRON_SECRET` = same as WORKER_TOKEN
+   - `ADMIN_USERNAME` = your choice
+   - `ADMIN_PASSWORD` = strong password
+   - `POOL_SIZE` = `3`
+   - `APP_URL` = your Vercel domain (set after first deploy)
+5. First deploy. Then run the schema seed from your laptop with the same
+   env (`DATABASE_URL` set): `npm run init-db`.
+6. Vercel Cron will start firing `/api/internal/cron-topup` every 5
+   minutes and refill the pool.
+
+Notes:
+- The KB (`extraction/docs`) is not deployed — RC will fall back to Aeon
+  essays / LLM-generated passages; other sections use exemplar-free prompts.
+- Vercel Hobby caps function duration at 60s. A single set generation on
+  Groq runs well under that; very occasionally a multi-call section (VA, QA)
+  may time out. The cron will simply retry the section next tick.
+
 ## License
 
 No license declared — treat as all-rights-reserved by the author until one

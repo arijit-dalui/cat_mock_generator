@@ -1,77 +1,79 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
 import { SECTIONS } from "@/lib/config";
 
-interface Row {
-  [key: string]: unknown;
-}
+const usingPostgres = !!process.env.DATABASE_URL;
+
+/** Date-truncation expression for the active driver. */
+const dateExpr = (col: string) =>
+  usingPostgres ? `to_char(${col}, 'YYYY-MM-DD')` : `date(${col})`;
+
+/** "WHERE created_at >= ..." for the last N days, driver-aware. */
+const sinceDays = (col: string, n: number) =>
+  usingPostgres
+    ? `${col} >= now() - interval '${n} days'`
+    : `${col} >= date('now', '-${n} days')`;
+
+const submittedTrue = usingPostgres ? "submitted = TRUE" : "submitted = 1";
 
 export async function GET() {
-  const user = currentUser();
+  const user = await currentUser();
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Admin only." }, { status: 403 });
   }
 
   const totalUsers = (
-    db.prepare("SELECT COUNT(*) c FROM users WHERE role = 'user'").get() as { c: number }
+    (await query<{ c: number }>(
+      "SELECT COUNT(*) c FROM users WHERE role = 'user'",
+    ))[0]
   ).c;
 
-  const recentRegistrations = db
-    .prepare(
-      `SELECT date(created_at) d, COUNT(*) c FROM users
-       WHERE role = 'user' AND created_at >= date('now', '-30 days')
-       GROUP BY d ORDER BY d`,
-    )
-    .all() as { d: string; c: number }[];
+  const recentRegistrations = await query<{ d: string; c: number }>(
+    `SELECT ${dateExpr("created_at")} d, COUNT(*) c FROM users
+     WHERE role = 'user' AND ${sinceDays("created_at", 30)}
+     GROUP BY d ORDER BY d`,
+  );
 
-  const dau = db
-    .prepare(
-      `SELECT date(created_at) d, COUNT(DISTINCT user_id) c FROM events
-       WHERE type = 'login' AND created_at >= date('now', '-14 days')
-       GROUP BY d ORDER BY d`,
-    )
-    .all() as { d: string; c: number }[];
+  const dau = await query<{ d: string; c: number }>(
+    `SELECT ${dateExpr("created_at")} d, COUNT(DISTINCT user_id) c FROM events
+     WHERE type = 'login' AND ${sinceDays("created_at", 14)}
+     GROUP BY d ORDER BY d`,
+  );
 
-  const generated = db
-    .prepare(
-      "SELECT section, COUNT(*) c FROM events WHERE type = 'generate' GROUP BY section",
-    )
-    .all() as { section: string; c: number }[];
+  const generated = await query<{ section: string; c: number }>(
+    "SELECT section, COUNT(*) c FROM events WHERE type = 'generate' GROUP BY section",
+  );
 
-  const solved = db
-    .prepare(
-      `SELECT section, COUNT(*) c, AVG(score * 1.0 / NULLIF(total, 0)) avg
-       FROM attempts WHERE submitted = 1 GROUP BY section`,
-    )
-    .all() as { section: string; c: number; avg: number | null }[];
+  const solved = await query<{ section: string; c: number; avg: number | null }>(
+    `SELECT section, COUNT(*) c, AVG(score * 1.0 / NULLIF(total, 0)) avg
+     FROM attempts WHERE ${submittedTrue} GROUP BY section`,
+  );
 
-  const pool = db
-    .prepare(
-      "SELECT section, COUNT(*) c FROM generated_sets WHERE status = 'pooled' GROUP BY section",
-    )
-    .all() as { section: string; c: number }[];
+  const pool = await query<{ section: string; c: number }>(
+    "SELECT section, COUNT(*) c FROM generated_sets WHERE status = 'pooled' GROUP BY section",
+  );
 
-  const kb = db
-    .prepare("SELECT section, COUNT(*) c FROM kb_items GROUP BY section")
-    .all() as { section: string; c: number }[];
+  const kb = await query<{ section: string; c: number }>(
+    "SELECT section, COUNT(*) c FROM kb_items GROUP BY section",
+  );
 
   const bySection = (rows: { section: string; c: number; avg?: number | null }[]) => {
     const out: Record<string, { count: number; avgScore?: number | null }> = {};
     for (const s of SECTIONS) out[s] = { count: 0 };
     for (const r of rows) {
       if (out[r.section]) {
-        out[r.section].count = r.c;
-        if ("avg" in r) out[r.section].avgScore = r.avg;
+        out[r.section].count = Number(r.c);
+        if ("avg" in r) out[r.section].avgScore = r.avg == null ? null : Number(r.avg);
       }
     }
     return out;
   };
 
   return NextResponse.json({
-    totalUsers,
-    recentRegistrations,
-    dau,
+    totalUsers: Number(totalUsers),
+    recentRegistrations: recentRegistrations.map((r) => ({ d: r.d, c: Number(r.c) })),
+    dau: dau.map((r) => ({ d: r.d, c: Number(r.c) })),
     generated: bySection(generated),
     solved: bySection(solved),
     pool: bySection(pool),

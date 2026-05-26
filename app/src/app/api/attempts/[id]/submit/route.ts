@@ -9,11 +9,11 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } },
 ) {
-  const user = currentUser();
+  const user = await currentUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
-  const attempt = attempts.byId(Number(params.id));
+  const attempt = await attempts.byId(Number(params.id));
   if (!attempt || attempt.user_id !== user.id) {
     return NextResponse.json({ error: "Attempt not found." }, { status: 404 });
   }
@@ -32,15 +32,18 @@ export async function POST(
   }
   const answers = (body.answers ?? {}) as Record<string, number>;
 
-  const setRow = sets.byId(attempt.set_id);
+  const setRow = await sets.byId(attempt.set_id);
   if (!setRow) {
     return NextResponse.json({ error: "Set not found." }, { status: 404 });
   }
-  const set = JSON.parse(setRow.payload) as GeneratedSet;
+  // payload may be a string (sqlite returns text) or already-parsed object (pg JSONB cast to text returns string too)
+  const set = (typeof setRow.payload === "string"
+    ? JSON.parse(setRow.payload)
+    : setRow.payload) as GeneratedSet;
   const { correct, total } = scoreSet(set, answers);
 
-  attempts.submit(attempt.id, answers, correct, total);
-  events.log("solve", user.id, attempt.section, { score: correct, total });
+  await attempts.submit(attempt.id, answers, correct, total);
+  await events.log("solve", user.id, attempt.section, { score: correct, total });
 
   return NextResponse.json({ score: correct, total });
 }

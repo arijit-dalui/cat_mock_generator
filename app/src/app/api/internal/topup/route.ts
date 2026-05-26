@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   }
   try {
     const generated = await generateSet(section);
-    const id = sets.insert(section, generated, "worker");
+    const id = await sets.insert(section, generated, "worker");
     return NextResponse.json({
       id,
       section,

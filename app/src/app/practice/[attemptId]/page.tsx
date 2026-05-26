@@ -4,12 +4,12 @@ import SolveClient from "./SolveClient";
 
 export const dynamic = "force-dynamic";
 
-export default function PracticePage({
+export default async function PracticePage({
   params,
 }: {
   params: { attemptId: string };
 }) {
-  const user = currentUser();
+  const user = await currentUser();
   if (!user) redirect("/login");
   return <SolveClient attemptId={params.attemptId} />;
 }

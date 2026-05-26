@@ -10,9 +10,9 @@ import { users, sessions, type User } from "./db";
 
 const COOKIE = "cat_session";
 
-/** SQLite-friendly timestamp: "YYYY-MM-DD HH:MM:SS" in UTC. */
+/** ISO timestamp safe for both SQLite and Postgres. */
 function sqlTime(d: Date): string {
-  return d.toISOString().slice(0, 19).replace("T", " ");
+  return d.toISOString();
 }
 
 export function hashPassword(password: string): string {
@@ -24,10 +24,10 @@ export function verifyPassword(password: string, hash: string): boolean {
 }
 
 /** Create a session row and set the session cookie. */
-export function startSession(userId: number): void {
+export async function startSession(userId: number): Promise<void> {
   const token = crypto.randomBytes(32).toString("hex");
   const expires = new Date(Date.now() + config.sessionTtlDays * 86400_000);
-  sessions.create(token, userId, sqlTime(expires));
+  await sessions.create(token, userId, sqlTime(expires));
   cookies().set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -37,23 +37,25 @@ export function startSession(userId: number): void {
 }
 
 /** Destroy the current session and clear the cookie. */
-export function endSession(): void {
+export async function endSession(): Promise<void> {
   const c = cookies().get(COOKIE);
-  if (c) sessions.destroy(c.value);
+  if (c) await sessions.destroy(c.value);
   cookies().delete(COOKIE);
 }
 
 /** Resolve the logged-in user from the session cookie, or null. */
-export function currentUser(): User | null {
+export async function currentUser(): Promise<User | null> {
   const c = cookies().get(COOKIE);
   if (!c) return null;
-  const s = sessions.get(c.value);
+  const s = await sessions.get(c.value);
   if (!s) return null;
-  if (new Date(s.expires_at.replace(" ", "T") + "Z") < new Date()) {
-    sessions.destroy(c.value);
+  // expires_at may arrive as "YYYY-MM-DD HH:MM:SS" (sqlite) or ISO (postgres).
+  const exp = new Date(/T/.test(s.expires_at) ? s.expires_at : s.expires_at.replace(" ", "T") + "Z");
+  if (exp < new Date()) {
+    await sessions.destroy(c.value);
     return null;
   }
-  return users.byId(s.user_id) ?? null;
+  return (await users.byId(s.user_id)) ?? null;
 }
 
 /** Username rules: 3-30 chars, letters/digits and @ . _ - only. */

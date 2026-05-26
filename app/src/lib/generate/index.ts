@@ -107,7 +107,7 @@ function normalizeQuestion(raw: any, type: string): GenQuestion | null {
     : [];
   if (prompt.length < 5 || options.length !== 4) return null;
   // Reject obvious placeholder options like "o1", "o2", "o3", "o4".
-  if (options.every((o) => /^o\d$/i.test(o))) return null;
+  if (options.every((o: string) => /^o\d$/i.test(o))) return null;
   const answer = coerceAnswer(
     raw.answer ?? raw.correct ?? raw.correctAnswer ?? raw.correct_option,
     4,
@@ -137,7 +137,7 @@ async function genQuestions(
   const items: GenQuestion[] = [];
   for (const step of plan) {
     try {
-      const exemplars = sampleExemplars(section, {
+      const exemplars = await sampleExemplars(section, {
         subtype: step.subtype,
         limit: 3,
       });
@@ -154,7 +154,7 @@ async function genQuestions(
           warnings.push(`malformed ${step.subtype} question discarded`);
           continue;
         }
-        if (maxSimilarityToKb(norm.prompt, section) > LEAK_THRESHOLD) {
+        if ((await maxSimilarityToKb(norm.prompt, section)) > LEAK_THRESHOLD) {
           warnings.push(`near-duplicate ${step.subtype} question discarded`);
           continue;
         }
@@ -225,14 +225,34 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
       }
     }
     if (!passage) {
-      const p = sampleExemplars("RC", {
+      const exs = await sampleExemplars("RC", {
         subtype: "rc_passage",
         limit: 1,
         minWords: 250,
-      })[0];
+      });
+      const p = exs[0];
       if (p) {
         passage = cleanExemplar(p.stem);
         source = "mock-derived passage";
+      }
+    }
+    if (!passage) {
+      // Ask the LLM itself to produce a CAT-style RC passage from scratch.
+      try {
+        const synth = await chatJSON<{ passage?: string; topic?: string }>(
+          `You are a CAT-style RC passage writer. Generate one original ` +
+            `350-450 word essay-style passage suitable for a CAT reading-` +
+            `comprehension question. Pick a non-fiction topic (philosophy, ` +
+            `history of science, economics, ecology, etc.). Use clean ASCII ` +
+            `prose, no headings, no markdown. Return JSON: {"topic":"...","passage":"..."}.`,
+          { temperature: 0.7 },
+        );
+        if (synth?.passage && synth.passage.length > 800) {
+          passage = synth.passage;
+          source = `LLM-generated essay${synth.topic ? " on " + synth.topic : ""}`;
+        }
+      } catch {
+        /* fall through to warning */
       }
     }
     if (!passage) {
@@ -240,7 +260,7 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
       continue;
     }
     try {
-      const ex = sampleExemplars("RC", { subtype: "rc", limit: 1 });
+      const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
       const data = await chatJSON<any>(rcPrompt(passage, source, ex), {
         temperature: 0.7,
       });
@@ -272,7 +292,7 @@ async function genContextSets(
   const sets: GenSubSet[] = [];
   for (let i = 0; i < 2; i++) {
     try {
-      const ex = sampleExemplars(section, { limit: 2 });
+      const ex = await sampleExemplars(section, { limit: 2 });
       const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8 });
       const set = normalizeSet(data, section.toLowerCase(), label, "", "mock-derived", warnings);
       if (set.questions.length) sets.push(set);

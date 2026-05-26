@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/internal/cron-topup",
+      "schedule": "*/5 * * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/generate/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/internal/topup/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/internal/cron-topup/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}
