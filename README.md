@@ -232,6 +232,20 @@ Notes:
   Groq runs well under that; very occasionally a multi-call section (VA, QA)
   may time out. The cron will simply retry the section next tick.
 
+## Contributing
+
+`main` is protected — direct pushes are blocked. To contribute:
+
+1. **Fork** the repo (button top-right on the GitHub page).
+2. Clone your fork, create a branch: `git checkout -b your-feature`.
+3. Make your changes, commit, push to your fork.
+4. **Open a Pull Request** against `arijit-dalui/cat_mock_generator:main`.
+5. I'll review, request changes if needed, and merge.
+
+For bugs, quality issues, or feature ideas without a code change, please
+**open a GitHub Issue** — it's the easiest way to flag a problem and
+discuss before code goes in.
+
 ## License
 
 No license declared — treat as all-rights-reserved by the author until one
