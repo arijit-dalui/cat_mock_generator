@@ -12,40 +12,33 @@ import type { KbItem } from "../kb";
 
 /** What every explanation MUST contain, regardless of section. */
 const EXPLANATION_RUBRIC = `
-Each entry in "explanations" must be 2-4 sentences and follow this shape:
-- Start with the LABEL ("Correct." or "Incorrect.").
-- For the right option: state the key insight, then the decisive step that
-  rules out the trap.
-- For each wrong option: name the SPECIFIC misconception or wrong calculation
-  that produces that option (e.g. "uses gross instead of net", "treats 'all
-  except' as 'only'", "assumes uniform distribution where the data clusters",
-  "confuses median with mean"). Do not say merely "this is wrong" - say WHY a
-  reasonable test-taker would pick it and why it fails.
+Explanation rules:
+- Each "explanations[i]" is 2-3 sentences. Start with "Correct." or "Incorrect.".
+- Right option: name the key insight + the step that rules out the trap.
+- Each wrong option: name the SPECIFIC misconception that produces it
+  (e.g. "uses gross instead of net", "treats 'at least' as 'exactly'",
+  "confuses median with mean"). Never say only "this is wrong".
 
-"solution" must be a step-by-step walk-through (5-12 lines) showing every
-substitution, lemma, or textual inference used. Mention the trap explicitly
-("Note: the question says 'at least', not 'exactly' - missing this gives the
-wrong option B"). Do NOT skip arithmetic; show the numbers that survive each
-step.`;
+"solution" rules (CRITICAL):
+- Write a CLEAN final solution, 4-10 short lines, with concrete numbers at
+  each step.
+- DO NOT narrate your own thinking, debugging, or mistakes. If your first
+  approach was wrong, redo silently and emit only the corrected solution.
+- BANNED phrases: "let's correct", "I made an error", "reflecting on the
+  step", "actually", "wait", "re-evaluating". The solution must read like
+  it was written by a confident solver in one pass.
+- If the working contradicts the "answer" index, REDO the question.`;
 
 const DIFFICULTY_RUBRIC = `
-DIFFICULTY TARGET: this question should land in the 75-85% accuracy band for
-a CAT 99-percentile aspirant. That means:
-- A weak student gets it wrong fast (lands on a distractor in under 30s).
-- A strong student needs 2-3 minutes of real work.
-- The question requires AT LEAST 3 inference/computation steps. One-step
-  questions ("plug into formula", "scan one line of the passage") are BANNED.
-- The decisive insight is non-obvious: a hidden constraint, a tricky case
-  split, a quantifier flip ("at least" vs "exactly"), a unit trap, a
-  scope-of-pronoun ambiguity, or a counter-intuitive corollary.
+DIFFICULTY: target the CAT 99-percentile band. Each question must require
+3+ steps of inference or calculation. BAN one-step questions ("plug into
+formula", "scan one line"). The decisive insight should be non-obvious:
+a hidden constraint, a tricky case split, a quantifier flip ("at least" vs
+"exactly"), a unit trap, or a counter-intuitive corollary.
 
-Distractor design (CRITICAL):
-- Every wrong option must be the answer you get from a SPECIFIC named mistake.
-- At least one distractor must be "the answer to a slightly different
-  question" (e.g. computed without applying the last constraint, or computed
-  for the wrong row/quantifier).
-- Avoid silly distractors (round numbers far from the right value, obviously
-  off-topic options). Distractors should pass a one-second sanity check.`;
+Distractors: every wrong option must be the answer you get from a SPECIFIC
+named mistake (one of them should be "the answer to a slightly different
+question"). Distractors must look plausible at a one-second glance.`;
 
 /** JSON contract for a batch of standalone questions (VA, QA). */
 const SCHEMA_QUESTIONS = `Return JSON of this exact shape:
