@@ -3,8 +3,8 @@ import { config, SECTIONS, type Section } from "@/lib/config";
 import { sets } from "@/lib/db";
 import { generateSet } from "@/lib/generate";
 
-// Generation can take several minutes on a CPU model.
-export const maxDuration = 600;
+// On Groq, a set generates in 10-30s; Hobby max is 300s.
+export const maxDuration = 300;
 
 /**
  * Worker-only endpoint: generate ONE set for the given section and add it to
