@@ -92,7 +92,7 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
       model: config.llm.groqModel,
       messages,
       temperature: opts.temperature ?? 0.7,
-      max_tokens: opts.maxTokens ?? 4096,
+      max_tokens: opts.maxTokens ?? 8192,
       response_format: { type: "json_object" },
     }),
     {
