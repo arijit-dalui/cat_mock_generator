@@ -24,20 +24,32 @@ export async function POST(req: Request) {
   const pe = validatePassword(password);
   if (pe) return NextResponse.json({ error: pe }, { status: 400 });
 
-  if (await users.byUsername(username)) {
+  try {
+    if (await users.byUsername(username)) {
+      return NextResponse.json(
+        { error: "That username is already taken." },
+        { status: 409 },
+      );
+    }
+
+    const user = await users.create(username, hashPassword(password), "user");
+    await startSession(user.id);
+    await events.log("register", user.id);
+    await events.log("login", user.id);
+
+    return NextResponse.json({
+      ok: true,
+      user: { id: user.id, username: user.username, role: user.role },
+    });
+  } catch (e) {
+    console.error("[register] failed:", e);
     return NextResponse.json(
-      { error: "That username is already taken." },
-      { status: 409 },
+      {
+        error:
+          "Registration failed: " +
+          (e instanceof Error ? e.message : String(e)),
+      },
+      { status: 500 },
     );
   }
-
-  const user = await users.create(username, hashPassword(password), "user");
-  await startSession(user.id);
-  await events.log("register", user.id);
-  await events.log("login", user.id);
-
-  return NextResponse.json({
-    ok: true,
-    user: { id: user.id, username: user.username, role: user.role },
-  });
 }

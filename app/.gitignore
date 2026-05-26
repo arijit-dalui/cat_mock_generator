@@ -12,3 +12,4 @@ next-env.d.ts
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+vercel-env.env
