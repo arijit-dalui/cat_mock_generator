@@ -128,6 +128,10 @@ interface Plan {
   count: number;
 }
 
+/** Sleep between Groq calls to stay under free-tier RPM/TPM limits. */
+const PACE_MS = 3500;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function genQuestions(
   section: Section,
   plan: Plan[],
@@ -135,7 +139,8 @@ async function genQuestions(
   warnings: string[],
 ): Promise<GenQuestion[]> {
   const items: GenQuestion[] = [];
-  for (const step of plan) {
+  for (const [stepIdx, step] of plan.entries()) {
+    if (stepIdx > 0) await sleep(PACE_MS);
     try {
       const exemplars = await sampleExemplars(section, {
         subtype: step.subtype,
@@ -214,6 +219,7 @@ function normalizeSet(
 async function genRC(warnings: string[]): Promise<GenSubSet[]> {
   const sets: GenSubSet[] = [];
   for (let i = 0; i < 2; i++) {
+    if (i > 0) await sleep(PACE_MS);
     let passage = "";
     let source = "";
     // mix: try a fresh Aeon essay roughly half the time
@@ -247,7 +253,7 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
             `prose, no headings, no markdown. Return JSON: {"topic":"...","passage":"..."}.`,
           { temperature: 0.7 },
         );
-        if (synth?.passage && synth.passage.length > 800) {
+        if (synth?.passage && synth.passage.length > 400) {
           passage = synth.passage;
           source = `LLM-generated essay${synth.topic ? " on " + synth.topic : ""}`;
         }
@@ -291,6 +297,7 @@ async function genContextSets(
 ): Promise<GenSubSet[]> {
   const sets: GenSubSet[] = [];
   for (let i = 0; i < 2; i++) {
+    if (i > 0) await sleep(PACE_MS);
     try {
       const ex = await sampleExemplars(section, { limit: 2 });
       const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8 });
@@ -342,7 +349,8 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
   if (section === "QA") {
     const items = await genQuestions("QA", QA_PLAN, qaPrompt, warnings);
     const verified: GenQuestion[] = [];
-    for (const q of items) {
+    for (const [vi, q] of items.entries()) {
+      if (vi > 0) await sleep(2000);
       if (await verifyAnswer(q)) verified.push(q);
       else warnings.push(`QA question failed answer verification and was dropped`);
     }
