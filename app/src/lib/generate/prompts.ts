@@ -1,8 +1,51 @@
 /**
  * Prompt builders for the generation engine. Each builder returns a string
  * that asks the LLM for strict JSON in the shape the validator expects.
+ *
+ * Difficulty target: top-percentile CAT (LRDI / VARC / QA) — the kind of
+ * question that a strong test-taker still has to think about for 2-3 minutes.
+ * The prompts spell out anti-easy rubrics, distractor design rules, and a
+ * mandatory explanation structure so the LLM can't fall back to baby
+ * mechanics.
  */
 import type { KbItem } from "../kb";
+
+/** What every explanation MUST contain, regardless of section. */
+const EXPLANATION_RUBRIC = `
+Each entry in "explanations" must be 2-4 sentences and follow this shape:
+- Start with the LABEL ("Correct." or "Incorrect.").
+- For the right option: state the key insight, then the decisive step that
+  rules out the trap.
+- For each wrong option: name the SPECIFIC misconception or wrong calculation
+  that produces that option (e.g. "uses gross instead of net", "treats 'all
+  except' as 'only'", "assumes uniform distribution where the data clusters",
+  "confuses median with mean"). Do not say merely "this is wrong" - say WHY a
+  reasonable test-taker would pick it and why it fails.
+
+"solution" must be a step-by-step walk-through (5-12 lines) showing every
+substitution, lemma, or textual inference used. Mention the trap explicitly
+("Note: the question says 'at least', not 'exactly' - missing this gives the
+wrong option B"). Do NOT skip arithmetic; show the numbers that survive each
+step.`;
+
+const DIFFICULTY_RUBRIC = `
+DIFFICULTY TARGET: this question should land in the 75-85% accuracy band for
+a CAT 99-percentile aspirant. That means:
+- A weak student gets it wrong fast (lands on a distractor in under 30s).
+- A strong student needs 2-3 minutes of real work.
+- The question requires AT LEAST 3 inference/computation steps. One-step
+  questions ("plug into formula", "scan one line of the passage") are BANNED.
+- The decisive insight is non-obvious: a hidden constraint, a tricky case
+  split, a quantifier flip ("at least" vs "exactly"), a unit trap, a
+  scope-of-pronoun ambiguity, or a counter-intuitive corollary.
+
+Distractor design (CRITICAL):
+- Every wrong option must be the answer you get from a SPECIFIC named mistake.
+- At least one distractor must be "the answer to a slightly different
+  question" (e.g. computed without applying the last constraint, or computed
+  for the wrong row/quantifier).
+- Avoid silly distractors (round numbers far from the right value, obviously
+  off-topic options). Distractors should pass a one-second sanity check.`;
 
 /** JSON contract for a batch of standalone questions (VA, QA). */
 const SCHEMA_QUESTIONS = `Return JSON of this exact shape:
@@ -16,8 +59,7 @@ const SCHEMA_QUESTIONS = `Return JSON of this exact shape:
   }
 ]}
 Rules: exactly 4 options; "answer" is the 0-based index of the single correct
-option; "explanations" has exactly 4 entries, one per option, each saying
-clearly why that option is correct or incorrect.`;
+option; "explanations" has exactly 4 entries, one per option.`;
 
 /** JSON contract for a passage/data set with 4 questions (RC, DI, LR). */
 const SCHEMA_SET = `Return JSON of this exact shape:
@@ -33,15 +75,14 @@ const SCHEMA_SET = `Return JSON of this exact shape:
     }
   ]
 }
-Rules: exactly 4 questions; each question has exactly 4 options; "answer" is the
-0-based index of the correct option; "explanations" has 4 entries.`;
+Rules: exactly 4 questions; each question has exactly 4 options; "answer" is
+the 0-based index of the correct option; "explanations" has 4 entries.`;
 
 /** Clean up the artefacts that PDF extraction leaves in KB exemplars:
  * single-character-per-line wrap, ALL-CAPS DIRECTIONS preambles, repeated
  * whitespace, "Q.27" / "Q27." numbering, page footers, etc. */
 export function cleanExemplar(stem: string): string {
   let s = stem;
-  // Re-flow lines where every "line" is only 1-2 characters wide.
   const lines = s.split(/\r?\n/);
   const reflowed: string[] = [];
   let buf = "";
@@ -67,14 +108,12 @@ export function cleanExemplar(stem: string): string {
   }
   if (buf) reflowed.push(buf);
   s = reflowed.join("\n");
-  // Strip CAT-paper preamble blocks.
   s = s.replace(
     /DIRECTIONS?\s+for\s+(the\s+)?questions?[^.\n]*?(?:[\.:]\s*)/gi,
     "",
   );
   s = s.replace(/Q\.?\s*\d+[\.:]?\s*/g, "");
   s = s.replace(/Question\s+\d+[\.:]?\s*/gi, "");
-  // Collapse repeated whitespace.
   s = s.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   return s;
 }
@@ -86,8 +125,8 @@ function formatExemplars(items: KbItem[], max = 3): string {
     (it, i) => `Example ${i + 1}:\n${cleanExemplar(it.stem).slice(0, 700)}`,
   );
   return (
-    `\nStyle references from past CAT papers - match this STYLE and ` +
-    `difficulty, but DO NOT copy or lightly reword them; invent fresh ` +
+    `\nStyle references from past CAT papers — match this STYLE and ` +
+    `DIFFICULTY, but DO NOT copy or lightly reword them; invent fresh ` +
     `content. Do NOT copy any "DIRECTIONS" preamble or question numbering ` +
     `from these examples:\n\n${blocks.join("\n\n")}\n`
   );
@@ -95,15 +134,15 @@ function formatExemplars(items: KbItem[], max = 3): string {
 
 const VA_BRIEF: Record<string, string> = {
   para_jumble:
-    "para-jumble questions: give 4-5 sentences labelled and ask for the correct logical order. Options are orderings.",
+    "para-jumble (TITA / odd-sentence-out): 5 sentences that must be reordered into a coherent paragraph. The right order should depend on PRONOUN/REFERENCE chains and LOGICAL connectives (however, therefore, by contrast). Do not make the order trivially chronological.",
   para_completion:
-    "para-completion questions: a short paragraph with the last/blank sentence missing; options are candidate sentences.",
+    "para-completion: a 4-6 sentence paragraph with the FINAL sentence blanked out (_____). The right completion must follow logically from the SPECIFIC argument the paragraph develops — not from generic topical relevance. Two distractors should be topically related but logically off (broaden the scope, contradict the implied premise, or echo a counter-argument).",
   odd_one_out:
-    "odd-one-out questions: 4-5 sentences of which one does not fit the others; options identify the misfit.",
+    "odd-one-out: 5 sentences on a single theme, one of which does not fit. The odd one usually breaks the THEMATIC LINE (advocacy vs description, cause vs effect, historical vs contemporary). Surface keyword overlap with the rest is a red herring — the misfit should share vocabulary but diverge in argumentative role.",
   summary:
-    "summary questions: a short paragraph followed by 4 candidate summaries; pick the best.",
+    "summary: a 120-200 word paragraph followed by 4 candidate summaries. The right summary must preserve the AUTHOR'S CENTRAL CLAIM AND ITS SCOPE. Distractors should: (a) over-generalise, (b) capture only a sub-claim, (c) flip a qualifier, (d) confuse the author's view with the view the author critiques.",
   va_other:
-    "CAT verbal-ability questions (critical reasoning, inference, vocabulary-in-context).",
+    "CAT verbal-ability (critical reasoning, inference, vocabulary-in-context).",
 };
 
 export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): string {
@@ -114,10 +153,15 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
         `"Arrange the following sentences in the correct logical order.\\n` +
         `1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n4. <sentence>\\n5. <sentence>"\n` +
         `Each option must be a 5-character ordering string drawn from "12345" ` +
-        `(every digit 1-5 used exactly once), e.g. "31245".`
+        `(every digit 1-5 used exactly once), e.g. "31245". Make the resolution ` +
+        `depend on cross-sentence references ("this", "such a view", "the latter"), ` +
+        `not on calendar dates or numeric labels inside the sentences.`
       : subtype === "para_completion"
       ? `\nIn the "prompt", show the paragraph with the final sentence ` +
-        `replaced by "_____". Each option is a candidate sentence (full sentence, not a fragment).`
+        `replaced by "_____". The blank should fall in a place where the ` +
+        `paragraph has built an EXPECTATION (a contrast, a corollary, a ` +
+        `qualification) — and the right option must satisfy that expectation. ` +
+        `Each option is a candidate sentence (full sentence, not a fragment).`
       : subtype === "odd_one_out"
       ? `\nFormat the "prompt" as a numbered list of 5 sentences (1-5). ` +
         `Each option must be a single digit string "1"-"5" naming the misfit.`
@@ -127,28 +171,52 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
         `two-sentence summary.`
       : "";
   return (
-    `You are a CAT (Common Admission Test) verbal expert. Create ${count} ` +
-    `original, exam-quality ${brief}\n` +
-    `Each must be genuinely solvable with one clearly best answer. ` +
-    `Write in clean prose. Do NOT include any "DIRECTIONS for questions..." ` +
-    `preamble or question numbers like "Q.27" - the app handles numbering. ` +
-    `Do NOT use smart/curly quotes; use straight ASCII quotes only.` +
+    `You are a CAT (Common Admission Test) verbal-ability paper-setter, ` +
+    `writing for the 99-percentile aspirant. Create ${count} ` +
+    `original, exam-quality ${brief}\n\n` +
+    DIFFICULTY_RUBRIC +
+    `\n\nWrite in clean prose. Vocabulary should be advanced (graduate-level) ` +
+    `where natural; subject matter should be philosophy, history of ideas, ` +
+    `economics, environmental policy, art criticism — NOT generic ` +
+    `"company sells gadgets" filler. Do NOT include "DIRECTIONS for ` +
+    `questions..." preambles or "Q.27" numbering. Use straight ASCII quotes ` +
+    `only.` +
     formatRules +
+    `\n\n` + EXPLANATION_RUBRIC +
     formatExemplars(exemplars) +
     `\n${SCHEMA_QUESTIONS}`
   );
 }
 
+const QA_DEPTH: Record<string, string> = {
+  geometry:
+    "Mix coordinate geometry with circle/triangle properties, or layer two non-trivial theorems (power-of-a-point, angle bisector, Stewart's, Apollonius, Ptolemy, inscribed-angle). Avoid plug-and-chug Pythagoras unless wrapped in a non-obvious construction.",
+  algebra:
+    "Use Vieta's, polynomial-remainder reasoning, functional equations, AM-GM/Cauchy bounds, or non-trivial system-of-equations with a parametric twist. Avoid 'solve 2x+5=11' baby algebra.",
+  arithmetic:
+    "Use multi-stage percentage chains, mixture/alligation with non-uniform proportions, ratio-and-proportion with a hidden invariant, time-speed-distance with relative motion + breaks, or partnership with profit-share twists. Numbers should resist mental arithmetic without insight.",
+  number_system:
+    "Use modular arithmetic, base conversion + property check, digit-sum / digit-product constraints, properties of factorials/HCF/LCM, last-digit / last-two-digit problems, or counting integers in a range with multiple divisibility constraints.",
+  modern_math:
+    "Use combinatorics with restriction (derangements, inclusion-exclusion, with-repetition vs without), probability with conditional / Bayes-style reasoning, sequences with a non-obvious closed form, or set-theory Venn questions where the unknown overlap is the key.",
+};
+
 export function qaPrompt(topic: string, count: number, exemplars: KbItem[]): string {
+  const depth = QA_DEPTH[topic] ?? "";
   return (
-    `You are a CAT quantitative-ability expert. Create ${count} original, ` +
-    `exam-quality multiple-choice questions on the topic: ${topic}.\n` +
-    `CRITICAL: solve every question yourself step by step and double-check the ` +
-    `arithmetic. The "answer" index MUST point to the mathematically correct ` +
-    `option, and "solution" must show the working that proves it. Distractor ` +
-    `options should be plausible (typical mistakes), not random. Each option ` +
-    `must be a CONCRETE numeric or algebraic value (e.g. "24", "3/5", ` +
-    `"x = 2"), never a placeholder like "o1". Use straight ASCII quotes only.` +
+    `You are a CAT quantitative-ability paper-setter, writing for the ` +
+    `99-percentile aspirant. Create ${count} original, exam-quality ` +
+    `multiple-choice questions on the topic: ${topic}.\n\n` +
+    DIFFICULTY_RUBRIC +
+    `\n\nTopic-specific depth requirement:\n${depth}\n\n` +
+    `CRITICAL: solve every question yourself step by step and double-check ` +
+    `the arithmetic. The "answer" index MUST point to the mathematically ` +
+    `correct option, and "solution" must show the working that proves it. ` +
+    `Each option must be a CONCRETE numeric or algebraic value (e.g. "24", ` +
+    `"3/5", "x = 2"), never a placeholder like "o1". Numbers in the question ` +
+    `should NOT be round (avoid 100, 1000) unless the question is about ` +
+    `roundness itself. Use straight ASCII quotes only.\n\n` +
+    EXPLANATION_RUBRIC +
     formatExemplars(exemplars) +
     `\n${SCHEMA_QUESTIONS}`
   );
@@ -156,31 +224,64 @@ export function qaPrompt(topic: string, count: number, exemplars: KbItem[]): str
 
 export function rcPrompt(passage: string, sourceLabel: string, exemplars: KbItem[]): string {
   return (
-    `You are a CAT verbal expert. Below is a reading passage (${sourceLabel}). ` +
-    `Create exactly 4 CAT-style reading-comprehension questions on it ` +
-    `(main idea, inference, tone/purpose, and detail). Questions must be ` +
-    `answerable purely from the passage. Write all text in clean ASCII; ` +
-    `use straight quotes only; inside JSON strings escape newlines as \\n.\n\n` +
-    `PASSAGE:\n${passage}\n` +
+    `You are a CAT verbal paper-setter, writing for the 99-percentile ` +
+    `aspirant. Below is a reading passage (${sourceLabel}). Create exactly 4 ` +
+    `CAT-style RC questions on it, drawn from this mix:\n` +
+    `- exactly ONE main-idea / central-argument question\n` +
+    `- exactly ONE inference question (something IMPLIED but not stated)\n` +
+    `- exactly ONE tone / author's-stance / purpose-of-paragraph question\n` +
+    `- exactly ONE specific-detail question that hinges on a qualifier ` +
+    `("most", "only", "primarily") most readers miss.\n\n` +
+    DIFFICULTY_RUBRIC +
+    `\n\nRC-specific rules:\n` +
+    `- Wrong options must each be UN-rejectable on a casual reading; you have ` +
+    `to return to the passage to eliminate them.\n` +
+    `- Use one "trap" distractor that paraphrases a sentence from the ` +
+    `passage too literally (echoes the wording but mis-captures the role of ` +
+    `that sentence in the argument).\n` +
+    `- Use one "out-of-scope" distractor that extends the author's view ` +
+    `beyond what the passage actually supports.\n` +
+    `- Questions must be answerable purely from the passage.\n\n` +
+    EXPLANATION_RUBRIC +
+    `\n\nPASSAGE:\n${passage}\n` +
     formatExemplars(exemplars, 1) +
     `\nReturn JSON: {"questions":[{prompt,options,answer,explanations,solution} x4]} ` +
-    `with exactly 4 options and a 4-entry explanations array per question.`
+    `with exactly 4 options and a 4-entry explanations array per question. ` +
+    `Use straight ASCII quotes; escape newlines as \\n inside JSON strings.`
   );
 }
 
 export function diPrompt(exemplars: KbItem[]): string {
   return (
-    `You are a CAT data-interpretation expert. Invent an original DI set: a ` +
-    `compact dataset plus exactly 4 questions based on it.\n` +
+    `You are a CAT data-interpretation paper-setter, writing for the ` +
+    `99-percentile aspirant. Invent an original DI set: a compact dataset ` +
+    `plus exactly 4 questions based on it.\n\n` +
+    DIFFICULTY_RUBRIC +
+    `\n\nDI-specific rules:\n` +
+    `- The dataset must contain a HIDDEN constraint that has to be discovered ` +
+    `before the questions can be answered (e.g. one row's value is given ` +
+    `only via a relationship to others; a column total must be inferred; a ` +
+    `cell is "*" or "X" meaning "deducible from the rest"). State this ` +
+    `constraint in the prose below the table.\n` +
+    `- Questions must require COMBINING at least 2 cells with at least 1 ` +
+    `derived quantity (percentage change, ratio, growth rate, weighted ` +
+    `average). One-cell-lookup questions ("What is February sales of Beta?") ` +
+    `are BANNED.\n` +
+    `- Use multi-period or multi-segment data (4-6 rows × 3-4 columns) so ` +
+    `the test-taker has to track which subset applies.\n` +
+    `- At least one question should be a "smart-shortcut" question where ` +
+    `the elegant path is much faster than brute computation.\n\n` +
     `Put the full dataset in "context" as a GitHub-Flavoured Markdown table ` +
     `with concrete numeric cells. Example shape:\n\n` +
-    `| Month | Alpha | Beta |\n|---|---|---|\n| Jan | 50 | 48 |\n| Feb | 70 | 65 |\n\n` +
-    `Then briefly explain what the table represents BELOW the table.\n` +
-    `Each question option must be a CONCRETE value (a number, percentage, ` +
-    `month name, or short phrase) - never a placeholder like "o1" or "o2".\n` +
+    `| Year | Region A | Region B | Region C |\n|---|---|---|---|\n` +
+    `| 2018 | 124 | 87 | 156 |\n| 2019 | 138 | 93 | * |\n\n` +
+    `Then in the prose below: state the hidden relationship (e.g. ` +
+    `"Region C in 2019 grew by 12.5% over 2018"). Each question option must ` +
+    `be a CONCRETE value (number, percentage, name, short phrase) — never ` +
+    `a placeholder like "o1".\n\n` +
     `Solve each question yourself; the "answer" index must be numerically ` +
-    `correct and "solution" must show the calculation step by step. Use ` +
-    `straight ASCII quotes only; escape newlines as \\n inside JSON strings.` +
+    `correct.\n\n` + EXPLANATION_RUBRIC +
+    `\n\nUse straight ASCII quotes only; escape newlines as \\n inside JSON strings.` +
     formatExemplars(exemplars, 2) +
     `\n${SCHEMA_SET}`
   );
@@ -188,17 +289,33 @@ export function diPrompt(exemplars: KbItem[]): string {
 
 export function lrPrompt(exemplars: KbItem[]): string {
   return (
-    `You are a CAT logical-reasoning expert. Invent an original LR set: a ` +
-    `self-contained scenario with a clear set of conditions (arrangement, ` +
-    `distribution, ordering or grouping) plus exactly 4 questions.\n` +
+    `You are a CAT logical-reasoning paper-setter, writing for the ` +
+    `99-percentile aspirant. Invent an original LR set: a self-contained ` +
+    `scenario with a clear set of conditions (arrangement, distribution, ` +
+    `ordering, grouping, matching) plus exactly 4 questions.\n\n` +
+    DIFFICULTY_RUBRIC +
+    `\n\nLR-specific rules:\n` +
+    `- The set must be a "partial-info" puzzle: the conditions narrow the ` +
+    `solution space to a SMALL number of valid configurations (1-4), but ` +
+    `NOT necessarily a unique one. Then the questions distinguish between ` +
+    `"definitely true", "possibly true", "definitely false". CAT-style LR ` +
+    `often has 2-3 valid base configurations.\n` +
+    `- Use 6-8 entities and 5-7 conditions. Conditions should include at ` +
+    `least one CONDITIONAL ("if X then Y"), at least one EITHER-OR, and at ` +
+    `least one NEGATIVE constraint ("Z is not adjacent to W").\n` +
+    `- At least one question must be a "minimum/maximum" question (e.g. ` +
+    `"what is the maximum number of X that can be Y?") that requires case ` +
+    `analysis.\n` +
+    `- Avoid trivial puzzles like "5 people in a row, A is left of B, who ` +
+    `sits at position 3?".\n\n` +
     `In "context": first state the scenario in 1-3 sentences, then list the ` +
-    `conditions as a numbered list (1., 2., 3., ...). The conditions MUST ` +
-    `yield a consistent, uniquely determinable situation. Solve the scenario ` +
-    `yourself first to verify uniqueness.\n` +
-    `Each question option must be a CONCRETE answer (a name, position, ` +
-    `number, or short phrase) - never a placeholder like "o1".\n` +
-    `Solve each question yourself and show the deduction in "solution". Use ` +
-    `straight ASCII quotes only; escape newlines as \\n inside JSON strings.` +
+    `conditions as a numbered list (1., 2., 3., ...). Then briefly outline ` +
+    `the solution space (e.g. "there are 3 valid arrangements; in all of ` +
+    `them, X sits at position 1"). Solve the scenario yourself first; if no ` +
+    `valid configuration exists, REWRITE the conditions.\n\n` +
+    `Each question option must be a CONCRETE answer (name, position, number, ` +
+    `short phrase) — never a placeholder.\n\n` + EXPLANATION_RUBRIC +
+    `\n\nUse straight ASCII quotes only; escape newlines as \\n inside JSON strings.` +
     formatExemplars(exemplars, 2) +
     `\n${SCHEMA_SET}`
   );
