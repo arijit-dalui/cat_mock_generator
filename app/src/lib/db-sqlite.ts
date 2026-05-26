@@ -27,8 +27,15 @@ function open(): Database.Database {
   return db;
 }
 
-const db: Database.Database = global.__catDb ?? open();
-if (process.env.NODE_ENV !== "production") global.__catDb = db;
+// In Postgres mode (cloud deployment) this module gets bundled by webpack but
+// must never call open() - the SQLite file and schema don't exist on disk.
+// We export a placeholder; the router never reaches into us in that mode.
+const db: Database.Database = process.env.DATABASE_URL
+  ? (null as unknown as Database.Database)
+  : (global.__catDb ?? open());
+if (!process.env.DATABASE_URL && process.env.NODE_ENV !== "production") {
+  global.__catDb = db;
+}
 
 export { db };
 
