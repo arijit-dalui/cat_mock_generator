@@ -10,35 +10,22 @@
  */
 import type { KbItem } from "../kb";
 
-/** What every explanation MUST contain, regardless of section. */
-const EXPLANATION_RUBRIC = `
-Explanation rules:
-- Each "explanations[i]" is 2-3 sentences. Start with "Correct." or "Incorrect.".
-- Right option: name the key insight + the step that rules out the trap.
-- Each wrong option: name the SPECIFIC misconception that produces it
-  (e.g. "uses gross instead of net", "treats 'at least' as 'exactly'",
-  "confuses median with mean"). Never say only "this is wrong".
+/** Compact rules injected into every prompt. Kept short to stay under Groq
+ * free-tier TPM cap (12K/min). */
+const EXPLANATION_RUBRIC =
+  `EXPLANATIONS: 2-3 sentences each, start with "Correct."/"Incorrect.". ` +
+  `For each wrong option name the specific misconception that yields it ` +
+  `(e.g. "uses gross not net", "treats 'at least' as 'exactly'"). ` +
+  `SOLUTION: 4-10 clean lines with concrete numbers. No self-correction, ` +
+  `no "actually"/"wait"/"let's redo". If working contradicts the answer ` +
+  `index, REDO the question silently.`;
 
-"solution" rules (CRITICAL):
-- Write a CLEAN final solution, 4-10 short lines, with concrete numbers at
-  each step.
-- DO NOT narrate your own thinking, debugging, or mistakes. If your first
-  approach was wrong, redo silently and emit only the corrected solution.
-- BANNED phrases: "let's correct", "I made an error", "reflecting on the
-  step", "actually", "wait", "re-evaluating". The solution must read like
-  it was written by a confident solver in one pass.
-- If the working contradicts the "answer" index, REDO the question.`;
-
-const DIFFICULTY_RUBRIC = `
-DIFFICULTY: target the CAT 99-percentile band. Each question must require
-3+ steps of inference or calculation. BAN one-step questions ("plug into
-formula", "scan one line"). The decisive insight should be non-obvious:
-a hidden constraint, a tricky case split, a quantifier flip ("at least" vs
-"exactly"), a unit trap, or a counter-intuitive corollary.
-
-Distractors: every wrong option must be the answer you get from a SPECIFIC
-named mistake (one of them should be "the answer to a slightly different
-question"). Distractors must look plausible at a one-second glance.`;
+const DIFFICULTY_RUBRIC =
+  `DIFFICULTY: CAT 99-percentile. Each Q needs 3+ inference/computation ` +
+  `steps; no plug-and-chug. Decisive insight should be a hidden constraint, ` +
+  `case split, quantifier flip, or unit trap. Distractors must each be the ` +
+  `answer to a specific named mistake (one = "the answer to a slightly ` +
+  `different question"); avoid silly distractors.`;
 
 /** JSON contract for a batch of standalone questions (VA, QA). */
 const SCHEMA_QUESTIONS = `Return JSON of this exact shape:
@@ -111,17 +98,15 @@ export function cleanExemplar(stem: string): string {
   return s;
 }
 
-function formatExemplars(items: KbItem[], max = 3): string {
+function formatExemplars(items: KbItem[], max = 1): string {
   const picked = items.slice(0, max);
   if (!picked.length) return "";
   const blocks = picked.map(
-    (it, i) => `Example ${i + 1}:\n${cleanExemplar(it.stem).slice(0, 700)}`,
+    (it, i) => `Example ${i + 1}:\n${cleanExemplar(it.stem).slice(0, 400)}`,
   );
   return (
-    `\nStyle references from past CAT papers — match this STYLE and ` +
-    `DIFFICULTY, but DO NOT copy or lightly reword them; invent fresh ` +
-    `content. Do NOT copy any "DIRECTIONS" preamble or question numbering ` +
-    `from these examples:\n\n${blocks.join("\n\n")}\n`
+    `\nStyle reference (DO NOT copy or reword — invent fresh content):\n\n` +
+    `${blocks.join("\n\n")}\n`
   );
 }
 
