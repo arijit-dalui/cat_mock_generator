@@ -47,8 +47,11 @@ export const config = {
   poolSize: parseInt(env("POOL_SIZE", "50"), 10),
   /** Maximum quality-graded sets the cron will hold per section. */
   poolTarget: parseInt(env("POOL_TARGET", "20"), 10),
-  /** Maximum sets the cron tries to generate per single invocation. */
-  maxPerTick: parseInt(env("MAX_PER_TICK", "3"), 10),
+  /** Maximum sets the cron tries to generate per single invocation.
+   * Vercel Hobby caps a single function call at 300s; a single set takes
+   * 60-200s including the judge. Default 1 keeps each tick safely under
+   * the limit. Increase to 2-3 only if you're on Vercel Pro. */
+  maxPerTick: parseInt(env("MAX_PER_TICK", "1"), 10),
   /** Minimum judge score across dimensions; below this the set is rejected. */
   minQuality: parseInt(env("MIN_QUALITY", "6"), 10),
   /** Pooled sets older than this many hours are deleted by the cleaner —
