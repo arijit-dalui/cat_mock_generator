@@ -39,6 +39,14 @@ interface SectionStatus {
 
 async function topupOnce(req: Request) {
   const start = Date.now();
+  // Only the sections the operator has enabled for cron topup. VA and QA
+  // are typically excluded on Vercel Hobby because they exceed the 300s
+  // function cap; the user-facing /api/generate route still handles them
+  // on-demand.
+  const cronSet = config.cronSections.filter((s) =>
+    (SECTIONS as readonly string[]).includes(s),
+  ) as Section[];
+
   const status: Record<Section, SectionStatus> = Object.fromEntries(
     SECTIONS.map((s) => [
       s,
@@ -51,7 +59,7 @@ async function topupOnce(req: Request) {
     status[s].pool = await sets.qualityPoolCount(s);
   }
 
-  const needed = SECTIONS.filter((s) => status[s].pool < config.poolTarget);
+  const needed = cronSet.filter((s) => status[s].pool < config.poolTarget);
   if (needed.length === 0) {
     // Nothing to do for generation. Still run cleanup.
     const deleted = await sets.cleanupOld(
@@ -60,21 +68,24 @@ async function topupOnce(req: Request) {
     );
     return NextResponse.json({
       status: "pool already full",
+      cronSections: cronSet,
       pool: Object.fromEntries(SECTIONS.map((s) => [s, status[s].pool])),
       cleanupDeleted: deleted,
       elapsedMs: Date.now() - start,
     });
   }
 
-  // Round-robin starting from the most-depleted section; generate up to
-  // maxPerTick sets total. Each set: generate, judge, insert-if-accepted.
-  // Stop early if we're approaching Vercel's 300s ceiling.
+  // Round-robin starting from the most-depleted section (within cronSet);
+  // generate up to maxPerTick sets total. Each set: generate, judge,
+  // insert-if-accepted. Stop early if we approach Vercel's 300s ceiling.
   const BUDGET_MS = 250_000;
   let toGenerate = config.maxPerTick;
   while (toGenerate > 0) {
     if (Date.now() - start > BUDGET_MS) break;
-    // Pick the section with the lowest pool that still needs filling.
-    const target = SECTIONS.map((s) => ({ s, depth: status[s].pool }))
+    // Pick the section with the lowest pool that still needs filling,
+    // restricted to the cron-allowed list.
+    const target = cronSet
+      .map((s) => ({ s, depth: status[s].pool }))
       .filter((x) => x.depth < config.poolTarget)
       .sort((a, b) => a.depth - b.depth)[0];
     if (!target) break;
@@ -113,6 +124,7 @@ async function topupOnce(req: Request) {
 
   return NextResponse.json({
     status: "done",
+    cronSections: cronSet,
     sections: status,
     cleanupDeleted: deleted,
     elapsedMs: Date.now() - start,
