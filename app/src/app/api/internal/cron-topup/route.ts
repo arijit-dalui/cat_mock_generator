@@ -68,8 +68,11 @@ async function topupOnce(req: Request) {
 
   // Round-robin starting from the most-depleted section; generate up to
   // maxPerTick sets total. Each set: generate, judge, insert-if-accepted.
+  // Stop early if we're approaching Vercel's 300s ceiling.
+  const BUDGET_MS = 250_000;
   let toGenerate = config.maxPerTick;
   while (toGenerate > 0) {
+    if (Date.now() - start > BUDGET_MS) break;
     // Pick the section with the lowest pool that still needs filling.
     const target = SECTIONS.map((s) => ({ s, depth: status[s].pool }))
       .filter((x) => x.depth < config.poolTarget)
