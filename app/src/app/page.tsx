@@ -7,8 +7,10 @@ export default function HomePage() {
         CAT Mock Generator
       </h1>
       <p className="mt-3 max-w-xl text-slate-600">
-        Generate fresh, exam-style VARC, DILR and QA problem sets - built from a
-        knowledge base of past mock papers and powered by a local LLM.
+        Generate fresh, CAT 99-percentile-style VA, RC, DI, LR and QA
+        problem sets on demand. Every set ships with worked solutions
+        and per-option explanations, and is gated by an independent
+        AI judge so weak questions never reach you.
       </p>
       <div className="mt-8 flex gap-3">
         <Link href="/register" className="btn-primary">

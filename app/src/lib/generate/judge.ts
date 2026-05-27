@@ -26,38 +26,40 @@ export interface JudgeVerdict {
   overall: number;
 }
 
-/** Strip the full set down to just the parts the judge needs to score it. */
+/** Strip the full set down to just the parts the judge needs to score it.
+ * Kept tight (~3.5K chars) to fit comfortably in Groq's smaller judge-model
+ * context window. */
 function summariseForJudge(set: GeneratedSet): string {
   const lines: string[] = [`Section: ${set.section}`];
   if (set.kind === "questions" && set.items) {
     lines.push(`Items (${set.items.length}):`);
     for (const [i, q] of set.items.entries()) {
-      lines.push(`\nQ${i + 1} [${q.type}]: ${q.prompt}`);
+      lines.push(`\nQ${i + 1} [${q.type}]: ${String(q.prompt).slice(0, 280)}`);
       q.options.forEach((o, k) =>
-        lines.push(`  ${"ABCD"[k]}. ${String(o).slice(0, 200)}`),
+        lines.push(`  ${"ABCD"[k]}. ${String(o).slice(0, 120)}`),
       );
       lines.push(`  ANSWER: ${"ABCD"[q.answer]}`);
-      lines.push(`  SOLUTION: ${String(q.solution).slice(0, 500)}`);
+      lines.push(`  SOLUTION: ${String(q.solution).slice(0, 240)}`);
       lines.push(
-        `  EXPLANATIONS: ` +
-          q.explanations.map((e, k) => `${"ABCD"[k]}: ${String(e).slice(0, 180)}`).join(" | "),
+        `  EXPL: ` +
+          q.explanations.map((e, k) => `${"ABCD"[k]}:${String(e).slice(0, 80)}`).join(" | "),
       );
     }
   } else if (set.kind === "sets" && set.sets) {
     for (const [si, s] of set.sets.entries()) {
       lines.push(`\nSet ${si + 1} context:`);
-      lines.push(String(s.context).slice(0, 1000));
+      lines.push(String(s.context).slice(0, 500));
       for (const [i, q] of s.questions.entries()) {
-        lines.push(`\n  Q${i + 1}: ${q.prompt}`);
+        lines.push(`\n  Q${i + 1}: ${String(q.prompt).slice(0, 220)}`);
         q.options.forEach((o, k) =>
-          lines.push(`    ${"ABCD"[k]}. ${String(o).slice(0, 180)}`),
+          lines.push(`    ${"ABCD"[k]}. ${String(o).slice(0, 100)}`),
         );
         lines.push(`    ANSWER: ${"ABCD"[q.answer]}`);
-        lines.push(`    SOLUTION: ${String(q.solution).slice(0, 400)}`);
+        lines.push(`    SOLUTION: ${String(q.solution).slice(0, 200)}`);
       }
     }
   }
-  return lines.join("\n").slice(0, 6500);
+  return lines.join("\n").slice(0, 3500);
 }
 
 const JUDGE_PROMPT = `You are a strict CAT (Common Admission Test) examiner reviewing an AI-generated practice set for the 99-percentile aspirant. Score the set 0-10 on EACH dimension:
@@ -123,6 +125,9 @@ export async function judgeSet(set: GeneratedSet): Promise<JudgeVerdict> {
     }>(JUDGE_PROMPT + "\n\nSET TO JUDGE:\n" + summariseForJudge(set), {
       temperature: 0.1,
       model: config.llm.judgeModel,
+      // qwen3-32b on Groq has a smaller max_tokens than llama-3.3-70b.
+      // The judge only needs ~200 tokens to output its small JSON.
+      maxTokens: 1024,
     });
     const s = data?.scores;
     if (!s) {
