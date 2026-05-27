@@ -200,14 +200,59 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   const subsets = data.set.kind === "sets" ? data.set.sets ?? [] : [];
   let n = 0;
 
+  /** Some LLM generations forget to include the directional sentence
+   * (e.g. odd-one-out prompts that show 5 numbered sentences but no
+   * "identify the misfit" instruction). Prepend a fallback when we
+   * detect that pattern. */
+  function withInstructionFallback(q: GenQuestion): string {
+    const p = q.prompt;
+    // Para-jumble: numbered sentences with no "arrange" instruction
+    if (
+      q.type === "para_jumble" &&
+      /^\s*1\.\s/.test(p) &&
+      !/arrange|order|sequence/i.test(p.slice(0, 80))
+    ) {
+      return "Arrange the following sentences in the correct logical order.\n" + p;
+    }
+    // Odd-one-out: numbered sentences with no "misfit/odd one" instruction
+    if (
+      q.type === "odd_one_out" &&
+      /\b1\.\s/.test(p) &&
+      !/misfit|odd one|does not fit|not belong/i.test(p)
+    ) {
+      return (
+        "Five sentences below relate to the same theme. Identify the ONE sentence that does not fit with the others.\n" +
+        p
+      );
+    }
+    // Para-completion: paragraph with no blank or "complete" instruction
+    if (
+      q.type === "para_completion" &&
+      !/_____|complete the|best completes|fill in the blank/i.test(p)
+    ) {
+      return (
+        "Choose the option that best completes the paragraph below.\n" + p
+      );
+    }
+    // Summary: paragraph with no "which best summarises" instruction
+    if (
+      q.type === "summary" &&
+      !/summari[sz]e|main idea|best capture/i.test(p)
+    ) {
+      return p + "\nWhich of the following best summarises the paragraph above?";
+    }
+    return p;
+  }
+
   function renderQuestion(q: GenQuestion) {
     n += 1;
     const chosen = answers[q.id];
+    const prompt = withInstructionFallback(q);
     return (
       <div key={q.id} className="card p-5">
         <p className="font-medium text-slate-900">
           <span className="text-slate-400">Q{n}.</span>{" "}
-          <span className="whitespace-pre-wrap">{q.prompt}</span>
+          <span className="whitespace-pre-wrap">{prompt}</span>
         </p>
         <div className="mt-3 space-y-2">
           {q.options.map((opt, i) => {
