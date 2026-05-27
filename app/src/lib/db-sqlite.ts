@@ -175,6 +175,72 @@ export const sets = {
   async markServed(id: number): Promise<void> {
     db.prepare("UPDATE generated_sets SET status = 'served' WHERE id = ?").run(id);
   },
+  async insertWithQuality(
+    section: string,
+    payload: unknown,
+    createdBy: string,
+    qualityScore: number,
+    judgeNotes: string,
+  ): Promise<number> {
+    const info = db
+      .prepare(
+        "INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(section, JSON.stringify(payload), createdBy, qualityScore, judgeNotes);
+    return Number(info.lastInsertRowid);
+  },
+  async pickForUser(section: string, userId: number): Promise<GeneratedSet | undefined> {
+    const fresh = db
+      .prepare(
+        `SELECT g.* FROM generated_sets g
+           WHERE g.section = ?
+             AND g.id NOT IN (SELECT set_id FROM user_seen_sets WHERE user_id = ?)
+           ORDER BY g.quality_score DESC, g.created_at DESC LIMIT 1`,
+      )
+      .get(section, userId) as GeneratedSet | undefined;
+    if (fresh) return fresh;
+    return db
+      .prepare(
+        `SELECT g.* FROM generated_sets g
+           JOIN user_seen_sets s ON s.set_id = g.id
+           WHERE g.section = ? AND s.user_id = ?
+           ORDER BY s.seen_at ASC LIMIT 1`,
+      )
+      .get(section, userId) as GeneratedSet | undefined;
+  },
+  async qualityPoolCount(section: string): Promise<number> {
+    return (
+      db
+        .prepare(
+          "SELECT COUNT(*) c FROM generated_sets WHERE section = ? AND quality_score IS NOT NULL",
+        )
+        .get(section) as { c: number }
+    ).c;
+  },
+  async cleanupOld(maxAgeHours: number, maxRows: number): Promise<number> {
+    if (maxAgeHours <= 0) return 0;
+    const info = db
+      .prepare(
+        `DELETE FROM generated_sets
+           WHERE id IN (
+             SELECT g.id FROM generated_sets g
+               LEFT JOIN attempts a ON a.set_id = g.id
+               WHERE g.created_at < datetime('now', ?)
+                 AND a.id IS NULL
+               ORDER BY g.created_at ASC LIMIT ?
+           )`,
+      )
+      .run(`-${maxAgeHours} hours`, maxRows);
+    return Number(info.changes ?? 0);
+  },
+};
+
+export const userSeen = {
+  async mark(userId: number, setId: number): Promise<void> {
+    db.prepare(
+      "INSERT OR IGNORE INTO user_seen_sets (user_id, set_id) VALUES (?, ?)",
+    ).run(userId, setId);
+  },
 };
 
 export const attempts = {

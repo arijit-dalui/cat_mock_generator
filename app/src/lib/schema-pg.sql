@@ -45,14 +45,27 @@ CREATE TABLE IF NOT EXISTS kb_items (
 CREATE INDEX IF NOT EXISTS idx_kb_section ON kb_items(section, subtype);
 
 CREATE TABLE IF NOT EXISTS generated_sets (
-  id         SERIAL PRIMARY KEY,
-  section    TEXT NOT NULL,
-  payload    JSONB NOT NULL,
-  status     TEXT NOT NULL DEFAULT 'pooled',
-  created_by TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id            SERIAL PRIMARY KEY,
+  section       TEXT NOT NULL,
+  payload       JSONB NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pooled',
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  quality_score INTEGER,
+  judge_notes   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sets_section_status ON generated_sets(section, status);
+CREATE INDEX IF NOT EXISTS idx_sets_section_quality
+  ON generated_sets(section, quality_score DESC, created_at DESC);
+
+-- Tracks which user has been served which set (so we never repeat).
+CREATE TABLE IF NOT EXISTS user_seen_sets (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  set_id  INTEGER NOT NULL REFERENCES generated_sets(id) ON DELETE CASCADE,
+  seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, set_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_seen_user ON user_seen_sets(user_id);
 
 CREATE TABLE IF NOT EXISTS attempts (
   id           SERIAL PRIMARY KEY,

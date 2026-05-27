@@ -1,55 +1,130 @@
 /**
  * Cron-triggered pool topup, for hosted deployments where we can't run the
- * standalone worker loop (Vercel etc.).
+ * standalone worker loop.
  *
- * Vercel Cron Jobs fire this endpoint on a schedule defined in vercel.json.
- * The request carries an "Authorization: Bearer <CRON_SECRET>" header that
- * we verify against process.env.CRON_SECRET. Each invocation generates ONE
- * set for whichever section has the lowest pool right now.
+ * What this endpoint does, per invocation:
+ *   1. Determine which sections need refilling (poolTarget - currentPool).
+ *   2. Generate up to maxPerTick sets, picking sections with the lowest pool.
+ *   3. For each freshly generated set: run the judge; if it scores >= MIN_QUALITY
+ *      across all dimensions, insert with quality_score; else drop.
+ *   4. Run an end-of-day-style cleaner: delete sets older than
+ *      CLEANUP_MAX_AGE_HOURS that have no attempts pointing at them.
  *
- * Local dev still uses scripts/worker.mjs which calls /api/internal/topup.
+ * Authenticated with Authorization: Bearer <CRON_SECRET> (which falls back
+ * to WORKER_TOKEN). Suitable for external schedulers (cron-job.org etc.)
+ * since Vercel Hobby caps native crons at once per day.
  */
 import { NextResponse } from "next/server";
 import { config, SECTIONS, type Section } from "@/lib/config";
 import { sets } from "@/lib/db";
 import { generateSet } from "@/lib/generate";
+import { judgeSet } from "@/lib/generate/judge";
 
 export const maxDuration = 300;
 
-export async function GET(req: Request) {
+function checkAuth(req: Request): boolean {
   const auth = req.headers.get("authorization") || "";
   const expected = process.env.CRON_SECRET || config.workerToken;
-  if (auth !== `Bearer ${expected}`) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return auth === `Bearer ${expected}`;
+}
+
+interface SectionStatus {
+  section: Section;
+  pool: number;
+  generated: number;
+  rejected: number;
+  errored: number;
+  lastNote?: string;
+}
+
+async function topupOnce(req: Request) {
+  const start = Date.now();
+  const status: Record<Section, SectionStatus> = Object.fromEntries(
+    SECTIONS.map((s) => [
+      s,
+      { section: s, pool: 0, generated: 0, rejected: 0, errored: 0 },
+    ]),
+  ) as Record<Section, SectionStatus>;
+
+  // Snapshot the current pool depth so we can decide what to generate.
+  for (const s of SECTIONS) {
+    status[s].pool = await sets.qualityPoolCount(s);
   }
 
-  // Pick the section that needs a set most.
-  const counts = await Promise.all(
-    SECTIONS.map(async (s) => ({ s, c: await sets.poolCount(s) })),
-  );
-  counts.sort((a, b) => a.c - b.c);
-  const target = counts[0];
-  if (target.c >= config.poolSize) {
-    return NextResponse.json({ status: "pool full", counts });
-  }
-
-  try {
-    const generated = await generateSet(target.s as Section);
-    const id = await sets.insert(target.s, generated, "cron");
-    return NextResponse.json({
-      status: "topped up",
-      section: target.s,
-      id,
-      warnings: generated.meta.warnings,
-    });
-  } catch (e) {
-    return NextResponse.json(
-      {
-        status: "failed",
-        section: target.s,
-        error: e instanceof Error ? e.message : String(e),
-      },
-      { status: 502 },
+  const needed = SECTIONS.filter((s) => status[s].pool < config.poolTarget);
+  if (needed.length === 0) {
+    // Nothing to do for generation. Still run cleanup.
+    const deleted = await sets.cleanupOld(
+      config.cleanupMaxAgeHours,
+      config.cleanupMaxRows,
     );
+    return NextResponse.json({
+      status: "pool already full",
+      pool: Object.fromEntries(SECTIONS.map((s) => [s, status[s].pool])),
+      cleanupDeleted: deleted,
+      elapsedMs: Date.now() - start,
+    });
   }
+
+  // Round-robin starting from the most-depleted section; generate up to
+  // maxPerTick sets total. Each set: generate, judge, insert-if-accepted.
+  let toGenerate = config.maxPerTick;
+  while (toGenerate > 0) {
+    // Pick the section with the lowest pool that still needs filling.
+    const target = SECTIONS.map((s) => ({ s, depth: status[s].pool }))
+      .filter((x) => x.depth < config.poolTarget)
+      .sort((a, b) => a.depth - b.depth)[0];
+    if (!target) break;
+    const sec = target.s;
+
+    try {
+      const generated = await generateSet(sec);
+      const verdict = await judgeSet(generated);
+      if (verdict.accept) {
+        await sets.insertWithQuality(
+          sec,
+          generated,
+          "cron",
+          verdict.overall,
+          verdict.notes,
+        );
+        status[sec].generated += 1;
+        status[sec].pool += 1;
+        status[sec].lastNote = `accepted (score ${verdict.overall})`;
+      } else {
+        status[sec].rejected += 1;
+        status[sec].lastNote = `rejected (score ${verdict.overall}): ${verdict.notes}`;
+      }
+    } catch (e) {
+      status[sec].errored += 1;
+      status[sec].lastNote = `error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    toGenerate -= 1;
+  }
+
+  // Bounded cleanup after generation so the pool table doesn't grow forever.
+  const deleted = await sets.cleanupOld(
+    config.cleanupMaxAgeHours,
+    config.cleanupMaxRows,
+  );
+
+  return NextResponse.json({
+    status: "done",
+    sections: status,
+    cleanupDeleted: deleted,
+    elapsedMs: Date.now() - start,
+  });
+}
+
+/** Cron-job.org and GitHub Actions usually fire GET; some use POST. Accept both. */
+export async function GET(req: Request) {
+  if (!checkAuth(req))
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return topupOnce(req);
+}
+
+export async function POST(req: Request) {
+  if (!checkAuth(req))
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return topupOnce(req);
 }
