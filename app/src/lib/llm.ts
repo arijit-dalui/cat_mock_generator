@@ -13,6 +13,9 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   system?: string;
+  /** Optional per-call model override (defaults to config.llm.groqModel /
+   * config.llm.ollamaModel). Used by the judge to invoke a different model. */
+  model?: string;
 }
 
 const TIMEOUT_MS = 900_000; // 15 min hard cap per LLM call
@@ -85,7 +88,7 @@ async function ollamaChat(prompt: string, opts: ChatOptions): Promise<string> {
   const { status, body } = await rawPost(
     `${config.llm.ollamaUrl}/api/chat`,
     JSON.stringify({
-      model: config.llm.ollamaModel,
+      model: opts.model ?? config.llm.ollamaModel,
       messages,
       stream: false,
       format: "json",
@@ -108,7 +111,7 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
   if (opts.system) messages.push({ role: "system", content: opts.system });
   messages.push({ role: "user", content: prompt });
   const payload = JSON.stringify({
-    model: config.llm.groqModel,
+    model: opts.model ?? config.llm.groqModel,
     messages,
     temperature: opts.temperature ?? 0.7,
     max_tokens: opts.maxTokens ?? 8192,

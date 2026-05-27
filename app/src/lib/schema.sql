@@ -47,14 +47,26 @@ CREATE INDEX IF NOT EXISTS idx_kb_section ON kb_items(section, subtype);
 
 -- Generated sets: the pool plus any served sets.
 CREATE TABLE IF NOT EXISTS generated_sets (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  section    TEXT NOT NULL,        -- VA|RC|DI|LR|QA
-  payload    TEXT NOT NULL,        -- JSON: questions/passages, options, answers, explanations
-  status     TEXT NOT NULL DEFAULT 'pooled',  -- pooled|served
-  created_by TEXT,                 -- 'worker' | 'user:<id>'
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  section       TEXT NOT NULL,
+  payload       TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pooled',
+  created_by    TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  quality_score INTEGER,
+  judge_notes   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sets_section_status ON generated_sets(section, status);
+CREATE INDEX IF NOT EXISTS idx_sets_section_quality
+  ON generated_sets(section, quality_score DESC, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_seen_sets (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  set_id  INTEGER NOT NULL REFERENCES generated_sets(id) ON DELETE CASCADE,
+  seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, set_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_seen_user ON user_seen_sets(user_id);
 
 -- User attempts at a generated set.
 CREATE TABLE IF NOT EXISTS attempts (

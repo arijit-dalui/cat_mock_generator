@@ -38,10 +38,24 @@ export const config = {
     ollamaEmbedModel: env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
     groqApiKey: process.env.GROQ_API_KEY || "",
     groqModel: env("GROQ_MODEL", "llama-3.1-8b-instant"),
+    // The judge is a SECOND model used to score freshly generated sets.
+    // Should be a different family from the writer for genuine second-opinion.
+    judgeModel: env("JUDGE_MODEL", "qwen/qwen3-32b"),
   },
 
   extractionDocs: path.resolve(appRoot, env("EXTRACTION_DOCS", "../extraction/docs")),
   poolSize: parseInt(env("POOL_SIZE", "50"), 10),
+  /** Maximum quality-graded sets the cron will hold per section. */
+  poolTarget: parseInt(env("POOL_TARGET", "20"), 10),
+  /** Maximum sets the cron tries to generate per single invocation. */
+  maxPerTick: parseInt(env("MAX_PER_TICK", "3"), 10),
+  /** Minimum judge score across dimensions; below this the set is rejected. */
+  minQuality: parseInt(env("MIN_QUALITY", "6"), 10),
+  /** Pooled sets older than this many hours are deleted by the cleaner —
+   * but only if no user has an attempt referencing them. Set to 0 to disable. */
+  cleanupMaxAgeHours: parseInt(env("CLEANUP_MAX_AGE_HOURS", "72"), 10),
+  /** Maximum rows the cleaner deletes per cron tick (bounds the work). */
+  cleanupMaxRows: parseInt(env("CLEANUP_MAX_ROWS", "200"), 10),
 
   appUrl: env("APP_URL", "http://localhost:3000"),
   workerToken: env("WORKER_TOKEN", "dev-insecure-worker-token"),

@@ -62,9 +62,22 @@ CREATE INDEX IF NOT EXISTS idx_kb_section ON kb_items(section, subtype);
 CREATE TABLE IF NOT EXISTS generated_sets (
   id SERIAL PRIMARY KEY, section TEXT NOT NULL, payload JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'pooled', created_by TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  quality_score INTEGER, judge_notes TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sets_section_status ON generated_sets(section, status);
+CREATE INDEX IF NOT EXISTS idx_sets_section_quality
+  ON generated_sets(section, quality_score DESC, created_at DESC);
+-- Migrations for existing deploys (Postgres allows IF NOT EXISTS on ADD COLUMN since 9.6).
+ALTER TABLE generated_sets ADD COLUMN IF NOT EXISTS quality_score INTEGER;
+ALTER TABLE generated_sets ADD COLUMN IF NOT EXISTS judge_notes TEXT;
+CREATE TABLE IF NOT EXISTS user_seen_sets (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  set_id  INTEGER NOT NULL REFERENCES generated_sets(id) ON DELETE CASCADE,
+  seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, set_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_seen_user ON user_seen_sets(user_id);
 CREATE TABLE IF NOT EXISTS attempts (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -241,6 +254,91 @@ export const sets = {
   async markServed(id: number): Promise<void> {
     await ready;
     await sql`UPDATE generated_sets SET status = 'served' WHERE id = ${id}`;
+  },
+  /** Insert a freshly generated set with judge quality score. */
+  async insertWithQuality(
+    section: string,
+    payload: unknown,
+    createdBy: string,
+    qualityScore: number,
+    judgeNotes: string,
+  ): Promise<number> {
+    await ready;
+    const rows = await sql<
+      { id: number }[]
+    >`INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes)
+        VALUES (${section}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, ${createdBy}, ${qualityScore}, ${judgeNotes})
+        RETURNING id`;
+    return rows[0].id;
+  },
+  /** Pick the highest-quality pooled set in `section` that this user has not
+   * yet seen. If they have seen them all, return the OLDEST seen one (least
+   * recently used). */
+  async pickForUser(
+    section: string,
+    userId: number,
+  ): Promise<GeneratedSet | undefined> {
+    await ready;
+    // First try: highest quality_score that user has NOT seen.
+    const fresh = await sql<
+      GeneratedSet[]
+    >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
+        FROM generated_sets g
+        WHERE g.section = ${section}
+          AND g.id NOT IN (
+            SELECT set_id FROM user_seen_sets WHERE user_id = ${userId}
+          )
+        ORDER BY g.quality_score DESC NULLS LAST, g.created_at DESC
+        LIMIT 1`;
+    if (fresh[0]) return fresh[0];
+    // Fallback: user has seen everything; return the one they saw longest ago.
+    const seen = await sql<
+      GeneratedSet[]
+    >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
+        FROM generated_sets g
+        JOIN user_seen_sets s ON s.set_id = g.id
+        WHERE g.section = ${section} AND s.user_id = ${userId}
+        ORDER BY s.seen_at ASC
+        LIMIT 1`;
+    return seen[0];
+  },
+  /** Count of pooled sets in this section that have a judge score (i.e. the
+   * new-style pool, not legacy 'served' rows). */
+  async qualityPoolCount(section: string): Promise<number> {
+    await ready;
+    const rows = await sql<
+      { c: number }[]
+    >`SELECT COUNT(*)::int c FROM generated_sets WHERE section = ${section} AND quality_score IS NOT NULL`;
+    return rows[0].c;
+  },
+  /** Delete sets older than maxAgeHours that are NOT referenced by any
+   * attempt (so we never break a user's review-mode link). Capped at
+   * maxRows per call so a single cron tick is bounded. */
+  async cleanupOld(maxAgeHours: number, maxRows: number): Promise<number> {
+    await ready;
+    if (maxAgeHours <= 0) return 0;
+    const rows = await sql<
+      { id: number }[]
+    >`DELETE FROM generated_sets
+        WHERE id IN (
+          SELECT g.id FROM generated_sets g
+            LEFT JOIN attempts a ON a.set_id = g.id
+            WHERE g.created_at < now() - (${maxAgeHours} || ' hours')::interval
+              AND a.id IS NULL
+            ORDER BY g.created_at ASC
+            LIMIT ${maxRows}
+        )
+        RETURNING id`;
+    return rows.length;
+  },
+};
+
+// ---- user_seen_sets ------------------------------------------------------
+export const userSeen = {
+  async mark(userId: number, setId: number): Promise<void> {
+    await ready;
+    await sql`INSERT INTO user_seen_sets (user_id, set_id) VALUES (${userId}, ${setId})
+      ON CONFLICT (user_id, set_id) DO NOTHING`;
   },
 };
 
