@@ -52,6 +52,15 @@ export const config = {
    * 60-200s including the judge. Default 1 keeps each tick safely under
    * the limit. Increase to 2-3 only if you're on Vercel Pro. */
   maxPerTick: parseInt(env("MAX_PER_TICK", "1"), 10),
+  /** Which sections the cron is allowed to top up. VA and QA fire 5-10
+   * LLM calls per set and routinely exceed Vercel Hobby's 300s function
+   * cap, so by default the cron leaves them out — they generate on-demand
+   * when the user clicks Generate. Add VA/QA only on Vercel Pro or when
+   * the worker runs off-platform. */
+  cronSections: env("CRON_SECTIONS", "RC,DI,LR")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean),
   /** Minimum judge score across dimensions; below this the set is rejected. */
   minQuality: parseInt(env("MIN_QUALITY", "6"), 10),
   /** Pooled sets older than this many hours are deleted by the cleaner —
