@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS generated_sets (
   quality_score INTEGER,
   judge_notes   TEXT
 );
+-- Migrations for previously-deployed databases (idempotent).
+ALTER TABLE generated_sets ADD COLUMN IF NOT EXISTS quality_score INTEGER;
+ALTER TABLE generated_sets ADD COLUMN IF NOT EXISTS judge_notes TEXT;
 CREATE INDEX IF NOT EXISTS idx_sets_section_status ON generated_sets(section, status);
 CREATE INDEX IF NOT EXISTS idx_sets_section_quality
   ON generated_sets(section, quality_score DESC, created_at DESC);
