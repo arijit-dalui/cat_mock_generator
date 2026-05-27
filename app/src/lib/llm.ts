@@ -19,11 +19,17 @@ const TIMEOUT_MS = 900_000; // 15 min hard cap per LLM call
 
 /** Plain node:http(s) POST. Avoids fetch/undici body-timeout defaults that
  * would abort slow CPU-LLM responses. Returns the raw body as text. */
+interface RawResp {
+  status: number;
+  body: string;
+  headers: Record<string, string | string[] | undefined>;
+}
+
 function rawPost(
   url: string,
   body: string,
   headers: Record<string, string>,
-): Promise<{ status: number; body: string }> {
+): Promise<RawResp> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
@@ -42,6 +48,7 @@ function rawPost(
           resolve({
             status: res.statusCode ?? 0,
             body: Buffer.concat(chunks).toString("utf8"),
+            headers: res.headers,
           }),
         );
         res.on("error", reject);
@@ -54,6 +61,20 @@ function rawPost(
     req.write(body);
     req.end();
   });
+}
+
+const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Parse Retry-After header (seconds or HTTP-date) into milliseconds. */
+function retryAfterMs(headers: Record<string, string | string[] | undefined>): number {
+  const ra = headers["retry-after"];
+  const v = Array.isArray(ra) ? ra[0] : ra;
+  if (!v) return 0;
+  const n = Number(v);
+  if (Number.isFinite(n)) return Math.max(0, n) * 1000;
+  const t = Date.parse(v);
+  if (!Number.isNaN(t)) return Math.max(0, t - Date.now());
+  return 0;
 }
 
 // ---- Ollama (local) -------------------------------------------------------
@@ -86,24 +107,37 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
   const messages = [];
   if (opts.system) messages.push({ role: "system", content: opts.system });
   messages.push({ role: "user", content: prompt });
-  const { status, body } = await rawPost(
-    "https://api.groq.com/openai/v1/chat/completions",
-    JSON.stringify({
-      model: config.llm.groqModel,
-      messages,
-      temperature: opts.temperature ?? 0.7,
-      max_tokens: opts.maxTokens ?? 8192,
-      response_format: { type: "json_object" },
-    }),
-    {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.llm.groqApiKey}`,
-    },
-  );
-  if (status < 200 || status >= 300)
-    throw new Error(`Groq chat failed: ${status}`);
-  const data = JSON.parse(body);
-  return data?.choices?.[0]?.message?.content ?? "";
+  const payload = JSON.stringify({
+    model: config.llm.groqModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 8192,
+    response_format: { type: "json_object" },
+  });
+  const reqHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${config.llm.groqApiKey}`,
+  };
+  // Up to 3 retries on 429, honouring Retry-After if Groq sends it,
+  // otherwise exponential backoff (5s, 10s, 20s).
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { status, body, headers } = await rawPost(
+      "https://api.groq.com/openai/v1/chat/completions",
+      payload,
+      reqHeaders,
+    );
+    if (status === 429 && attempt < 3) {
+      const wait =
+        retryAfterMs(headers) || Math.min(20_000, 5_000 * Math.pow(2, attempt));
+      await sleepMs(wait);
+      continue;
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`Groq chat failed: ${status}`);
+    const data = JSON.parse(body);
+    return data?.choices?.[0]?.message?.content ?? "";
+  }
+  throw new Error("Groq chat failed: 429 after retries");
 }
 
 /** Send a prompt to the active provider, with one retry. */

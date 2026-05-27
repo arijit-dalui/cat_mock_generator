@@ -128,8 +128,11 @@ interface Plan {
   count: number;
 }
 
-/** Sleep between Groq calls to stay under free-tier RPM/TPM limits. */
-const PACE_MS = 3500;
+/** Sleep between Groq calls to stay under free-tier RPM/TPM limits.
+ * Groq's free tier on llama-3.3-70b: ~12K TPM, 30 RPM.
+ * Our prompts are ~1500-2000 tokens; pacing 6s between calls = 10/min,
+ * well under both limits. Combined with chat()-level Retry-After backoff. */
+const PACE_MS = 6000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function genQuestions(
@@ -350,7 +353,7 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
     const items = await genQuestions("QA", QA_PLAN, qaPrompt, warnings);
     const verified: GenQuestion[] = [];
     for (const [vi, q] of items.entries()) {
-      if (vi > 0) await sleep(2000);
+      if (vi > 0) await sleep(4000);
       if (await verifyAnswer(q)) verified.push(q);
       else warnings.push(`QA question failed answer verification and was dropped`);
     }
