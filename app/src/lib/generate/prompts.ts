@@ -141,12 +141,18 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
         `qualification) — and the right option must satisfy that expectation. ` +
         `Each option is a candidate sentence (full sentence, not a fragment).`
       : subtype === "odd_one_out"
-      ? `\nFormat the "prompt" as a numbered list of 5 sentences (1-5). ` +
-        `Each option must be a single digit string "1"-"5" naming the misfit.`
+      ? `\nFormat each "prompt" exactly like:\n` +
+        `"The five sentences below relate to the same theme. ` +
+        `Identify the ONE sentence that does not fit logically with the ` +
+        `others.\\n1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n` +
+        `4. <sentence>\\n5. <sentence>"\n` +
+        `Each option must be a single digit string "1"-"5" naming the misfit. ` +
+        `The misfit should break the thematic line (advocacy vs description, ` +
+        `cause vs effect, etc.), not the surface vocabulary.`
       : subtype === "summary"
-      ? `\nFormat the "prompt" as the paragraph followed by "\\nWhich of the ` +
-        `following best summarises the passage?". Each option is a one- or ` +
-        `two-sentence summary.`
+      ? `\nFormat each "prompt" exactly as: the paragraph, then a NEWLINE, ` +
+        `then the literal question "Which of the following best summarises ` +
+        `the paragraph above?". Each option is a one- or two-sentence summary.`
       : "";
   return (
     `You are a CAT (Common Admission Test) verbal-ability paper-setter, ` +
