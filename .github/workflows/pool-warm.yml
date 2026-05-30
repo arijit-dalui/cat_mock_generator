@@ -1,0 +1,51 @@
+name: Pool warm
+
+# Serverless pool warmer. Vercel Hobby caps native crons at once/day, so we
+# drive the topup endpoint from GitHub Actions instead. Each run generates one
+# judged set into the most-depleted section and tops every section toward 50.
+#
+# Required repo secrets:
+#   APP_URL      - production base URL, e.g. https://cat-mocks-assss-projects.vercel.app
+#   WORKER_TOKEN - same value as CRON_SECRET / WORKER_TOKEN in Vercel env
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every ~10 minutes (GitHub may delay under load)
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Purge pooled sets not referenced by any attempt before warming"
+        type: boolean
+        default: false
+      target:
+        description: "Pool depth to maintain per section"
+        default: "50"
+
+concurrency:
+  group: pool-warm
+  cancel-in-progress: false
+
+jobs:
+  topup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit cron-topup
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          WORKER_TOKEN: ${{ secrets.WORKER_TOKEN }}
+          TARGET: ${{ github.event.inputs.target || '50' }}
+          RESET: ${{ github.event.inputs.reset || 'false' }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$WORKER_TOKEN" ]; then
+            echo "APP_URL and WORKER_TOKEN secrets must be set"; exit 1
+          fi
+          RESET_PARAM=""
+          if [ "$RESET" = "true" ]; then RESET_PARAM="&reset=1"; fi
+          URL="${APP_URL%/}/api/internal/cron-topup?target=${TARGET}&max=1&sections=VA,RC,DI,LR,QA${RESET_PARAM}"
+          echo "POST $URL"
+          code=$(curl -sS -m 300 -o /tmp/resp.json -w "%{http_code}" \
+            -X POST "$URL" -H "Authorization: Bearer ${WORKER_TOKEN}")
+          echo "HTTP $code"
+          cat /tmp/resp.json; echo
+          # 2xx only; anything else fails the run so it shows up in the actions log
+          case "$code" in 2*) ;; *) exit 1 ;; esac
