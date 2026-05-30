@@ -246,7 +246,11 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
 
   function renderQuestion(q: GenQuestion) {
     n += 1;
-    const chosen = answers[q.id];
+    // Coerce to numbers — JSON round-trips occasionally hand us "2" instead of
+    // 2, which then fails strict-equality and paints colors at random.
+    const chosen =
+      answers[q.id] === undefined ? undefined : Number(answers[q.id]);
+    const correctIdx = Number(q.answer);
     const prompt = withInstructionFallback(q);
     return (
       <div key={q.id} className="card p-5">
@@ -257,7 +261,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
         <div className="mt-3 space-y-2">
           {q.options.map((opt, i) => {
             const isChosen = chosen === i;
-            const isCorrect = q.answer === i;
+            const isCorrect = correctIdx === i;
             let cls = "border-slate-300 hover:bg-slate-50";
             if (reviewed && isCorrect) cls = "border-green-500 bg-green-50";
             else if (reviewed && isChosen && !isCorrect)

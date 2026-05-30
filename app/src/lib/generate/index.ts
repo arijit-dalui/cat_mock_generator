@@ -28,19 +28,40 @@ function nextId(prefix: string): string {
 }
 
 // ---- normalisation of raw LLM output --------------------------------------
-function coerceAnswer(a: unknown, optionCount: number): number {
-  if (typeof a === "number" && a >= 0 && a < optionCount) return Math.floor(a);
+/** Coerce the LLM's "answer" field to a 0-based option index. Accepts:
+ *   - integers (treated 0-based if 0..N-1, else 1-based if 1..N)
+ *   - letters "A"/"a"/.../"D"/"d"
+ *   - strings like "Option B" or "(C)"
+ * Returns null when we cannot confidently decide — caller can drop the
+ * question rather than silently default to A (which used to mask key bugs). */
+function coerceAnswer(a: unknown, optionCount: number): number | null {
+  if (typeof a === "number") {
+    const n = Math.floor(a);
+    if (n >= 0 && n < optionCount) return n;
+    if (n >= 1 && n <= optionCount) return n - 1;
+    return null;
+  }
   if (typeof a === "string") {
     const s = a.trim();
+    // bare letter, e.g. "B"
+    const m = s.match(/^[\(\[]?\s*([A-Da-d])\s*[\)\]\.\:]?$/);
+    if (m) return m[1].toUpperCase().charCodeAt(0) - 65;
+    // "option B", "answer is C"
+    const m2 = s.match(/\b(?:option|answer|choice)\s*[:\-]?\s*([A-Da-d])\b/i);
+    if (m2) return m2[1].toUpperCase().charCodeAt(0) - 65;
+    // bare integer
     if (/^\d+$/.test(s)) {
       const n = parseInt(s, 10);
       if (n >= 0 && n < optionCount) return n;
-      if (n >= 1 && n <= optionCount) return n - 1; // 1-based
+      if (n >= 1 && n <= optionCount) return n - 1;
     }
-    const letter = s.toLowerCase().charCodeAt(0) - 97; // a -> 0
-    if (letter >= 0 && letter < optionCount) return letter;
+    // single-char fallback
+    if (s.length === 1) {
+      const letter = s.toUpperCase().charCodeAt(0) - 65;
+      if (letter >= 0 && letter < optionCount) return letter;
+    }
   }
-  return 0;
+  return null;
 }
 
 function coerceExplanations(e: unknown, optionCount: number): string[] {
@@ -112,6 +133,9 @@ function normalizeQuestion(raw: any, type: string): GenQuestion | null {
     raw.answer ?? raw.correct ?? raw.correctAnswer ?? raw.correct_option,
     4,
   );
+  // Drop questions whose answer key we couldn't parse — silently defaulting
+  // to A used to ship junk to users (red/green swapped, wrong score).
+  if (answer === null) return null;
   const explanations = coerceExplanations(
     raw.explanations ?? raw.explanation ?? raw.optionExplanations,
     4,
@@ -119,7 +143,26 @@ function normalizeQuestion(raw: any, type: string): GenQuestion | null {
   const solution = cleanQuestionText(
     String(raw.solution ?? raw.working ?? raw.reasoning ?? "").trim(),
   );
-  return { id: nextId("q"), type, prompt, options, answer, explanations, solution };
+  // Sanity check: if the solution text names a single option letter clearly
+  // and it disagrees with `answer`, trust the solution working (the LLM more
+  // often emits the right letter inside its prose than in the JSON field).
+  const lettered = /\b(?:answer|correct option|hence|therefore)\s*(?:is|:)?\s*\(?([A-D])\)?/i.exec(
+    solution,
+  );
+  let finalAnswer = answer;
+  if (lettered) {
+    const fromSol = lettered[1].toUpperCase().charCodeAt(0) - 65;
+    if (fromSol !== answer) finalAnswer = fromSol;
+  }
+  return {
+    id: nextId("q"),
+    type,
+    prompt,
+    options,
+    answer: finalAnswer,
+    explanations,
+    solution,
+  };
 }
 
 // ---- standalone-question sections (VA, QA) --------------------------------
@@ -187,7 +230,8 @@ async function verifyAnswer(q: GenQuestion): Promise<boolean> {
       verifyPrompt(q.prompt, q.options),
       { temperature: 0 },
     );
-    return coerceAnswer(v?.answer, 4) === q.answer;
+    const verified = coerceAnswer(v?.answer, 4);
+    return verified === null || verified === q.answer;
   } catch {
     return true; // verifier unavailable - do not block generation
   }
@@ -221,28 +265,36 @@ function normalizeSet(
 
 async function genRC(warnings: string[]): Promise<GenSubSet[]> {
   const sets: GenSubSet[] = [];
+  const usedPassages: string[] = [];
+  const isDuplicate = (p: string) =>
+    usedPassages.some((u) => u.slice(0, 200) === p.slice(0, 200));
   for (let i = 0; i < 2; i++) {
     if (i > 0) await sleep(PACE_MS);
     let passage = "";
     let source = "";
-    // mix: try a fresh Aeon essay roughly half the time
-    if (Math.random() < 0.5) {
-      const article = await fetchAeonArticle();
-      if (article) {
-        passage = article.text;
-        source = `Aeon: ${article.title}`;
+    // Try multiple sources; reject duplicates of the first passage so the
+    // user always sees 2 DIFFERENT passages, never the same one twice.
+    // Try Aeon up to 3 attempts when we need a fresh passage.
+    for (let attempt = 0; attempt < 3 && !passage; attempt++) {
+      if (Math.random() < 0.5 || i > 0) {
+        const article = await fetchAeonArticle();
+        if (article && !isDuplicate(article.text)) {
+          passage = article.text;
+          source = `Aeon: ${article.title}`;
+          break;
+        }
       }
-    }
-    if (!passage) {
+      // KB exemplar fallback
       const exs = await sampleExemplars("RC", {
         subtype: "rc_passage",
-        limit: 1,
+        limit: 5,
         minWords: 250,
       });
-      const p = exs[0];
+      const p = exs.find((e) => !isDuplicate(cleanExemplar(e.stem)));
       if (p) {
         passage = cleanExemplar(p.stem);
         source = "mock-derived passage";
+        break;
       }
     }
     if (!passage) {
@@ -268,6 +320,11 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
       warnings.push("no RC passage available for one set");
       continue;
     }
+    if (isDuplicate(passage)) {
+      warnings.push("RC duplicate passage rejected");
+      continue;
+    }
+    usedPassages.push(passage);
     try {
       const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
       const data = await chatJSON<any>(rcPrompt(passage, source, ex), {

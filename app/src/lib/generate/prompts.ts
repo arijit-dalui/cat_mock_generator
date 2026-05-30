@@ -32,14 +32,16 @@ const SCHEMA_QUESTIONS = `Return JSON of this exact shape:
 {"questions":[
   {
     "prompt": "the full question text",
-    "options": ["option 1", "option 2", "option 3", "option 4"],
-    "answer": 0,
-    "explanations": ["why option 1 is right/wrong", "...2", "...3", "...4"],
+    "options": ["option A text", "option B text", "option C text", "option D text"],
+    "answer": "A",
+    "explanations": ["why A is right/wrong", "why B...", "why C...", "why D..."],
     "solution": "the full worked reasoning leading to the answer"
   }
 ]}
-Rules: exactly 4 options; "answer" is the 0-based index of the single correct
-option; "explanations" has exactly 4 entries, one per option.`;
+Rules: exactly 4 options in A,B,C,D order; "answer" MUST be the LETTER ("A",
+"B", "C", or "D") of the single correct option; "explanations" has exactly 4
+entries, one per option in A,B,C,D order. The letter in "answer" must match
+the option that the "solution" working actually arrives at.`;
 
 /** JSON contract for a passage/data set with 4 questions (RC, DI, LR). */
 const SCHEMA_SET = `Return JSON of this exact shape:
@@ -48,15 +50,17 @@ const SCHEMA_SET = `Return JSON of this exact shape:
   "questions": [
     {
       "prompt": "question text",
-      "options": ["o1","o2","o3","o4"],
-      "answer": 0,
-      "explanations": ["...1","...2","...3","...4"],
+      "options": ["A text","B text","C text","D text"],
+      "answer": "A",
+      "explanations": ["why A...","why B...","why C...","why D..."],
       "solution": "worked reasoning"
     }
   ]
 }
-Rules: exactly 4 questions; each question has exactly 4 options; "answer" is
-the 0-based index of the correct option; "explanations" has 4 entries.`;
+Rules: exactly 4 questions; each question has exactly 4 options in A,B,C,D
+order; "answer" MUST be the LETTER ("A","B","C","D") of the correct option
+and must match what the "solution" actually arrives at; "explanations" has 4
+entries, one per option in A,B,C,D order.`;
 
 /** Clean up the artefacts that PDF extraction leaves in KB exemplars:
  * single-character-per-line wrap, ALL-CAPS DIRECTIONS preambles, repeated

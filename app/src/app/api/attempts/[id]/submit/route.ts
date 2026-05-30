@@ -42,6 +42,20 @@ export async function POST(
     : setRow.payload) as GeneratedSet;
   const { correct, total } = scoreSet(set, answers);
 
+  // Diagnostic: log mismatches so we can spot key-shift bugs in production.
+  // Cheap — runs only on submit, payload is small.
+  if (correct === 0 && Object.keys(answers).length > 0) {
+    const debug = (set.kind === "questions" ? set.items ?? [] : (set.sets ?? []).flatMap((s) => s.questions))
+      .map((q) => ({ id: q.id, answer: q.answer, picked: answers[q.id] }));
+    console.warn("[submit] zero-score with non-empty answers", {
+      attemptId: attempt.id,
+      userId: user.id,
+      section: attempt.section,
+      keys: { qIds: debug.map((d) => d.id), answerIds: Object.keys(answers) },
+      sample: debug.slice(0, 3),
+    });
+  }
+
   await attempts.submit(attempt.id, answers, correct, total);
   await events.log("solve", user.id, attempt.section, { score: correct, total });
 
