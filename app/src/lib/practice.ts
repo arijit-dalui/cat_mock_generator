@@ -7,14 +7,20 @@ export function allQuestions(set: GeneratedSet): GenQuestion[] {
   return (set.sets ?? []).flatMap((s) => s.questions);
 }
 
-/** Score a set against a map of questionId -> chosen option index. */
+/** Score a set against a map of questionId -> chosen option index.
+ * Defensively coerces both sides to numbers so a JSONB round-trip that
+ * stringifies values (e.g. answers = {"q1": "2"}) still scores correctly. */
 export function scoreSet(
   set: GeneratedSet,
-  answers: Record<string, number>,
+  answers: Record<string, unknown>,
 ): { correct: number; total: number } {
   const qs = allQuestions(set);
   let correct = 0;
-  for (const q of qs) if (answers[q.id] === q.answer) correct += 1;
+  for (const q of qs) {
+    const picked = Number(answers[q.id]);
+    const key = Number(q.answer);
+    if (Number.isFinite(picked) && Number.isFinite(key) && picked === key) correct += 1;
+  }
   return { correct, total: qs.length };
 }
 
