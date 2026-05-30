@@ -154,6 +154,18 @@ function normalizeQuestion(raw: any, type: string): GenQuestion | null {
     const fromSol = lettered[1].toUpperCase().charCodeAt(0) - 65;
     if (fromSol !== answer) finalAnswer = fromSol;
   }
+  // Strongest cross-check: per-option explanations. Writers reliably prefix the
+  // correct option's explanation with "Correct" and the others with "Incorrect".
+  // If EXACTLY ONE explanation is so labelled and it disagrees with the current
+  // answer, trust it. This catches the off-by-one / 1-based-index key bug where
+  // the stored `answer` lands one option past the truly-correct one.
+  const correctByExp = explanations.reduce<number[]>((acc, e, i) => {
+    if (/^\s*correct\b/i.test(e)) acc.push(i);
+    return acc;
+  }, []);
+  if (correctByExp.length === 1 && correctByExp[0] !== finalAnswer) {
+    finalAnswer = correctByExp[0];
+  }
   return {
     id: nextId("q"),
     type,
@@ -223,11 +235,15 @@ async function genQuestions(
   return items;
 }
 
-/** Re-solve a question independently; returns true if the answer holds. */
-async function verifyAnswer(q: GenQuestion): Promise<boolean> {
+/** Re-solve a question independently; returns true if the answer holds.
+ * `context` (e.g. a DI table / LR scenario) is prepended so the verifier has
+ * the data it needs to recompute the answer. */
+async function verifyAnswer(q: GenQuestion, context?: string): Promise<boolean> {
   try {
+    const prompt =
+      context && context.trim() ? `${context.trim()}\n\n${q.prompt}` : q.prompt;
     const v = await chatJSON<{ answer?: unknown }>(
-      verifyPrompt(q.prompt, q.options),
+      verifyPrompt(prompt, q.options),
       { temperature: 0 },
     );
     const verified = coerceAnswer(v?.answer, 4);
@@ -424,6 +440,20 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
 
   if (section === "DI") {
     const sets = await genContextSets("DI", "Data Interpretation", diPrompt, warnings);
+    // DI keys are arithmetic; independently re-solve each question against its
+    // own table and drop ones the verifier confidently disagrees with. This
+    // kills the "table says 70 but the key computed with 60" inconsistency bug.
+    let verifyCalls = 0;
+    for (const set of sets) {
+      const kept: GenQuestion[] = [];
+      for (const q of set.questions) {
+        if (verifyCalls > 0) await sleep(4000);
+        verifyCalls += 1;
+        if (await verifyAnswer(q, set.context)) kept.push(q);
+        else warnings.push("DI question failed answer verification and was dropped");
+      }
+      set.questions = kept;
+    }
     return { section, kind: "sets", sets, meta };
   }
 

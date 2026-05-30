@@ -45,8 +45,9 @@ export const config = {
 
   extractionDocs: path.resolve(appRoot, env("EXTRACTION_DOCS", "../extraction/docs")),
   poolSize: parseInt(env("POOL_SIZE", "50"), 10),
-  /** Maximum quality-graded sets the cron will hold per section. */
-  poolTarget: parseInt(env("POOL_TARGET", "20"), 10),
+  /** Maximum quality-graded sets the cron will hold per section. Target 50+
+   * so a user practically never exhausts the unseen pool (= no repeats). */
+  poolTarget: parseInt(env("POOL_TARGET", "50"), 10),
   /** Maximum sets the cron tries to generate per single invocation.
    * Vercel Hobby caps a single function call at 300s; a single set takes
    * 60-200s including the judge. Default 1 keeps each tick safely under
@@ -57,7 +58,7 @@ export const config = {
    * cap, so by default the cron leaves them out — they generate on-demand
    * when the user clicks Generate. Add VA/QA only on Vercel Pro or when
    * the worker runs off-platform. */
-  cronSections: env("CRON_SECTIONS", "RC,DI,LR")
+  cronSections: env("CRON_SECTIONS", "VA,RC,DI,LR,QA")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),

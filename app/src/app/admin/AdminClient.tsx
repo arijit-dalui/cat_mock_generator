@@ -11,9 +11,16 @@ interface Stats {
   dau: { d: string; c: number }[];
   generated: Record<string, { count: number }>;
   solved: Record<string, { count: number; avgScore?: number | null }>;
-  pool: Record<string, { count: number }>;
-  kb: Record<string, { count: number }>;
 }
+
+// Slice colours for the question-distribution pie (one per section).
+const SECTION_COLORS: Record<string, string> = {
+  VA: "#2563eb",
+  RC: "#16a34a",
+  DI: "#d97706",
+  LR: "#9333ea",
+  QA: "#dc2626",
+};
 
 export default function AdminClient({ username }: { username: string }) {
   const router = useRouter();
@@ -48,7 +55,23 @@ export default function AdminClient({ username }: { username: string }) {
   if (!stats)
     return <main className="mx-auto max-w-4xl px-6 py-10 text-slate-400">Loading...</main>;
 
-  const maxDau = Math.max(1, ...stats.dau.map((d) => d.c));
+  // Question distribution across sections, as a share of total generated.
+  const dist = SECTIONS.map((s) => ({
+    section: s,
+    count: stats.generated[s]?.count ?? 0,
+    color: SECTION_COLORS[s],
+  }));
+  const distTotal = dist.reduce((n, d) => n + d.count, 0);
+  // Build conic-gradient stops so each slice is its share of 100%.
+  let acc = 0;
+  const gradientStops = dist
+    .map((d) => {
+      const start = distTotal ? (acc / distTotal) * 100 : 0;
+      acc += d.count;
+      const end = distTotal ? (acc / distTotal) * 100 : 0;
+      return `${d.color} ${start}% ${end}%`;
+    })
+    .join(", ");
 
   return (
     <div className="min-h-screen">
@@ -81,26 +104,36 @@ export default function AdminClient({ username }: { username: string }) {
 
         <section className="card p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Daily active visitors (last 14 days)
+            Question distribution by section
           </h2>
-          <div className="mt-4 flex items-end gap-2" style={{ height: 120 }}>
-            {stats.dau.length === 0 ? (
-              <p className="text-sm text-slate-400">No activity yet.</p>
-            ) : (
-              stats.dau.map((d) => (
-                <div key={d.d} className="flex flex-1 flex-col items-center">
-                  <div
-                    className="w-full rounded-t bg-brand/80"
-                    style={{ height: `${(d.c / maxDau) * 100}%` }}
-                    title={`${d.d}: ${d.c}`}
-                  />
-                  <span className="mt-1 text-[10px] text-slate-400">
-                    {d.d.slice(5)}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+          {distTotal === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">No questions generated yet.</p>
+          ) : (
+            <div className="mt-4 flex flex-wrap items-center gap-8">
+              <div
+                className="h-40 w-40 shrink-0 rounded-full"
+                style={{ background: `conic-gradient(${gradientStops})` }}
+                aria-label="Question distribution pie chart"
+              />
+              <ul className="space-y-2 text-sm">
+                {dist.map((d) => {
+                  const pct = distTotal ? (d.count / distTotal) * 100 : 0;
+                  return (
+                    <li key={d.section} className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-3 w-3 rounded-sm"
+                        style={{ background: d.color }}
+                      />
+                      <span className="font-medium text-slate-700">{d.section}</span>
+                      <span className="text-slate-400">
+                        {pct.toFixed(1)}% ({d.count})
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </section>
 
         <section className="card p-6 overflow-x-auto">
@@ -114,8 +147,6 @@ export default function AdminClient({ username }: { username: string }) {
                 <th>Generated</th>
                 <th>Solved</th>
                 <th>Avg score</th>
-                <th>Pool</th>
-                <th>KB items</th>
               </tr>
             </thead>
             <tbody>
@@ -129,8 +160,6 @@ export default function AdminClient({ username }: { username: string }) {
                     <td>
                       {avg == null ? "-" : `${Math.round(avg * 100)}%`}
                     </td>
-                    <td>{stats.pool[s]?.count ?? 0}</td>
-                    <td>{stats.kb[s]?.count ?? 0}</td>
                   </tr>
                 );
               })}

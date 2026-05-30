@@ -50,14 +50,6 @@ export async function GET() {
      FROM attempts WHERE ${submittedTrue} GROUP BY section`,
   );
 
-  const pool = await query<{ section: string; c: number }>(
-    "SELECT section, COUNT(*) c FROM generated_sets WHERE status = 'pooled' GROUP BY section",
-  );
-
-  const kb = await query<{ section: string; c: number }>(
-    "SELECT section, COUNT(*) c FROM kb_items GROUP BY section",
-  );
-
   const bySection = (rows: { section: string; c: number; avg?: number | null }[]) => {
     const out: Record<string, { count: number; avgScore?: number | null }> = {};
     for (const s of SECTIONS) out[s] = { count: 0 };
@@ -76,7 +68,5 @@ export async function GET() {
     dau: dau.map((r) => ({ d: r.d, c: Number(r.c) })),
     generated: bySection(generated),
     solved: bySection(solved),
-    pool: bySection(pool),
-    kb: bySection(kb),
   });
 }
