@@ -25,11 +25,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unknown section." }, { status: 400 });
   }
 
-  // Try the new quality-graded pool first.
+  // Serve the highest-quality pooled set this user has NOT seen yet.
   let setRow = await sets.pickForUser(section, user.id);
 
-  // Fallback: pool is empty for this section -> generate one synchronously.
-  // The judge is run inline so we don't ship junk to the user.
+  // No UNSEEN set left -> generate a fresh one synchronously rather than
+  // re-serving an old set (re-serving caused the "same set again and again"
+  // bug). The judge runs inline so we don't ship junk.
   if (!setRow) {
     try {
       const generated = await generateSet(section);
@@ -46,14 +47,19 @@ export async function POST(req: Request) {
       );
       setRow = await sets.byId(id);
     } catch (e) {
-      return NextResponse.json(
-        {
-          error:
-            "Could not generate a set. " +
-            (e instanceof Error ? e.message : ""),
-        },
-        { status: 502 },
-      );
+      // Generation failed (LLM down / timeout). Only NOW fall back to an
+      // already-seen set so the user gets something rather than an error.
+      setRow = await sets.pickSeenLRU(section, user.id);
+      if (!setRow) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not generate a set. " +
+              (e instanceof Error ? e.message : ""),
+          },
+          { status: 502 },
+        );
+      }
     }
   }
   if (!setRow) {

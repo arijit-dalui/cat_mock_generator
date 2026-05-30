@@ -271,15 +271,15 @@ export const sets = {
         RETURNING id`;
     return rows[0].id;
   },
-  /** Pick the highest-quality pooled set in `section` that this user has not
-   * yet seen. If they have seen them all, return the OLDEST seen one (least
-   * recently used). */
+  /** Highest-quality pooled set in `section` that this user has NOT yet seen,
+   * or undefined when they've seen them all. The caller should generate a
+   * fresh set when this returns undefined rather than re-serving a stale one
+   * (re-serving was the "same set again and again" bug). */
   async pickForUser(
     section: string,
     userId: number,
   ): Promise<GeneratedSet | undefined> {
     await ready;
-    // First try: highest quality_score that user has NOT seen.
     const fresh = await sql<
       GeneratedSet[]
     >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
@@ -290,8 +290,16 @@ export const sets = {
           )
         ORDER BY g.quality_score DESC NULLS LAST, g.created_at DESC
         LIMIT 1`;
-    if (fresh[0]) return fresh[0];
-    // Fallback: user has seen everything; return the one they saw longest ago.
+    return fresh[0];
+  },
+  /** Last-resort fallback: the set this user saw longest ago. Only used when
+   * the pool is exhausted AND fresh generation failed, so the user is never
+   * handed an error while some content exists. */
+  async pickSeenLRU(
+    section: string,
+    userId: number,
+  ): Promise<GeneratedSet | undefined> {
+    await ready;
     const seen = await sql<
       GeneratedSet[]
     >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
@@ -329,6 +337,18 @@ export const sets = {
             LIMIT ${maxRows}
         )
         RETURNING id`;
+    return rows.length;
+  },
+  /** Delete every pooled set that no attempt references. Used as a one-shot
+   * reset to clear stale/wrong-key content; review links survive because any
+   * set tied to a real attempt is kept. Returns the number deleted. */
+  async purgeUnreferenced(): Promise<number> {
+    await ready;
+    const rows = await sql<
+      { id: number }[]
+    >`DELETE FROM generated_sets g
+        WHERE NOT EXISTS (SELECT 1 FROM attempts a WHERE a.set_id = g.id)
+        RETURNING g.id`;
     return rows.length;
   },
 };

@@ -39,13 +39,41 @@ interface SectionStatus {
 
 async function topupOnce(req: Request) {
   const start = Date.now();
-  // Only the sections the operator has enabled for cron topup. VA and QA
-  // are typically excluded on Vercel Hobby because they exceed the 300s
-  // function cap; the user-facing /api/generate route still handles them
-  // on-demand.
-  const cronSet = config.cronSections.filter((s) =>
+
+  // Query overrides let the scheduler (GitHub Actions) drive target depth and
+  // which sections to warm WITHOUT changing Vercel env vars. Falls back to
+  // config when a param is absent or invalid.
+  //   ?target=50          -> pool depth to maintain per section
+  //   ?sections=VA,RC,..  -> which sections to warm (default: config.cronSections)
+  //   ?max=1              -> sets generated this invocation
+  //   ?reset=1            -> first purge pooled sets not referenced by any
+  //                          attempt (used once to clear stale/bad-key sets)
+  const url = new URL(req.url);
+  const qpInt = (key: string, fallback: number) => {
+    const v = parseInt(url.searchParams.get(key) || "", 10);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+  const poolTarget = qpInt("target", config.poolTarget);
+  const maxPerTick = qpInt("max", config.maxPerTick);
+  const sectionsParam = url.searchParams.get("sections");
+  const requested = sectionsParam
+    ? sectionsParam.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
+    : config.cronSections;
+  const doReset = ["1", "true", "yes"].includes(
+    (url.searchParams.get("reset") || "").toLowerCase(),
+  );
+
+  // Only sections that actually exist.
+  const cronSet = requested.filter((s) =>
     (SECTIONS as readonly string[]).includes(s),
   ) as Section[];
+
+  // One-shot maintenance: purge pooled sets with no attempt referencing them
+  // (clears stale/wrong-key content so the pool refills with corrected sets).
+  let purged = 0;
+  if (doReset) {
+    purged = await sets.purgeUnreferenced();
+  }
 
   const status: Record<Section, SectionStatus> = Object.fromEntries(
     SECTIONS.map((s) => [
@@ -59,7 +87,7 @@ async function topupOnce(req: Request) {
     status[s].pool = await sets.qualityPoolCount(s);
   }
 
-  const needed = cronSet.filter((s) => status[s].pool < config.poolTarget);
+  const needed = cronSet.filter((s) => status[s].pool < poolTarget);
   if (needed.length === 0) {
     // Nothing to do for generation. Still run cleanup.
     const deleted = await sets.cleanupOld(
@@ -69,6 +97,8 @@ async function topupOnce(req: Request) {
     return NextResponse.json({
       status: "pool already full",
       cronSections: cronSet,
+      poolTarget,
+      purged,
       pool: Object.fromEntries(SECTIONS.map((s) => [s, status[s].pool])),
       cleanupDeleted: deleted,
       elapsedMs: Date.now() - start,
@@ -79,14 +109,14 @@ async function topupOnce(req: Request) {
   // generate up to maxPerTick sets total. Each set: generate, judge,
   // insert-if-accepted. Stop early if we approach Vercel's 300s ceiling.
   const BUDGET_MS = 250_000;
-  let toGenerate = config.maxPerTick;
+  let toGenerate = maxPerTick;
   while (toGenerate > 0) {
     if (Date.now() - start > BUDGET_MS) break;
     // Pick the section with the lowest pool that still needs filling,
     // restricted to the cron-allowed list.
     const target = cronSet
       .map((s) => ({ s, depth: status[s].pool }))
-      .filter((x) => x.depth < config.poolTarget)
+      .filter((x) => x.depth < poolTarget)
       .sort((a, b) => a.depth - b.depth)[0];
     if (!target) break;
     const sec = target.s;
@@ -125,6 +155,8 @@ async function topupOnce(req: Request) {
   return NextResponse.json({
     status: "done",
     cronSections: cronSet,
+    poolTarget,
+    purged,
     sections: status,
     cleanupDeleted: deleted,
     elapsedMs: Date.now() - start,

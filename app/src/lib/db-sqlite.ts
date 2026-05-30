@@ -189,8 +189,11 @@ export const sets = {
       .run(section, JSON.stringify(payload), createdBy, qualityScore, judgeNotes);
     return Number(info.lastInsertRowid);
   },
+  /** Highest-quality pooled set in `section` the user has NOT seen yet, or
+   * undefined if they've seen them all. The caller should generate a fresh set
+   * when this returns undefined rather than re-serving an old one. */
   async pickForUser(section: string, userId: number): Promise<GeneratedSet | undefined> {
-    const fresh = db
+    return db
       .prepare(
         `SELECT g.* FROM generated_sets g
            WHERE g.section = ?
@@ -198,7 +201,11 @@ export const sets = {
            ORDER BY g.quality_score DESC, g.created_at DESC LIMIT 1`,
       )
       .get(section, userId) as GeneratedSet | undefined;
-    if (fresh) return fresh;
+  },
+  /** Last-resort fallback: the set this user saw longest ago. Only used when
+   * the pool is exhausted AND fresh generation failed, so we never hand the
+   * user an error when at least some content exists. */
+  async pickSeenLRU(section: string, userId: number): Promise<GeneratedSet | undefined> {
     return db
       .prepare(
         `SELECT g.* FROM generated_sets g
@@ -231,6 +238,18 @@ export const sets = {
            )`,
       )
       .run(`-${maxAgeHours} hours`, maxRows);
+    return Number(info.changes ?? 0);
+  },
+  /** Delete every pooled set that no attempt references. One-shot reset to
+   * clear stale/wrong-key content; sets tied to a real attempt are kept so
+   * review links survive. Returns the number deleted. */
+  async purgeUnreferenced(): Promise<number> {
+    const info = db
+      .prepare(
+        `DELETE FROM generated_sets
+           WHERE id NOT IN (SELECT set_id FROM attempts WHERE set_id IS NOT NULL)`,
+      )
+      .run();
     return Number(info.changes ?? 0);
   },
 };
