@@ -193,10 +193,14 @@ export const sets = {
    * undefined if they've seen them all. The caller should generate a fresh set
    * when this returns undefined rather than re-serving an old one. */
   async pickForUser(section: string, userId: number): Promise<GeneratedSet | undefined> {
+    // Only serve JUDGE-GRADED sets (quality_score NOT NULL). Legacy pre-grading
+    // rows carry the old wrong/off-by-one keys, so they're never picked;
+    // exhausting graded sets makes the route generate fresh instead.
     return db
       .prepare(
         `SELECT g.* FROM generated_sets g
            WHERE g.section = ?
+             AND g.quality_score IS NOT NULL
              AND g.id NOT IN (SELECT set_id FROM user_seen_sets WHERE user_id = ?)
            ORDER BY g.quality_score DESC, g.created_at DESC LIMIT 1`,
       )
