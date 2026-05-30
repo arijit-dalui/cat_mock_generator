@@ -280,15 +280,20 @@ export const sets = {
     userId: number,
   ): Promise<GeneratedSet | undefined> {
     await ready;
+    // Only serve JUDGE-GRADED sets (quality_score IS NOT NULL). Legacy
+    // pre-grading rows (NULL score) carry the old wrong/off-by-one keys, so we
+    // never pick them — exhausting graded sets triggers fresh generation in the
+    // route instead. Their review links stay valid; they're just never served.
     const fresh = await sql<
       GeneratedSet[]
     >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
         FROM generated_sets g
         WHERE g.section = ${section}
+          AND g.quality_score IS NOT NULL
           AND g.id NOT IN (
             SELECT set_id FROM user_seen_sets WHERE user_id = ${userId}
           )
-        ORDER BY g.quality_score DESC NULLS LAST, g.created_at DESC
+        ORDER BY g.quality_score DESC, g.created_at DESC
         LIMIT 1`;
     return fresh[0];
   },
