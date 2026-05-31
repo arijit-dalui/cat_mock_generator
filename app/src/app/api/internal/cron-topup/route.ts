@@ -195,15 +195,56 @@ async function topupOnce(req: Request) {
   });
 }
 
-/** Cron-job.org and GitHub Actions usually fire GET; some use POST. Accept both. */
-export async function GET(req: Request) {
+/** Keep the serverless function alive after the response is sent so background
+ * work finishes, using Vercel's request-context waitUntil WITHOUT requiring the
+ * @vercel/functions package (this is what that package does internally).
+ * Returns true if it scheduled the work, false if waitUntil isn't available. */
+function bgWaitUntil(p: Promise<unknown>): boolean {
+  try {
+    const ctx = (
+      globalThis as unknown as {
+        [k: symbol]: { get?: () => { waitUntil?: (p: Promise<unknown>) => void } };
+      }
+    )[Symbol.for("@vercel/request-context")]?.get?.();
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(p);
+      return true;
+    }
+  } catch {
+    /* fall through */
+  }
+  return false;
+}
+
+/** Shared handler. With ?bg=1 it returns 200 IMMEDIATELY and runs the topup in
+ * the background (up to maxDuration), so callers with short timeouts — e.g.
+ * cron-job.org's 30s limit — see a fast success instead of a timeout while the
+ * pool still fills. Without ?bg it runs synchronously (used by manual checks). */
+async function handle(req: Request) {
   if (!checkAuth(req))
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const bg = ["1", "true", "yes"].includes(
+    (new URL(req.url).searchParams.get("bg") || "").toLowerCase(),
+  );
+  if (bg) {
+    const work = topupOnce(req).catch((e) =>
+      console.error("[cron-topup bg] error:", e),
+    );
+    if (bgWaitUntil(work)) {
+      return NextResponse.json({ status: "started in background" });
+    }
+    // No waitUntil (local/dev): fall back to synchronous so work still runs.
+    await work;
+    return NextResponse.json({ status: "done (sync fallback)" });
+  }
   return topupOnce(req);
 }
 
+/** Cron-job.org and GitHub Actions usually fire GET; some use POST. Accept both. */
+export async function GET(req: Request) {
+  return handle(req);
+}
+
 export async function POST(req: Request) {
-  if (!checkAuth(req))
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  return topupOnce(req);
+  return handle(req);
 }
