@@ -116,7 +116,7 @@ function formatExemplars(items: KbItem[], max = 1): string {
 
 const VA_BRIEF: Record<string, string> = {
   para_jumble:
-    "para-jumble: 5 sentences (labelled 1-5 in scrambled order) that must be reordered into one coherent paragraph. EXACTLY ONE sentence must be a self-contained OPENER — a topic/thesis statement that introduces the subject with NO back-reference and NO transition-word start — and it must be the intended first sentence. Do NOT write sentences that nearly all begin with a connective: at most one or two sentences may start with 'however / moreover / therefore / by contrast / furthermore'; every other sentence must begin with its own subject (a noun phrase), not a discourse marker. The correct order should be FORCED by pronoun/reference chains ('this', 'such a view', 'the latter') and logical flow, not by chronology or by the digit labels.",
+    "para-jumble: 5 sentences (labelled 1-5 in scrambled order) that must be reordered into one coherent paragraph. EXACTLY ONE sentence must be a self-contained OPENER — a topic/thesis statement that introduces the subject with NO back-reference and NO transition-word start — and it must be the intended first sentence. Do NOT write sentences that nearly all begin with a connective: at most one or two sentences may start with 'however / moreover / therefore / by contrast / furthermore'; every other sentence must begin with its own subject (a noun phrase), not a discourse marker. CRUCIAL: the correct order must be driven by the LOGICAL / CONCEPTUAL progression of the argument (a claim, then its elaboration, an example, a qualification, a conclusion) — NOT by obvious surface cues. Do NOT lean on explicit conjunctions or pronouns ('this', 'such a view', 'the latter', 'however', 'therefore') as glue that makes the sequence trivially obvious; a solver should have to follow the MEANING and the flow of ideas, not just chain pronouns and connectives. Avoid chronology and digit labels as ordering signals.",
   para_completion:
     "para-completion: a 4-6 sentence paragraph with the FINAL sentence blanked out (_____). The right completion must follow logically from the SPECIFIC argument the paragraph develops — not from generic topical relevance. Two distractors should be topically related but logically off (broaden the scope, contradict the implied premise, or echo a counter-argument).",
   odd_one_out:
@@ -135,9 +135,14 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
         `"Arrange the following sentences in the correct logical order.\\n` +
         `1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n4. <sentence>\\n5. <sentence>"\n` +
         `Each option must be a 5-character ordering string drawn from "12345" ` +
-        `(every digit 1-5 used exactly once), e.g. "31245". Make the resolution ` +
-        `depend on cross-sentence references ("this", "such a view", "the latter"), ` +
-        `not on calendar dates or numeric labels inside the sentences.\n` +
+        `(every digit 1-5 used exactly once), e.g. "31245". The resolution must ` +
+        `depend on the LOGICAL flow of the argument (claim -> elaboration -> ` +
+        `example/qualification -> conclusion), NOT on calendar dates, numeric ` +
+        `labels, or obvious word-glue. Do NOT make the order trivially obvious ` +
+        `by chaining explicit connectives or pronouns ("this", "such a view", ` +
+        `"the latter", "however", "therefore"); the solver should have to ` +
+        `reason about MEANING, not just spot a pronoun pointing back at the ` +
+        `previous sentence.\n` +
         `STYLE: do NOT have most sentences open with "However"/"Moreover"/` +
         `"Therefore"/"Furthermore" — that pattern destroys the puzzle. Keep the ` +
         `independent OPENER sentence (subject-first, no back-reference) so a ` +
