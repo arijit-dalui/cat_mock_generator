@@ -106,6 +106,10 @@ async function ollamaChat(prompt: string, opts: ChatOptions): Promise<string> {
 }
 
 // ---- Groq (hosted) --------------------------------------------------------
+// Round-robin cursor across the configured API keys. Module-level so every
+// call (across the whole process) advances it, spreading load evenly.
+let groqKeyCursor = 0;
+
 async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
   const messages = [];
   if (opts.system) messages.push({ role: "system", content: opts.system });
@@ -117,30 +121,40 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
     max_tokens: opts.maxTokens ?? 8192,
     response_format: { type: "json_object" },
   });
-  const reqHeaders = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${config.llm.groqApiKey}`,
-  };
-  // Up to 3 retries on 429, honouring Retry-After if Groq sends it,
-  // otherwise exponential backoff (5s, 10s, 20s).
+  const keys = config.llm.groqApiKeys.length
+    ? config.llm.groqApiKeys
+    : [config.llm.groqApiKey];
+  const url = "https://api.groq.com/openai/v1/chat/completions";
+
+  // Strategy: on each attempt, try every key once (round-robin). A 429 on one
+  // key just moves to the next key immediately — only when ALL keys are
+  // rate-limited in the same round do we back off (honouring Retry-After,
+  // else 5s/10s/20s). With N keys this multiplies the usable TPM budget.
   for (let attempt = 0; attempt < 4; attempt++) {
-    const { status, body, headers } = await rawPost(
-      "https://api.groq.com/openai/v1/chat/completions",
-      payload,
-      reqHeaders,
-    );
-    if (status === 429 && attempt < 3) {
-      const wait =
-        retryAfterMs(headers) || Math.min(20_000, 5_000 * Math.pow(2, attempt));
-      await sleepMs(wait);
-      continue;
+    let lastRetryAfter = 0;
+    let all429 = true;
+    for (let k = 0; k < keys.length; k++) {
+      const key = keys[groqKeyCursor++ % keys.length];
+      const { status, body, headers } = await rawPost(url, payload, {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      });
+      if (status === 429) {
+        lastRetryAfter = retryAfterMs(headers) || lastRetryAfter;
+        continue; // try the next key right away
+      }
+      all429 = false;
+      if (status < 200 || status >= 300)
+        throw new Error(`Groq chat failed: ${status}`);
+      const data = JSON.parse(body);
+      return data?.choices?.[0]?.message?.content ?? "";
     }
-    if (status < 200 || status >= 300)
-      throw new Error(`Groq chat failed: ${status}`);
-    const data = JSON.parse(body);
-    return data?.choices?.[0]?.message?.content ?? "";
+    // Every key returned 429 this round — back off before the next round.
+    if (all429 && attempt < 3) {
+      await sleepMs(lastRetryAfter || Math.min(20_000, 5_000 * Math.pow(2, attempt)));
+    }
   }
-  throw new Error("Groq chat failed: 429 after retries");
+  throw new Error("Groq chat failed: 429 after retries across all keys");
 }
 
 /** Send a prompt to the active provider, with one retry. */

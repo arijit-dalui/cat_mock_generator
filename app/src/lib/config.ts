@@ -37,6 +37,13 @@ export const config = {
     ollamaModel: env("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
     ollamaEmbedModel: env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
     groqApiKey: process.env.GROQ_API_KEY || "",
+    // One or more Groq API keys. Set GROQ_API_KEYS="key1,key2,key3" to spread
+    // load across keys (round-robin) and fail over on 429 — this multiplies the
+    // effective free-tier tokens-per-minute budget. Falls back to GROQ_API_KEY.
+    groqApiKeys: (process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
     groqModel: env("GROQ_MODEL", "llama-3.1-8b-instant"),
     // The judge is a SECOND model used to score freshly generated sets.
     // Should be a different family from the writer for genuine second-opinion.
