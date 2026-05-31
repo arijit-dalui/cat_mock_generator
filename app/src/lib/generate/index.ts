@@ -366,6 +366,36 @@ const RC_TOPICS = [
   "the economics of labour markets and work",
 ];
 
+/** Are two passages near-duplicates? Shared logic for the dedup checks. */
+function passagesAreNearDuplicate(a: string, b: string): boolean {
+  return (
+    normHead(a) === normHead(b) ||
+    shingleOverlap(openingShingles(a), openingShingles(b)) > 0.4 ||
+    jaccard(passageSignature(a), passageSignature(b)) > 0.45
+  );
+}
+
+/** Remove near-duplicate sub-passages from a stored RC set, keeping the first
+ * occurrence of each. Returns the (possibly shrunk) payload and whether it
+ * changed. Used to self-heal legacy pre-fix sets at serve time so a user is
+ * never shown two near-identical passages, with no LLM call required. */
+export function dedupeRcPayload(
+  payload: unknown,
+): { payload: unknown; changed: boolean } {
+  const set = payload as GeneratedSet | null;
+  if (!set || set.section !== "RC" || set.kind !== "sets" || !set.sets) {
+    return { payload, changed: false };
+  }
+  const kept: GenSubSet[] = [];
+  for (const sub of set.sets) {
+    const ctx = sub.context ?? "";
+    const dup = kept.some((k) => passagesAreNearDuplicate(k.context ?? "", ctx));
+    if (!dup) kept.push(sub);
+  }
+  if (kept.length === set.sets.length) return { payload, changed: false };
+  return { payload: { ...set, sets: kept }, changed: true };
+}
+
 /** True if a stored RC set's passages are near-duplicates of one another.
  * Used at serve time to skip legacy pre-fix sets so no user is ever shown
  * two near-identical passages, regardless of when the set was generated. */
