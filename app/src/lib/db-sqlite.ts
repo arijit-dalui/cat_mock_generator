@@ -247,13 +247,11 @@ export const sets = {
   /** Delete every pooled set that no attempt references. One-shot reset to
    * clear stale/wrong-key content; sets tied to a real attempt are kept so
    * review links survive. Returns the number deleted. */
-  async purgeUnreferenced(): Promise<number> {
-    const info = db
-      .prepare(
-        `DELETE FROM generated_sets
-           WHERE id NOT IN (SELECT set_id FROM attempts WHERE set_id IS NOT NULL)`,
-      )
-      .run();
+  async purgeUnreferenced(section?: string): Promise<number> {
+    const base = `DELETE FROM generated_sets WHERE id NOT IN (SELECT set_id FROM attempts WHERE set_id IS NOT NULL)`;
+    const info = section
+      ? db.prepare(`${base} AND section = ?`).run(section)
+      : db.prepare(base).run();
     return Number(info.changes ?? 0);
   },
 };

@@ -82,10 +82,16 @@ async function topupOnce(req: Request) {
   ) as Section[];
 
   // One-shot maintenance: purge pooled sets with no attempt referencing them
-  // (clears stale/wrong-key content so the pool refills with corrected sets).
+  // (clears stale/wrong-key or duplicate-passage content so the pool refills
+  // with corrected sets). Scoped to the requested sections, so
+  // ?reset=1&sections=RC clears only RC and leaves other pools intact.
   let purged = 0;
   if (doReset) {
-    purged = await sets.purgeUnreferenced();
+    if (sectionsParam) {
+      for (const sec of cronSet) purged += await sets.purgeUnreferenced(sec);
+    } else {
+      purged = await sets.purgeUnreferenced();
+    }
   }
 
   const status: Record<Section, SectionStatus> = Object.fromEntries(

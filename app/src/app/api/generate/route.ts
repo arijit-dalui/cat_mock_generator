@@ -8,6 +8,17 @@ import { judgeSet } from "@/lib/generate/judge";
 // On-demand generation can take a while; Vercel Hobby max is 300s.
 export const maxDuration = 300;
 
+/** Bound a promise so the request returns a usable response well under
+ * Vercel's 300s cap instead of hanging until the platform kills it. Under
+ * Groq rate-limit backoff a fresh RC/QA set can otherwise exceed 5 minutes. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let t: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((_, reject) => {
+    t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(t)) as Promise<T>;
+}
+
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) {
@@ -33,22 +44,32 @@ export async function POST(req: Request) {
   // bug). The judge runs inline so we don't ship junk.
   if (!setRow) {
     try {
-      const generated = await generateSet(section);
-      const verdict = await judgeSet(generated);
-      // Even if the judge rejects, the user has been waiting — insert and
-      // serve it anyway, but tag the quality_score honestly so the cron
-      // can replace it later. Falling back to 0 if no judge score.
+      // Hard-bound fresh generation so we never ride Vercel's 300s ceiling.
+      const generated = await withTimeout(generateSet(section), 200_000, "generateSet");
+      // Judge is best-effort: if it times out or errors, we still serve the
+      // freshly generated set (tagged honestly) rather than discarding it and
+      // re-serving an old one. The cron's judge can re-grade it later.
+      let qScore = 0;
+      let qNotes = "on-demand (judge unavailable)";
+      try {
+        const verdict = await withTimeout(judgeSet(generated), 40_000, "judge");
+        qScore = verdict.overall || 0;
+        qNotes = verdict.notes || qNotes;
+      } catch {
+        /* keep fresh set with quality 0 */
+      }
       const id = await sets.insertWithQuality(
         section,
         generated,
         `user:${user.id}`,
-        verdict.overall || 0,
-        verdict.notes || "on-demand fallback (no judge verdict)",
+        qScore,
+        qNotes,
       );
       setRow = await sets.byId(id);
     } catch (e) {
-      // Generation failed (LLM down / timeout). Only NOW fall back to an
-      // already-seen set so the user gets something rather than an error.
+      // Generation itself failed (LLM down / overran the budget). Only NOW
+      // fall back to an already-seen set so the user gets something rather
+      // than an error.
       setRow = await sets.pickSeenLRU(section, user.id);
       if (!setRow) {
         return NextResponse.json(

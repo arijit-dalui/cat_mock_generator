@@ -347,13 +347,16 @@ export const sets = {
   /** Delete every pooled set that no attempt references. Used as a one-shot
    * reset to clear stale/wrong-key content; review links survive because any
    * set tied to a real attempt is kept. Returns the number deleted. */
-  async purgeUnreferenced(): Promise<number> {
+  async purgeUnreferenced(section?: string): Promise<number> {
     await ready;
-    const rows = await sql<
-      { id: number }[]
-    >`DELETE FROM generated_sets g
-        WHERE NOT EXISTS (SELECT 1 FROM attempts a WHERE a.set_id = g.id)
-        RETURNING g.id`;
+    const rows = section
+      ? await sql<{ id: number }[]>`DELETE FROM generated_sets g
+          WHERE g.section = ${section}
+            AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.set_id = g.id)
+          RETURNING g.id`
+      : await sql<{ id: number }[]>`DELETE FROM generated_sets g
+          WHERE NOT EXISTS (SELECT 1 FROM attempts a WHERE a.set_id = g.id)
+          RETURNING g.id`;
     return rows.length;
   },
 };
