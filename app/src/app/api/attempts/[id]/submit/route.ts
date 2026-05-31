@@ -36,10 +36,18 @@ export async function POST(
   if (!setRow) {
     return NextResponse.json({ error: "Set not found." }, { status: 404 });
   }
-  // payload may be a string (sqlite returns text) or already-parsed object (pg JSONB cast to text returns string too)
-  const set = (typeof setRow.payload === "string"
-    ? JSON.parse(setRow.payload)
-    : setRow.payload) as GeneratedSet;
+  // Deep-parse: payload::text is normally one JSON object, but a few legacy/
+  // heal-rewritten rows are double-encoded (a JSON string scalar). Parse until
+  // we get an object so scoring keys off real questions, not a string.
+  let parsed: unknown = setRow.payload;
+  for (let i = 0; i < 3 && typeof parsed === "string"; i++) {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      break;
+    }
+  }
+  const set = parsed as GeneratedSet;
   const { correct, total } = scoreSet(set, answers);
 
   // Diagnostic: log mismatches so we can spot key-shift bugs in production.

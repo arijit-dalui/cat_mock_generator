@@ -20,9 +20,19 @@ export async function GET(
   if (!setRow) {
     return NextResponse.json({ error: "Set not found." }, { status: 404 });
   }
-  const set = (typeof setRow.payload === "string"
-    ? JSON.parse(setRow.payload)
-    : setRow.payload) as GeneratedSet;
+  // Deep-parse: payload::text is normally a single JSON object, but a few
+  // legacy/heal-rewritten rows are double-encoded (a JSON string scalar). Parse
+  // until we get an object so the client always receives a usable set instead
+  // of a string (which renders as a blank practice page).
+  let parsed: unknown = setRow.payload;
+  for (let i = 0; i < 3 && typeof parsed === "string"; i++) {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      break;
+    }
+  }
+  const set = parsed as GeneratedSet;
 
   return NextResponse.json({
     attempt: {
