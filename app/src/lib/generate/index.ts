@@ -366,6 +366,31 @@ const RC_TOPICS = [
   "the economics of labour markets and work",
 ];
 
+/** True if a stored RC set's passages are near-duplicates of one another.
+ * Used at serve time to skip legacy pre-fix sets so no user is ever shown
+ * two near-identical passages, regardless of when the set was generated. */
+export function rcPayloadHasDuplicatePassages(payload: unknown): boolean {
+  const set = payload as GeneratedSet | null;
+  if (!set || set.section !== "RC" || set.kind !== "sets") return false;
+  const ctxs = (set.sets ?? [])
+    .map((s) => s.context ?? "")
+    .filter((c) => c.length > 80);
+  for (let i = 0; i < ctxs.length; i++) {
+    for (let j = i + 1; j < ctxs.length; j++) {
+      const a = ctxs[i];
+      const b = ctxs[j];
+      if (
+        normHead(a) === normHead(b) ||
+        shingleOverlap(openingShingles(a), openingShingles(b)) > 0.4 ||
+        jaccard(passageSignature(a), passageSignature(b)) > 0.45
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function genRC(warnings: string[]): Promise<GenSubSet[]> {
   const sets: GenSubSet[] = [];
   const usedPassages: string[] = [];
