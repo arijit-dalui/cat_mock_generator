@@ -28,6 +28,19 @@ function checkAuth(req: Request): boolean {
   return auth === `Bearer ${expected}`;
 }
 
+/** Resolve `p`, but reject if it takes longer than `ms`. The underlying work
+ * isn't cancelled (Vercel freezes the function after maxDuration anyway), but
+ * this lets the handler RETURN a response well under the 300s platform cap
+ * instead of letting one slow generation hang the whole request until the
+ * scheduler's curl times out — which is what was failing the warm workflow. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let t: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((_, reject) => {
+    t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(t)) as Promise<T>;
+}
+
 interface SectionStatus {
   section: Section;
   pool: number;
@@ -108,7 +121,13 @@ async function topupOnce(req: Request) {
   // Round-robin starting from the most-depleted section (within cronSet);
   // generate up to maxPerTick sets total. Each set: generate, judge,
   // insert-if-accepted. Stop early if we approach Vercel's 300s ceiling.
-  const BUDGET_MS = 250_000;
+  // Leave generous headroom under Vercel's 300s function cap so the handler
+  // always returns a response (and the scheduler sees a 2xx) instead of being
+  // killed mid-flight. A single set is hard-capped so it can never eat the
+  // whole budget on a slow section (DI/QA) or a Groq rate-limit retry storm.
+  const BUDGET_MS = 230_000;
+  const PER_SET_MS = 160_000;
+  const JUDGE_MS = 45_000;
   let toGenerate = maxPerTick;
   while (toGenerate > 0) {
     if (Date.now() - start > BUDGET_MS) break;
@@ -122,8 +141,8 @@ async function topupOnce(req: Request) {
     const sec = target.s;
 
     try {
-      const generated = await generateSet(sec);
-      const verdict = await judgeSet(generated);
+      const generated = await withTimeout(generateSet(sec), PER_SET_MS, `${sec} generateSet`);
+      const verdict = await withTimeout(judgeSet(generated), JUDGE_MS, `${sec} judge`);
       if (verdict.accept) {
         await sets.insertWithQuality(
           sec,
