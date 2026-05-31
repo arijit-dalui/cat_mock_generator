@@ -175,6 +175,12 @@ export const sets = {
   async markServed(id: number): Promise<void> {
     db.prepare("UPDATE generated_sets SET status = 'served' WHERE id = ?").run(id);
   },
+  async updatePayload(id: number, payload: unknown): Promise<void> {
+    db.prepare("UPDATE generated_sets SET payload = ? WHERE id = ?").run(
+      JSON.stringify(payload),
+      id,
+    );
+  },
   async insertWithQuality(
     section: string,
     payload: unknown,

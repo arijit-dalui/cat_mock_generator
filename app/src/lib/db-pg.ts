@@ -255,6 +255,10 @@ export const sets = {
     await ready;
     await sql`UPDATE generated_sets SET status = 'served' WHERE id = ${id}`;
   },
+  async updatePayload(id: number, payload: unknown): Promise<void> {
+    await ready;
+    await sql`UPDATE generated_sets SET payload = ${JSON.stringify(payload)} WHERE id = ${id}`;
+  },
   /** Insert a freshly generated set with judge quality score. */
   async insertWithQuality(
     section: string,
