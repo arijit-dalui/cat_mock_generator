@@ -257,7 +257,12 @@ export const sets = {
   },
   async updatePayload(id: number, payload: unknown): Promise<void> {
     await ready;
-    await sql`UPDATE generated_sets SET payload = ${JSON.stringify(payload)} WHERE id = ${id}`;
+    // payload is a JSONB column: use sql.json so it stores a JSON object, not a
+    // JSON string scalar. (JSON.stringify here would double-encode it, so
+    // payload::text would read back as a quoted string — a blank practice page.)
+    await sql`UPDATE generated_sets SET payload = ${sql.json(
+      payload as Parameters<typeof sql.json>[0],
+    )} WHERE id = ${id}`;
   },
   /** Insert a freshly generated set with judge quality score. */
   async insertWithQuality(
