@@ -187,7 +187,7 @@ interface Plan {
  * Groq's free tier on llama-3.3-70b: ~12K TPM, 30 RPM.
  * Our prompts are ~1500-2000 tokens; pacing 6s between calls = 10/min,
  * well under both limits. Combined with chat()-level Retry-After backoff. */
-const PACE_MS = 6000;
+const PACE_MS = 2000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function genQuestions(
