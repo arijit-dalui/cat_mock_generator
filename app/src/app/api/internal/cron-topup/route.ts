@@ -132,9 +132,12 @@ async function topupOnce(req: Request) {
   // always returns a response (and the scheduler sees a 2xx) instead of being
   // killed mid-flight. A single set is hard-capped so it can never eat the
   // whole budget on a slow section (DI/QA) or a Groq rate-limit retry storm.
-  const BUDGET_MS = 230_000;
-  const PER_SET_MS = 160_000;
-  const JUDGE_MS = 45_000;
+  // With key rotation + the instant judge a set now generates in ~60-90s, so
+  // we can fit 2+ per invocation. PER_SET_MS still hard-caps a stuck set well
+  // under Vercel's 300s ceiling, and the loop reserves a slot before starting.
+  const BUDGET_MS = 265_000;
+  const PER_SET_MS = 120_000;
+  const JUDGE_MS = 30_000;
   let toGenerate = maxPerTick;
   while (toGenerate > 0) {
     // Don't START a set we can't finish within budget: reserve a full per-set
