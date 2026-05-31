@@ -10,7 +10,10 @@ const UA = "Mozilla/5.0 (compatible; CAT-Mock-Generator/1.0)";
 async function get(url: string): Promise<string | null> {
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 20_000);
+    // Tight per-request budget: Aeon is best-effort fresh source material, not
+    // worth blocking generation on. A slow/blocking response falls through to
+    // the KB exemplar and then the (reliable) LLM synth fallback.
+    const t = setTimeout(() => ctrl.abort(), 6_000);
     const res = await fetch(url, {
       headers: { "User-Agent": UA },
       signal: ctrl.signal,
@@ -62,8 +65,8 @@ export async function fetchAeonArticle(
   );
   if (!slugs.length) return null;
 
-  // try a few random essays until one yields a usable body
-  for (let attempt = 0; attempt < 4 && slugs.length; attempt++) {
+  // try a couple of random essays until one yields a usable body
+  for (let attempt = 0; attempt < 2 && slugs.length; attempt++) {
     const idx = Math.floor(Math.random() * slugs.length);
     const slug = slugs.splice(idx, 1)[0];
     const url = `https://aeon.co${slug}`;

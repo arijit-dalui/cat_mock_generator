@@ -452,11 +452,12 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
   // Acquire one passage that is NOT a duplicate of those already used:
   // Aeon (2 tries) -> KB exemplars -> forced-distinct LLM synth.
   const acquire = async (): Promise<{ passage: string; source: string; topic?: string } | null> => {
-    for (let a = 0; a < 2; a++) {
-      const article = await fetchAeonArticle();
-      if (article && !isDuplicate(article.text)) {
-        return { passage: article.text, source: `Aeon: ${article.title}`, topic: article.title };
-      }
+    // One fast Aeon attempt for fresh source material; fall through quickly to
+    // the local KB and then the reliable LLM synth so we never block on a slow
+    // external fetch.
+    const article = await fetchAeonArticle();
+    if (article && !isDuplicate(article.text)) {
+      return { passage: article.text, source: `Aeon: ${article.title}`, topic: article.title };
     }
     const exs = await sampleExemplars("RC", {
       subtype: "rc_passage",

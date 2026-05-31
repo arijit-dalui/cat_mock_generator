@@ -136,7 +136,9 @@ async function topupOnce(req: Request) {
   const JUDGE_MS = 45_000;
   let toGenerate = maxPerTick;
   while (toGenerate > 0) {
-    if (Date.now() - start > BUDGET_MS) break;
+    // Don't START a set we can't finish within budget: reserve a full per-set
+    // slot so a max>1 override never rides past Vercel's 300s cap.
+    if (Date.now() - start > BUDGET_MS - PER_SET_MS) break;
     // Pick the section with the lowest pool that still needs filling,
     // restricted to the cron-allowed list.
     const target = cronSet
