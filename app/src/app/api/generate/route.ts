@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { sets, attempts, events, userSeen } from "@/lib/db";
 import { SECTIONS, type Section } from "@/lib/config";
-import { generateSet, rcPayloadHasDuplicatePassages } from "@/lib/generate";
+import { generateSet, dedupeRcPayload } from "@/lib/generate";
 import { judgeSet } from "@/lib/generate/judge";
 
 // On-demand generation can take a while; Vercel Hobby max is 300s.
@@ -38,24 +38,6 @@ export async function POST(req: Request) {
 
   // Serve the highest-quality pooled set this user has NOT seen yet.
   let setRow = await sets.pickForUser(section, user.id);
-
-  // Belt-and-suspenders for RC: skip any legacy pooled set whose two passages
-  // are near-duplicates of each other (pre-fix content). Mark it seen so this
-  // user never gets it again, then pick the next unseen set. Exhausting the
-  // pool here drops through to fresh generation, which can't produce twins.
-  if (section === "RC") {
-    let guard = 0;
-    while (setRow && guard < 8) {
-      const payload =
-        typeof setRow.payload === "string"
-          ? JSON.parse(setRow.payload)
-          : setRow.payload;
-      if (!rcPayloadHasDuplicatePassages(payload)) break;
-      await userSeen.mark(user.id, setRow.id);
-      setRow = await sets.pickForUser(section, user.id);
-      guard += 1;
-    }
-  }
 
   // No UNSEEN set left -> generate a fresh one synchronously rather than
   // re-serving an old set (re-serving caused the "same set again and again"
@@ -103,6 +85,23 @@ export async function POST(req: Request) {
   }
   if (!setRow) {
     return NextResponse.json({ error: "Generation failed." }, { status: 502 });
+  }
+
+  // Self-heal RC twins: whatever path produced this set (pool, fresh
+  // generation, or last-resort re-serve), if it carries two near-identical
+  // passages — a legacy pre-fix set — drop the duplicate and persist the fix
+  // so this user, and everyone after, is never shown the same passage twice.
+  // Fresh sets are already distinct, so this is a no-op for them.
+  if (section === "RC") {
+    const payload =
+      typeof setRow.payload === "string"
+        ? JSON.parse(setRow.payload)
+        : setRow.payload;
+    const { payload: healed, changed } = dedupeRcPayload(payload);
+    if (changed) {
+      await sets.updatePayload(setRow.id, healed);
+      setRow = { ...setRow, payload: JSON.stringify(healed) };
+    }
   }
 
   // Mark seen + create the attempt.
