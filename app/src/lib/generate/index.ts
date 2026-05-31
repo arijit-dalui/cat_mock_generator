@@ -631,7 +631,7 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
     const items = await genQuestions("QA", QA_PLAN, qaPrompt, warnings);
     const verified: GenQuestion[] = [];
     for (const [vi, q] of items.entries()) {
-      if (vi > 0) await sleep(4000);
+      if (vi > 0) await sleep(1500);
       if (await verifyAnswer(q)) verified.push(q);
       else warnings.push(`QA question failed answer verification and was dropped`);
     }
@@ -652,7 +652,7 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
     for (const set of sets) {
       const kept: GenQuestion[] = [];
       for (const q of set.questions) {
-        if (verifyCalls > 0) await sleep(4000);
+        if (verifyCalls > 0) await sleep(1500);
         verifyCalls += 1;
         if (await verifyAnswer(q, set.context)) kept.push(q);
         else warnings.push("DI question failed answer verification and was dropped");
