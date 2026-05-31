@@ -318,6 +318,32 @@ function normHead(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 160);
 }
 
+/** Word trigrams over the first ~45 words of a passage. Two near-identical
+ * openings (the classic "scientific revolution" twins whose bodies later
+ * diverge enough to dodge a full-text Jaccard test) share most of these. */
+function openingShingles(text: string): Set<string> {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 45);
+  const grams = new Set<string>();
+  for (let i = 0; i + 2 < words.length; i++) {
+    grams.add(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+  }
+  return grams;
+}
+
+/** Overlap of two shingle sets, normalised by the smaller set so a long
+ * passage doesn't dilute the score. 1 = one opening contains the other. */
+function shingleOverlap(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const g of a) if (b.has(g)) inter += 1;
+  return inter / Math.min(a.size, b.size);
+}
+
 // Curated, deliberately-spread topics for the LLM synth fallback. When a
 // passage must be generated, we pick one NOT already used this set and tell
 // the model to avoid the others, guaranteeing the two passages differ.
@@ -344,17 +370,25 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
   const sets: GenSubSet[] = [];
   const usedPassages: string[] = [];
   const usedSigs: Set<string>[] = [];
+  const usedShingles: Set<string>[] = [];
   const usedTopics: string[] = [];
 
-  // A candidate is a near-duplicate if its opening matches a prior passage OR
-  // it shares more than 45% of its content words with one. The Jaccard check
-  // catches the "two essays on the same subject, different first sentence"
-  // case that the old 200-char-prefix test let slip through.
+  // A candidate is a near-duplicate of a prior passage if ANY of:
+  //   - identical normalised opening (exact-ish reprint), or
+  //   - >40% of its opening word-trigrams overlap (same opening sentence,
+  //     even when the bodies later diverge — the reported twin-passage bug), or
+  //   - >45% content-word Jaccard over the whole passage (same subject reworded).
+  // A false positive only forces a fresh-topic synth, so we bias toward
+  // rejecting rather than ever serving two similar passages.
   const isDuplicate = (p: string): boolean => {
     const head = normHead(p);
     const sig = passageSignature(p);
+    const sh = openingShingles(p);
     return usedPassages.some(
-      (u, idx) => normHead(u) === head || jaccard(usedSigs[idx], sig) > 0.45,
+      (u, idx) =>
+        normHead(u) === head ||
+        shingleOverlap(usedShingles[idx], sh) > 0.4 ||
+        jaccard(usedSigs[idx], sig) > 0.45,
     );
   };
 
@@ -433,6 +467,7 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
     }
     usedPassages.push(got.passage);
     usedSigs.push(passageSignature(got.passage));
+    usedShingles.push(openingShingles(got.passage));
     if (got.topic) usedTopics.push(got.topic);
     try {
       const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
