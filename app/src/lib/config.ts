@@ -45,9 +45,11 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
     groqModel: env("GROQ_MODEL", "llama-3.1-8b-instant"),
-    // The judge is a SECOND model used to score freshly generated sets.
-    // Should be a different family from the writer for genuine second-opinion.
-    judgeModel: env("JUDGE_MODEL", "qwen/qwen3-32b"),
+    // The judge is a SECOND model used to score freshly generated sets. We use
+    // the fast instant model here: it's far cheaper on tokens-per-minute than a
+    // reasoning model (qwen3-32b), which keeps judging from dominating the
+    // generation budget. Override with JUDGE_MODEL if you want a stronger judge.
+    judgeModel: env("JUDGE_MODEL", "llama-3.1-8b-instant"),
   },
 
   extractionDocs: path.resolve(appRoot, env("EXTRACTION_DOCS", "../extraction/docs")),
