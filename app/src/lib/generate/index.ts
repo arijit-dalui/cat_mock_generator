@@ -279,80 +279,173 @@ function normalizeSet(
   };
 }
 
+// ---- RC passage de-duplication --------------------------------------------
+// A small stopword list so the similarity signature is driven by content
+// words, not grammar. Two passages on the same subject share most content
+// words even when their opening sentences differ.
+const RC_STOPWORDS = new Set(
+  ("the a an and or but of to in on at for with by from as is are was were be " +
+    "been being this that these those it its their his her our your my we you " +
+    "they he she them us him not no nor so than then there here which who whom " +
+    "whose what when where why how all any both each few more most other some " +
+    "such only own same too very can will just into over under about between " +
+    "through during before after above below up down out off again further")
+    .split(/\s+/),
+);
+
+/** Content-word set for a passage: lowercased, punctuation-stripped, stopwords
+ * and short tokens removed. Used to measure topical overlap between passages. */
+function passageSignature(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !RC_STOPWORDS.has(w)),
+  );
+}
+
+/** Jaccard overlap of two content-word sets (0 = disjoint, 1 = identical). */
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const w of a) if (b.has(w)) inter += 1;
+  return inter / (a.size + b.size - inter);
+}
+
+/** Normalised opening of a passage, for an exact near-prefix comparison. */
+function normHead(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 160);
+}
+
+// Curated, deliberately-spread topics for the LLM synth fallback. When a
+// passage must be generated, we pick one NOT already used this set and tell
+// the model to avoid the others, guaranteeing the two passages differ.
+const RC_TOPICS = [
+  "behavioural economics and how people make financial choices",
+  "marine biology and the ecology of deep-ocean ecosystems",
+  "the philosophy of language and meaning",
+  "urban architecture and the planning of modern cities",
+  "the history of cartography and mapmaking",
+  "the cognitive neuroscience of human memory",
+  "the evolution of classical music as an art form",
+  "the anthropology of food and cuisine across cultures",
+  "renewable energy policy and the economics of the energy transition",
+  "the sociology of social media and online communities",
+  "evolutionary biology and natural selection",
+  "the ethics and governance of artificial intelligence",
+  "ancient trade routes and the exchange of goods and ideas",
+  "the psychology of human decision-making",
+  "climate science and the study of past climates",
+  "the economics of labour markets and work",
+];
+
 async function genRC(warnings: string[]): Promise<GenSubSet[]> {
   const sets: GenSubSet[] = [];
   const usedPassages: string[] = [];
-  const isDuplicate = (p: string) =>
-    usedPassages.some((u) => u.slice(0, 200) === p.slice(0, 200));
+  const usedSigs: Set<string>[] = [];
+  const usedTopics: string[] = [];
+
+  // A candidate is a near-duplicate if its opening matches a prior passage OR
+  // it shares more than 45% of its content words with one. The Jaccard check
+  // catches the "two essays on the same subject, different first sentence"
+  // case that the old 200-char-prefix test let slip through.
+  const isDuplicate = (p: string): boolean => {
+    const head = normHead(p);
+    const sig = passageSignature(p);
+    return usedPassages.some(
+      (u, idx) => normHead(u) === head || jaccard(usedSigs[idx], sig) > 0.45,
+    );
+  };
+
+  // LLM-synthesised passage, forced onto a fresh topic and told to avoid the
+  // ones already used so the two passages can never collide topically.
+  const synthPassage = async (): Promise<{ passage: string; source: string; topic: string } | null> => {
+    const available = RC_TOPICS.filter((t) => !usedTopics.includes(t));
+    const pool = available.length ? available : RC_TOPICS;
+    const topic = pool[Math.floor(Math.random() * pool.length)];
+    const avoid = usedTopics.length
+      ? ` This passage MUST be on a completely different subject from the ` +
+        `following already-used topics, so do not write about any of them: ` +
+        `${usedTopics.join("; ")}.`
+      : "";
+    try {
+      const synth = await chatJSON<{ passage?: string; topic?: string }>(
+        `You are a CAT-style RC passage writer. Write one original 350-450 ` +
+          `word essay-style passage suitable for a CAT reading-comprehension ` +
+          `question, strictly about: ${topic}.${avoid} Use clean ASCII prose, ` +
+          `no headings, no markdown. Return JSON: {"topic":"...","passage":"..."}.`,
+        { temperature: 0.85 },
+      );
+      if (synth?.passage && synth.passage.length > 400) {
+        return {
+          passage: synth.passage,
+          source: `LLM-generated essay on ${topic}`,
+          topic,
+        };
+      }
+    } catch {
+      /* fall through */
+    }
+    return null;
+  };
+
+  // Acquire one passage that is NOT a duplicate of those already used:
+  // Aeon (2 tries) -> KB exemplars -> forced-distinct LLM synth.
+  const acquire = async (): Promise<{ passage: string; source: string; topic?: string } | null> => {
+    for (let a = 0; a < 2; a++) {
+      const article = await fetchAeonArticle();
+      if (article && !isDuplicate(article.text)) {
+        return { passage: article.text, source: `Aeon: ${article.title}`, topic: article.title };
+      }
+    }
+    const exs = await sampleExemplars("RC", {
+      subtype: "rc_passage",
+      limit: 8,
+      minWords: 250,
+    });
+    for (const e of exs) {
+      const cleaned = cleanExemplar(e.stem);
+      if (!isDuplicate(cleaned)) {
+        return { passage: cleaned, source: "mock-derived passage" };
+      }
+    }
+    return await synthPassage();
+  };
+
   for (let i = 0; i < 2; i++) {
     if (i > 0) await sleep(PACE_MS);
-    let passage = "";
-    let source = "";
-    // Try multiple sources; reject duplicates of the first passage so the
-    // user always sees 2 DIFFERENT passages, never the same one twice.
-    // Try Aeon up to 3 attempts when we need a fresh passage.
-    for (let attempt = 0; attempt < 3 && !passage; attempt++) {
-      if (Math.random() < 0.5 || i > 0) {
-        const article = await fetchAeonArticle();
-        if (article && !isDuplicate(article.text)) {
-          passage = article.text;
-          source = `Aeon: ${article.title}`;
-          break;
-        }
-      }
-      // KB exemplar fallback
-      const exs = await sampleExemplars("RC", {
-        subtype: "rc_passage",
-        limit: 5,
-        minWords: 250,
-      });
-      const p = exs.find((e) => !isDuplicate(cleanExemplar(e.stem)));
-      if (p) {
-        passage = cleanExemplar(p.stem);
-        source = "mock-derived passage";
-        break;
-      }
-    }
-    if (!passage) {
-      // Ask the LLM itself to produce a CAT-style RC passage from scratch.
-      try {
-        const synth = await chatJSON<{ passage?: string; topic?: string }>(
-          `You are a CAT-style RC passage writer. Generate one original ` +
-            `350-450 word essay-style passage suitable for a CAT reading-` +
-            `comprehension question. Pick a non-fiction topic (philosophy, ` +
-            `history of science, economics, ecology, etc.). Use clean ASCII ` +
-            `prose, no headings, no markdown. Return JSON: {"topic":"...","passage":"..."}.`,
-          { temperature: 0.7 },
-        );
-        if (synth?.passage && synth.passage.length > 400) {
-          passage = synth.passage;
-          source = `LLM-generated essay${synth.topic ? " on " + synth.topic : ""}`;
-        }
-      } catch {
-        /* fall through to warning */
-      }
-    }
-    if (!passage) {
+    const got = await acquire();
+    if (!got || !got.passage) {
       warnings.push("no RC passage available for one set");
       continue;
     }
-    if (isDuplicate(passage)) {
-      warnings.push("RC duplicate passage rejected");
-      continue;
+    if (isDuplicate(got.passage)) {
+      // Last resort: force a synth on a guaranteed-fresh topic.
+      const forced = await synthPassage();
+      if (!forced || isDuplicate(forced.passage)) {
+        warnings.push("RC duplicate passage rejected");
+        continue;
+      }
+      got.passage = forced.passage;
+      got.source = forced.source;
+      got.topic = forced.topic;
     }
-    usedPassages.push(passage);
+    usedPassages.push(got.passage);
+    usedSigs.push(passageSignature(got.passage));
+    if (got.topic) usedTopics.push(got.topic);
     try {
       const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
-      const data = await chatJSON<any>(rcPrompt(passage, source, ex), {
+      const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex), {
         temperature: 0.7,
       });
       sets.push(
         normalizeSet(
-          { context: passage, questions: data?.questions },
+          { context: got.passage, questions: data?.questions },
           "rc",
           "Reading Comprehension",
-          passage,
-          source,
+          got.passage,
+          got.source,
           warnings,
         ),
       );
