@@ -311,7 +311,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
 
       <main className="mx-auto max-w-3xl px-6 py-8">
         {score && (
-          <div className="card mb-6 bg-brand p-5 text-white">
+          <div className="mb-6 rounded-xl bg-brand p-5 text-white shadow-sm">
             <p className="text-lg font-semibold">
               Your score: {score.correct} / {score.total}
             </p>
