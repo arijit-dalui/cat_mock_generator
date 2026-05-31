@@ -26,20 +26,26 @@ on:
         default: "50"
       minutes:
         description: "How long this run keeps warming (minutes)"
-        default: "55"
+        default: "330"
       max:
         description: "Sets generated per 5-minute tick"
         default: "3"
 
 concurrency:
   group: pool-warm
-  # A newly-started run takes over from an older looping one (no pile-up).
-  cancel-in-progress: true
+  # Let a long-running loop finish rather than churn-restarting it every fire;
+  # overlapping scheduled fires are skipped while one run is active.
+  cancel-in-progress: false
 
 jobs:
   topup:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    # Each run self-loops for ~5.5h (public repo = unlimited Actions minutes),
+    # so a single run keeps filling every 5 min for hours. GitHub's sparse
+    # scheduling then only has to start a fresh run occasionally — NOT every
+    # 5 min. Expect FEW runs in the Actions tab by design; judge progress by
+    # pool depth, not run count.
+    timeout-minutes: 340
     steps:
       - name: Warm the pool every 5 minutes (self-looping)
         env:
