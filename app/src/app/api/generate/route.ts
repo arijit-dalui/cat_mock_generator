@@ -93,11 +93,7 @@ export async function POST(req: Request) {
   // so this user, and everyone after, is never shown the same passage twice.
   // Fresh sets are already distinct, so this is a no-op for them.
   if (section === "RC") {
-    const payload =
-      typeof setRow.payload === "string"
-        ? JSON.parse(setRow.payload)
-        : setRow.payload;
-    const { payload: healed, changed } = dedupeRcPayload(payload);
+    const { payload: healed, changed } = dedupeRcPayload(setRow.payload);
     if (changed) {
       await sets.updatePayload(setRow.id, healed);
       setRow = { ...setRow, payload: JSON.stringify(healed) };

@@ -375,20 +375,41 @@ function passagesAreNearDuplicate(a: string, b: string): boolean {
   );
 }
 
+/** Parse a stored payload that may be a JSON string, or even double-encoded
+ * (legacy rows were sometimes JSON.stringify'd twice). Returns the object. */
+function deepParsePayload(payload: unknown): unknown {
+  let p = payload;
+  for (let i = 0; i < 3 && typeof p === "string"; i++) {
+    try {
+      p = JSON.parse(p);
+    } catch {
+      break;
+    }
+  }
+  return p;
+}
+
 /** Remove near-duplicate sub-passages from a stored RC set, keeping the first
  * occurrence of each. Returns the (possibly shrunk) payload and whether it
  * changed. Used to self-heal legacy pre-fix sets at serve time so a user is
- * never shown two near-identical passages, with no LLM call required. */
+ * never shown two near-identical passages, with no LLM call required.
+ * Does NOT depend on a `section` field inside the payload (legacy rows omit
+ * it — the section lives in the DB column); the caller gates on section. */
 export function dedupeRcPayload(
   payload: unknown,
 ): { payload: unknown; changed: boolean } {
-  const set = payload as GeneratedSet | null;
-  if (!set || set.section !== "RC" || set.kind !== "sets" || !set.sets) {
+  const set = deepParsePayload(payload) as GeneratedSet | null;
+  if (
+    !set ||
+    typeof set !== "object" ||
+    set.kind !== "sets" ||
+    !Array.isArray(set.sets)
+  ) {
     return { payload, changed: false };
   }
   const kept: GenSubSet[] = [];
   for (const sub of set.sets) {
-    const ctx = sub.context ?? "";
+    const ctx = (sub && sub.context) || "";
     const dup = kept.some((k) => passagesAreNearDuplicate(k.context ?? "", ctx));
     if (!dup) kept.push(sub);
   }
