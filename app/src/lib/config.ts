@@ -36,14 +36,18 @@ export const config = {
     ollamaUrl: env("OLLAMA_URL", "http://localhost:11434"),
     ollamaModel: env("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
     ollamaEmbedModel: env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
-    groqApiKey: process.env.GROQ_API_KEY || "",
-    // One or more Groq API keys. Set GROQ_API_KEYS="key1,key2,key3" to spread
-    // load across keys (round-robin) and fail over on 429 — this multiplies the
-    // effective free-tier tokens-per-minute budget. Falls back to GROQ_API_KEY.
-    groqApiKeys: (process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || "")
+    // One or more Groq API keys in GROQ_API_KEY. Put several comma-separated
+    // ("key1,key2,key3") to rotate across them (round-robin + fail over on 429),
+    // which multiplies the effective free-tier tokens-per-minute budget. A
+    // single key works fine too. (GROQ_API_KEYS is also accepted if set.)
+    groqApiKeys: (process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    // First key, for the few places that want a single value.
+    groqApiKey: (process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || "")
+      .split(",")[0]
+      ?.trim() || "",
     groqModel: env("GROQ_MODEL", "llama-3.1-8b-instant"),
     // The judge is a SECOND model used to score freshly generated sets. We use
     // the fast instant model here: it's far cheaper on tokens-per-minute than a
