@@ -1,8 +1,14 @@
 name: Pool warm
 
-# Serverless pool warmer. Vercel Hobby caps native crons at once/day, so we
-# drive the topup endpoint from GitHub Actions instead. Each run generates one
-# judged set into the most-depleted section and tops every section toward 50.
+# Keeps the generated-set pool full so users are always served pre-made sets.
+#
+# Why a self-loop instead of `cron: "*/5"`? GitHub's scheduled `schedule`
+# trigger is best-effort and HEAVILY throttles high-frequency crons — in
+# practice "*/5" fired only ~once an hour here. So instead, GitHub only has to
+# start a run occasionally, and EACH run loops internally: it hits the topup
+# endpoint every 5 minutes for ~an hour. A timeout or Groq rate-limit on any
+# single tick is swallowed (logged, never fatal) so the loop keeps going and
+# the queue keeps filling every 5 minutes no matter what.
 #
 # Required repo secrets:
 #   APP_URL      - production base URL, e.g. https://cat-mocks-assss-projects.vercel.app
@@ -10,42 +16,68 @@ name: Pool warm
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # every 5 minutes (GitHub may delay under heavy load)
+    # Start a fresh looping run every 15 min. GitHub may delay/drop some of
+    # these, but each run covers ~55 min on its own, so coverage is continuous.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
-      reset:
-        description: "Purge pooled sets not referenced by any attempt before warming"
-        type: boolean
-        default: false
       target:
         description: "Pool depth to maintain per section"
         default: "50"
+      minutes:
+        description: "How long this run keeps warming (minutes)"
+        default: "55"
+      max:
+        description: "Sets generated per 5-minute tick"
+        default: "3"
 
 concurrency:
   group: pool-warm
-  cancel-in-progress: false
+  # A newly-started run takes over from an older looping one (no pile-up).
+  cancel-in-progress: true
 
 jobs:
   topup:
     runs-on: ubuntu-latest
+    timeout-minutes: 70
     steps:
-      - name: Hit cron-topup
+      - name: Warm the pool every 5 minutes (self-looping)
         env:
           APP_URL: ${{ secrets.APP_URL }}
           WORKER_TOKEN: ${{ secrets.WORKER_TOKEN }}
           TARGET: ${{ github.event.inputs.target || '50' }}
-          RESET: ${{ github.event.inputs.reset || 'false' }}
+          MINUTES: ${{ github.event.inputs.minutes || '55' }}
+          MAXPER: ${{ github.event.inputs.max || '3' }}
         run: |
-          if [ -z "$APP_URL" ] || [ -z "$WORKER_TOKEN" ]; then
+          set -u
+          if [ -z "${APP_URL:-}" ] || [ -z "${WORKER_TOKEN:-}" ]; then
             echo "APP_URL and WORKER_TOKEN secrets must be set"; exit 1
           fi
-          RESET_PARAM=""
-          if [ "$RESET" = "true" ]; then RESET_PARAM="&reset=1"; fi
-          URL="${APP_URL%/}/api/internal/cron-topup?target=${TARGET}&max=1&sections=VA,RC,DI,LR,QA${RESET_PARAM}"
-          echo "POST $URL"
-          code=$(curl -sS -m 300 -o /tmp/resp.json -w "%{http_code}" \
-            -X POST "$URL" -H "Authorization: Bearer ${WORKER_TOKEN}")
-          echo "HTTP $code"
-          cat /tmp/resp.json; echo
-          # 2xx only; anything else fails the run so it shows up in the actions log
-          case "$code" in 2*) ;; *) exit 1 ;; esac
+          URL="${APP_URL%/}/api/internal/cron-topup?target=${TARGET}&max=${MAXPER}&sections=VA,RC,DI,LR,QA"
+          END=$(( $(date +%s) + MINUTES * 60 ))
+          tick=0
+          while :; do
+            tick=$((tick + 1))
+            start=$(date +%s)
+            echo "===== tick #${tick} @ $(date -u '+%Y-%m-%dT%H:%M:%SZ') ====="
+            # Best-effort: a timeout / 429 / 5xx must NEVER stop the loop.
+            code=$(curl -sS -m 285 -o /tmp/resp.json -w "%{http_code}" \
+              -X POST "$URL" -H "Authorization: Bearer ${WORKER_TOKEN}" || echo "000")
+            echo "HTTP ${code}"
+            head -c 800 /tmp/resp.json 2>/dev/null || true
+            echo
+            now=$(date +%s)
+            if [ "$now" -ge "$END" ]; then
+              echo "Warm window (${MINUTES}m) complete after ${tick} ticks."
+              break
+            fi
+            # Keep a ~5-minute cadence regardless of how long the call took.
+            elapsed=$((now - start))
+            sleep_for=$((300 - elapsed))
+            if [ "$sleep_for" -lt 10 ]; then sleep_for=10; fi
+            echo "next tick in ${sleep_for}s"
+            sleep "$sleep_for"
+          done
+          # Always succeed. Rate limits / timeouts are expected and must not
+          # mark the workflow failed or interrupt the schedule.
+          exit 0
