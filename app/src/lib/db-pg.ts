@@ -333,41 +333,6 @@ export const sets = {
     >`SELECT COUNT(*)::int c FROM generated_sets WHERE section = ${section} AND quality_score IS NOT NULL`;
     return rows[0].c;
   },
-  /** Delete sets older than maxAgeHours that are NOT referenced by any
-   * attempt (so we never break a user's review-mode link). Capped at
-   * maxRows per call so a single cron tick is bounded. */
-  async cleanupOld(maxAgeHours: number, maxRows: number): Promise<number> {
-    await ready;
-    if (maxAgeHours <= 0) return 0;
-    const rows = await sql<
-      { id: number }[]
-    >`DELETE FROM generated_sets
-        WHERE id IN (
-          SELECT g.id FROM generated_sets g
-            LEFT JOIN attempts a ON a.set_id = g.id
-            WHERE g.created_at < now() - (${maxAgeHours} || ' hours')::interval
-              AND a.id IS NULL
-            ORDER BY g.created_at ASC
-            LIMIT ${maxRows}
-        )
-        RETURNING id`;
-    return rows.length;
-  },
-  /** Delete every pooled set that no attempt references. Used as a one-shot
-   * reset to clear stale/wrong-key content; review links survive because any
-   * set tied to a real attempt is kept. Returns the number deleted. */
-  async purgeUnreferenced(section?: string): Promise<number> {
-    await ready;
-    const rows = section
-      ? await sql<{ id: number }[]>`DELETE FROM generated_sets g
-          WHERE g.section = ${section}
-            AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.set_id = g.id)
-          RETURNING g.id`
-      : await sql<{ id: number }[]>`DELETE FROM generated_sets g
-          WHERE NOT EXISTS (SELECT 1 FROM attempts a WHERE a.set_id = g.id)
-          RETURNING g.id`;
-    return rows.length;
-  },
 };
 
 // ---- user_seen_sets ------------------------------------------------------
