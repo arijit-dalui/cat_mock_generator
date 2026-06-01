@@ -234,32 +234,6 @@ export const sets = {
         .get(section) as { c: number }
     ).c;
   },
-  async cleanupOld(maxAgeHours: number, maxRows: number): Promise<number> {
-    if (maxAgeHours <= 0) return 0;
-    const info = db
-      .prepare(
-        `DELETE FROM generated_sets
-           WHERE id IN (
-             SELECT g.id FROM generated_sets g
-               LEFT JOIN attempts a ON a.set_id = g.id
-               WHERE g.created_at < datetime('now', ?)
-                 AND a.id IS NULL
-               ORDER BY g.created_at ASC LIMIT ?
-           )`,
-      )
-      .run(`-${maxAgeHours} hours`, maxRows);
-    return Number(info.changes ?? 0);
-  },
-  /** Delete every pooled set that no attempt references. One-shot reset to
-   * clear stale/wrong-key content; sets tied to a real attempt are kept so
-   * review links survive. Returns the number deleted. */
-  async purgeUnreferenced(section?: string): Promise<number> {
-    const base = `DELETE FROM generated_sets WHERE id NOT IN (SELECT set_id FROM attempts WHERE set_id IS NOT NULL)`;
-    const info = section
-      ? db.prepare(`${base} AND section = ?`).run(section)
-      : db.prepare(base).run();
-    return Number(info.changes ?? 0);
-  },
 };
 
 export const userSeen = {

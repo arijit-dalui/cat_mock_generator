@@ -77,11 +77,6 @@ export const config = {
     .filter(Boolean),
   /** Minimum judge score across dimensions; below this the set is rejected. */
   minQuality: parseInt(env("MIN_QUALITY", "6"), 10),
-  /** Pooled sets older than this many hours are deleted by the cleaner —
-   * but only if no user has an attempt referencing them. Set to 0 to disable. */
-  cleanupMaxAgeHours: parseInt(env("CLEANUP_MAX_AGE_HOURS", "72"), 10),
-  /** Maximum rows the cleaner deletes per cron tick (bounds the work). */
-  cleanupMaxRows: parseInt(env("CLEANUP_MAX_ROWS", "200"), 10),
 
   appUrl: env("APP_URL", "http://localhost:3000"),
   workerToken: env("WORKER_TOKEN", "dev-insecure-worker-token"),
