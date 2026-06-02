@@ -66,7 +66,7 @@ function freshDraft(section: Section): Draft {
       generatedAt: new Date().toISOString(),
       model:
         config.llm.provider === "groq"
-          ? config.llm.groqModel
+          ? config.llm.poolWriterModel
           : config.llm.ollamaModel,
       warnings: [],
     },
@@ -122,31 +122,28 @@ async function handle(req: Request) {
             idx,
             { items: payload.items, sets: payload.sets },
             warnings,
+            config.llm.poolWriterModel,
           ),
           UNIT_MS,
           `${sec} unit ${idx + 1}/${total}`,
         );
-        let progressed = false;
         if (unit.items && unit.items.length) {
           payload.items = [...(payload.items ?? []), ...unit.items];
-          progressed = true;
         }
         if (unit.set) {
           payload.sets = [...(payload.sets ?? []), unit.set];
-          progressed = true;
         }
+        if (!unit.items?.length && !unit.set) lastErr = "empty unit";
+        // ALWAYS advance past the unit (like the original generator's one
+        // attempt per step). A unit that yields nothing just makes the set
+        // short, which the size guard / judge then rejects and the whole set is
+        // rebuilt — re-rolling that unit. This guarantees the builder can never
+        // wedge retrying a flaky unit (e.g. para-jumbles that occasionally all
+        // fail normalisation) forever. Persist after EVERY unit so a platform
+        // kill never loses prior units.
+        payload._unitsDone = idx + 1;
         payload.meta.warnings = warnings.slice(-40);
-        if (progressed) {
-          payload._unitsDone = idx + 1;
-          // Persist after EVERY unit so a platform kill never loses prior units.
-          await sets.updateDraft(draftId, payload);
-        } else {
-          // Empty unit (LLM hiccup): save accumulated warnings and stop this
-          // call; the next call retries the same unit rather than leaving a hole.
-          await sets.updateDraft(draftId, payload);
-          lastErr = "empty unit";
-          break;
-        }
+        await sets.updateDraft(draftId, payload);
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
         break;

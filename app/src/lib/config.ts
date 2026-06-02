@@ -49,6 +49,15 @@ export const config = {
       .split(",")[0]
       ?.trim() || "",
     groqModel: env("GROQ_MODEL", "llama-3.1-8b-instant"),
+    // The pool BUILDER uses this model, independent of GROQ_MODEL (which the
+    // on-demand "Generate" path uses). Prod sets GROQ_MODEL to the 70B writer
+    // for quality, but the 70B free tier has a 100K tokens/DAY cap that the
+    // daily batch exhausts — every over-cap request 429s with a ~570s
+    // retry-after, stalling each builder unit to its timeout (0 sets generated).
+    // The 8B model has far more daily headroom and answers in ~3s, so the
+    // builder defaults to it. Point POOL_WRITER_MODEL at the 70B only on a paid
+    // Groq tier where the daily cap isn't a constraint.
+    poolWriterModel: env("POOL_WRITER_MODEL", "llama-3.1-8b-instant"),
     // Groq's free ("on_demand") tier caps llama-3.1-8b-instant at 6000 tokens
     // per minute, and a SINGLE request may not exceed that limit: prompt +
     // max_tokens must stay under 6000 or Groq returns HTTP 413 "Request too

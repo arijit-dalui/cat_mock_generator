@@ -198,6 +198,7 @@ async function genQuestionStep(
   step: Plan,
   promptFn: (subtype: string, count: number, ex: any[]) => string,
   warnings: string[],
+  model?: string,
 ): Promise<GenQuestion[]> {
   const items: GenQuestion[] = [];
   try {
@@ -207,7 +208,7 @@ async function genQuestionStep(
     });
     const data = await chatJSON<{ questions?: any[] }>(
       promptFn(step.subtype, step.count, exemplars),
-      { temperature: 0.85 },
+      { temperature: 0.85, model },
     );
     const raw = Array.isArray(data?.questions) ? data.questions : [];
     let kept = 0;
@@ -252,13 +253,17 @@ async function genQuestions(
 /** Re-solve a question independently; returns true if the answer holds.
  * `context` (e.g. a DI table / LR scenario) is prepended so the verifier has
  * the data it needs to recompute the answer. */
-async function verifyAnswer(q: GenQuestion, context?: string): Promise<boolean> {
+async function verifyAnswer(
+  q: GenQuestion,
+  context?: string,
+  model?: string,
+): Promise<boolean> {
   try {
     const prompt =
       context && context.trim() ? `${context.trim()}\n\n${q.prompt}` : q.prompt;
     const v = await chatJSON<{ answer?: unknown }>(
       verifyPrompt(prompt, q.options),
-      { temperature: 0 },
+      { temperature: 0, model },
     );
     const verified = coerceAnswer(v?.answer, 4);
     return verified === null || verified === q.answer;
@@ -462,6 +467,7 @@ export function rcPayloadHasDuplicatePassages(payload: unknown): boolean {
 async function genRCUnit(
   existingPassages: string[],
   warnings: string[],
+  model?: string,
 ): Promise<GenSubSet | null> {
   const usedPassages = [...existingPassages];
   const usedSigs = existingPassages.map(passageSignature);
@@ -495,7 +501,7 @@ async function genRCUnit(
           `word essay-style passage suitable for a CAT reading-comprehension ` +
           `question, strictly about: ${topic}.${avoid} Use clean ASCII prose, ` +
           `no headings, no markdown. Return JSON: {"topic":"...","passage":"..."}.`,
-        { temperature: 0.85 },
+        { temperature: 0.85, model },
       );
       if (synth?.passage && synth.passage.length > 400) {
         return { passage: synth.passage, source: `LLM-generated essay on ${topic}`, topic };
@@ -537,6 +543,7 @@ async function genRCUnit(
     const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
     const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex), {
       temperature: 0.7,
+      model,
     });
     return normalizeSet(
       { context: got.passage, questions: data?.questions },
@@ -575,10 +582,11 @@ async function genContextUnit(
   label: string,
   promptFn: (ex: any[]) => string,
   warnings: string[],
+  model?: string,
 ): Promise<GenSubSet | null> {
   try {
     const ex = await sampleExemplars(section, { limit: 2 });
-    const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8 });
+    const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8, model });
     const set = normalizeSet(data, section.toLowerCase(), label, "", "mock-derived", warnings);
     if (set.questions.length) return set;
     warnings.push(`${section} set had no valid questions`);
@@ -609,11 +617,15 @@ async function genContextSets(
 /** Independently re-solve each question in a DI sub-set against its own table,
  * dropping ones the verifier confidently disagrees with. Shared by the
  * single-call and incremental DI paths. */
-async function verifyDiSet(set: GenSubSet, warnings: string[]): Promise<void> {
+async function verifyDiSet(
+  set: GenSubSet,
+  warnings: string[],
+  model?: string,
+): Promise<void> {
   const kept: GenQuestion[] = [];
   for (const [i, q] of set.questions.entries()) {
     if (i > 0) await sleep(500);
-    if (await verifyAnswer(q, set.context)) kept.push(q);
+    if (await verifyAnswer(q, set.context, model)) kept.push(q);
     else warnings.push("DI question failed answer verification and was dropped");
   }
   set.questions = kept;
@@ -707,31 +719,32 @@ export async function generateUnit(
   unitIndex: number,
   accumulated: { items?: GenQuestion[]; sets?: GenSubSet[] },
   warnings: string[],
+  model?: string,
 ): Promise<{ items?: GenQuestion[]; set?: GenSubSet }> {
   if (section === "VA") {
-    return { items: await genQuestionStep("VA", VA_PLAN[unitIndex], vaPrompt, warnings) };
+    return { items: await genQuestionStep("VA", VA_PLAN[unitIndex], vaPrompt, warnings, model) };
   }
   if (section === "QA") {
-    const raw = await genQuestionStep("QA", QA_PLAN[unitIndex], qaPrompt, warnings);
+    const raw = await genQuestionStep("QA", QA_PLAN[unitIndex], qaPrompt, warnings, model);
     const verified: GenQuestion[] = [];
     for (const [vi, q] of raw.entries()) {
       if (vi > 0) await sleep(500);
-      if (await verifyAnswer(q)) verified.push(q);
+      if (await verifyAnswer(q, undefined, model)) verified.push(q);
       else warnings.push("QA question failed answer verification and was dropped");
     }
     return { items: verified };
   }
   if (section === "RC") {
     const existing = (accumulated.sets ?? []).map((s) => s.context ?? "");
-    const set = await genRCUnit(existing, warnings);
+    const set = await genRCUnit(existing, warnings, model);
     return { set: set ?? undefined };
   }
   if (section === "DI") {
-    const set = await genContextUnit("DI", "Data Interpretation", diPrompt, warnings);
-    if (set) await verifyDiSet(set, warnings);
+    const set = await genContextUnit("DI", "Data Interpretation", diPrompt, warnings, model);
+    if (set) await verifyDiSet(set, warnings, model);
     return { set: set ?? undefined };
   }
   // LR
-  const set = await genContextUnit("LR", "Logical Reasoning", lrPrompt, warnings);
+  const set = await genContextUnit("LR", "Logical Reasoning", lrPrompt, warnings, model);
   return { set: set ?? undefined };
 }
