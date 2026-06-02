@@ -258,6 +258,15 @@ export function rcPrompt(passage: string, sourceLabel: string, exemplars: KbItem
     `- Use one "out-of-scope" distractor that extends the author's view ` +
     `beyond what the passage actually supports.\n` +
     `- Questions must be answerable purely from the passage.\n\n` +
+    `RC EXPLANATIONS — RC has no numbers, so "concrete" means POINTING TO THE ` +
+    `TEXT: every explanation must anchor on the specific sentence/phrase it ` +
+    `relies on (quote 2-5 words from the passage) AND name the SPECIFIC reading ` +
+    `mistake each wrong option makes — e.g. "confuses the author's own view with ` +
+    `the counter-view in para 2", "treats the qualifier 'most' as 'all'", ` +
+    `"extends the para-3 claim beyond what the text supports", "restates a ` +
+    `detail that is true but not what the question asks". Name a DIFFERENT ` +
+    `specific misconception for each distractor; generic reasons ("this is not ` +
+    `correct", "does not match") are rejected.\n\n` +
     EXPLANATION_RUBRIC +
     `\n\nPASSAGE:\n${passage}\n` +
     formatExemplars(exemplars, 1) +

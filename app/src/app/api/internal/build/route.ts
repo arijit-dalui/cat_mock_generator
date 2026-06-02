@@ -35,6 +35,11 @@ export const maxDuration = 300;
 const SOFT_BUDGET_MS = 160_000;
 const UNIT_MS = 200_000;
 const JUDGE_MS = 60_000;
+// Small pause before re-rolling an empty unit, so a retry doesn't immediately
+// hammer the same prompt (gives Groq's per-minute budget a moment to recover
+// and avoids a tight failure loop).
+const RETRY_DELAY_MS = 2_000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function checkAuth(req: Request): boolean {
   const auth = req.headers.get("authorization") || "";
@@ -64,6 +69,29 @@ type Draft = GeneratedSet & { _unitsDone?: number; _unitTries?: number };
 // what keeps "assembled set too small" from recurring, while the cap (plus the
 // per-section call budget) still guarantees the builder can never wedge.
 const MAX_EMPTY_TRIES = 3;
+
+/** Parse a stored draft payload defensively. A draft row's JSONB can end up
+ * DOUBLE-encoded (a JSON string instead of an object) under rapid/concurrent
+ * writes through the pooler; a plain JSON.parse then yields a string and
+ * `payload.meta` blows up with a 500 that wedges the whole section. Deep-parse
+ * (up to 3x) recovers the object — and because the caller re-saves it as a
+ * proper object on the next updateDraft, the row self-heals. Returns null if
+ * the payload is unusable (missing structure), so the caller discards it. */
+function parseDraft(raw: unknown): Draft | null {
+  let p: unknown = raw;
+  for (let i = 0; i < 3 && typeof p === "string"; i++) {
+    try {
+      p = JSON.parse(p);
+    } catch {
+      return null;
+    }
+  }
+  if (!p || typeof p !== "object") return null;
+  const d = p as Draft;
+  if (!d.meta || typeof d.meta !== "object") return null;
+  if (!Array.isArray(d.meta.warnings)) d.meta.warnings = [];
+  return d;
+}
 
 function freshDraft(section: Section): Draft {
   const kind = sectionKind(section);
@@ -107,10 +135,14 @@ async function handle(req: Request) {
   let draftId: number;
   let payload: Draft;
   const existing = await sets.getDraft(sec);
-  if (existing) {
+  const parsed = existing ? parseDraft(existing.payload) : null;
+  if (existing && parsed) {
     draftId = existing.id;
-    payload = JSON.parse(existing.payload) as Draft;
+    payload = parsed;
   } else {
+    // No draft, or a corrupt one (e.g. double-encoded): discard it and start
+    // fresh so a bad row can never wedge the section with repeated 500s.
+    if (existing) await sets.deleteDraft(existing.id);
     payload = freshDraft(sec);
     draftId = await sets.createDraft(sec, payload);
   }
@@ -161,6 +193,11 @@ async function handle(req: Request) {
           } else {
             payload._unitTries = tries;
             lastErr = `unit ${idx + 1} empty, retrying (${tries}/${MAX_EMPTY_TRIES})`;
+            // Persist progress, then pause briefly before the loop re-rolls
+            // this same unit.
+            await sets.updateDraft(draftId, payload);
+            await sleep(RETRY_DELAY_MS);
+            continue;
           }
         }
         // Persist after EVERY unit so a platform kill never loses prior units.
