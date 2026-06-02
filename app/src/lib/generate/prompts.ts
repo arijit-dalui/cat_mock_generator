@@ -13,12 +13,19 @@ import type { KbItem } from "../kb";
 /** Compact rules injected into every prompt. Kept short to stay under Groq
  * free-tier TPM cap (12K/min). */
 const EXPLANATION_RUBRIC =
-  `EXPLANATIONS: 2-3 sentences each, start with "Correct."/"Incorrect.". ` +
-  `For each wrong option name the specific misconception that yields it ` +
-  `(e.g. "uses gross not net", "treats 'at least' as 'exactly'"). ` +
-  `SOLUTION: 4-10 clean lines with concrete numbers. No self-correction, ` +
-  `no "actually"/"wait"/"let's redo". If working contradicts the answer ` +
-  `index, REDO the question silently.`;
+  `EXPLANATIONS — one per option, EXACTLY 4, in A,B,C,D order, each 2-3 ` +
+  `sentences beginning "Correct." or "Incorrect.". DEPTH comes from SPECIFICITY, ` +
+  `not length: for the correct option give the decisive reason and the concrete ` +
+  `number/step that proves it; for every wrong option name the SPECIFIC mistake ` +
+  `that produces it AND the wrong value it leads to ` +
+  `(e.g. "Incorrect. Uses gross 240 not net 216, giving 20% instead of 8%."). ` +
+  `NEVER use vague filler ("this is wrong", "does not fit", "first identify...") ` +
+  `without the concrete reason — vague or incomplete explanations are rejected. ` +
+  `SOLUTION: 4-8 numbered lines, the actual numbers at each step, ending with the ` +
+  `answer letter. No self-correction, no "actually"/"wait"/"let's redo"; if the ` +
+  `working contradicts the answer index, REDO the question silently. ` +
+  `Keep wording tight so the COMPLETE set fits the response: shorten prose if ` +
+  `needed but NEVER drop a question or leave any option/explanation/solution empty.`;
 
 const DIFFICULTY_RUBRIC =
   `DIFFICULTY: CAT 99-percentile. Each Q needs 3+ inference/computation ` +
@@ -41,7 +48,9 @@ const SCHEMA_QUESTIONS = `Return JSON of this exact shape:
 Rules: exactly 4 options in A,B,C,D order; "answer" MUST be the LETTER ("A",
 "B", "C", or "D") of the single correct option; "explanations" has exactly 4
 entries, one per option in A,B,C,D order. The letter in "answer" must match
-the option that the "solution" working actually arrives at.`;
+the option that the "solution" working actually arrives at. SIZE: output EVERY
+question requested, each one complete (full options, 4 explanations, solution) —
+returning fewer or leaving fields empty gets the whole set discarded.`;
 
 /** JSON contract for a passage/data set with 4 questions (RC, DI, LR). */
 const SCHEMA_SET = `Return JSON of this exact shape:
@@ -60,7 +69,10 @@ const SCHEMA_SET = `Return JSON of this exact shape:
 Rules: exactly 4 questions; each question has exactly 4 options in A,B,C,D
 order; "answer" MUST be the LETTER ("A","B","C","D") of the correct option
 and must match what the "solution" actually arrives at; "explanations" has 4
-entries, one per option in A,B,C,D order.`;
+entries, one per option in A,B,C,D order. SIZE: the set MUST contain all 4
+questions, each complete (full options, 4 explanations, solution). A set with
+fewer than 4 questions, or any empty field, is discarded — so keep the passage/
+dataset and prose concise enough that all 4 complete questions fit the response.`;
 
 /** Clean up the artefacts that PDF extraction leaves in KB exemplars:
  * single-character-per-line wrap, ALL-CAPS DIRECTIONS preambles, repeated
