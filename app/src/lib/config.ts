@@ -65,10 +65,11 @@ export const config = {
     // prompts are large, and prompt + the old 8192 default always blew past
     // 6000). 3500 leaves headroom for the biggest prompt (RC, ~2000 tokens
     // with its embedded passage) while still fitting a full 4-question set.
-    // 3500 + the largest prompt (RC, ~1800 tokens worst case incl. passage)
-    // = ~5300, a comfortable margin under 6000. Raise via GROQ_MAX_TOKENS only
-    // if your keys are on a higher Groq tier (e.g. a 70B model with 12K TPM).
-    groqMaxTokens: parseInt(env("GROQ_MAX_TOKENS", "3500"), 10),
+    // 3800 leaves room for a COMPLETE 4-question set with specific (not verbose)
+    // explanations, while the largest prompt (RC, ~1800 tokens incl. passage) +
+    // 3800 = ~5600 stays under the 8B's 6000 TPM per-request cap. Raise via
+    // GROQ_MAX_TOKENS only on a higher Groq tier (e.g. a 70B model with 12K TPM).
+    groqMaxTokens: parseInt(env("GROQ_MAX_TOKENS", "3800"), 10),
     // The judge is a SECOND model used to score freshly generated sets. We use
     // the fast instant model here: it's far cheaper on tokens-per-minute than a
     // reasoning model (qwen3-32b), which keeps judging from dominating the
