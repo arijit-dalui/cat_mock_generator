@@ -1,7 +1,7 @@
 node_modules
 .next
 out
-build
+/build
 data/*.db
 data/*.db-journal
 data/*.db-wal

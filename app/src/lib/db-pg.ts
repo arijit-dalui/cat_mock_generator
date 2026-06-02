@@ -333,6 +333,64 @@ export const sets = {
     >`SELECT COUNT(*)::int c FROM generated_sets WHERE section = ${section} AND quality_score IS NOT NULL`;
     return rows[0].c;
   },
+
+  // ---- incremental draft building ----------------------------------------
+  // A "draft" is a partially-built set (status='draft', quality_score NULL) so
+  // it is invisible to every serving/pool query above. The pool builder fills
+  // it one unit at a time, then finalizes it to a graded pooled row.
+  /** Newest in-progress draft for a section, or undefined. Stale drafts older
+   * than `maxAgeMinutes` are ignored (and should be purged) so a crashed build
+   * never wedges the section forever. */
+  async getDraft(
+    section: string,
+    maxAgeMinutes = 180,
+  ): Promise<{ id: number; payload: string } | undefined> {
+    await ready;
+    const rows = await sql<{ id: number; payload: string }[]>`
+      SELECT id, payload::text AS payload FROM generated_sets
+        WHERE section = ${section} AND status = 'draft'
+          AND created_at > now() - (${maxAgeMinutes} || ' minutes')::interval
+        ORDER BY created_at DESC LIMIT 1`;
+    return rows[0];
+  },
+  async createDraft(section: string, payload: unknown): Promise<number> {
+    await ready;
+    const rows = await sql<{ id: number }[]>`
+      INSERT INTO generated_sets (section, payload, status, created_by)
+        VALUES (${section}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, 'draft', 'builder')
+        RETURNING id`;
+    return rows[0].id;
+  },
+  async updateDraft(id: number, payload: unknown): Promise<void> {
+    await ready;
+    await sql`UPDATE generated_sets SET payload = ${sql.json(
+      payload as Parameters<typeof sql.json>[0],
+    )} WHERE id = ${id} AND status = 'draft'`;
+  },
+  /** Promote a completed draft to a graded, servable pooled row. */
+  async finalizeDraft(
+    id: number,
+    payload: unknown,
+    qualityScore: number,
+    judgeNotes: string,
+  ): Promise<void> {
+    await ready;
+    await sql`UPDATE generated_sets
+        SET payload = ${sql.json(payload as Parameters<typeof sql.json>[0])},
+            status = 'pooled', quality_score = ${qualityScore}, judge_notes = ${judgeNotes}
+        WHERE id = ${id} AND status = 'draft'`;
+  },
+  async deleteDraft(id: number): Promise<void> {
+    await ready;
+    await sql`DELETE FROM generated_sets WHERE id = ${id} AND status = 'draft'`;
+  },
+  /** Drop drafts older than `maxAgeMinutes` (housekeeping for crashed builds). */
+  async purgeStaleDrafts(maxAgeMinutes = 180): Promise<void> {
+    await ready;
+    await sql`DELETE FROM generated_sets
+        WHERE status = 'draft'
+          AND created_at < now() - (${maxAgeMinutes} || ' minutes')::interval`;
+  },
 };
 
 // ---- user_seen_sets ------------------------------------------------------

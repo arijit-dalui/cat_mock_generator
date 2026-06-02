@@ -190,6 +190,51 @@ interface Plan {
 const PACE_MS = 2000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Generate ONE plan step's worth of standalone questions (one LLM call).
+ * Extracted so the incremental pool-builder can produce a single unit per HTTP
+ * request without re-running the whole section (see generateUnit). */
+async function genQuestionStep(
+  section: Section,
+  step: Plan,
+  promptFn: (subtype: string, count: number, ex: any[]) => string,
+  warnings: string[],
+): Promise<GenQuestion[]> {
+  const items: GenQuestion[] = [];
+  try {
+    const exemplars = await sampleExemplars(section, {
+      subtype: step.subtype,
+      limit: 3,
+    });
+    const data = await chatJSON<{ questions?: any[] }>(
+      promptFn(step.subtype, step.count, exemplars),
+      { temperature: 0.85 },
+    );
+    const raw = Array.isArray(data?.questions) ? data.questions : [];
+    let kept = 0;
+    for (const q of raw) {
+      if (kept >= step.count) break;
+      const norm = normalizeQuestion(q, step.subtype);
+      if (!norm) {
+        warnings.push(`malformed ${step.subtype} question discarded`);
+        continue;
+      }
+      if ((await maxSimilarityToKb(norm.prompt, section)) > LEAK_THRESHOLD) {
+        warnings.push(`near-duplicate ${step.subtype} question discarded`);
+        continue;
+      }
+      items.push(norm);
+      kept += 1;
+    }
+  } catch (e) {
+    warnings.push(
+      `${step.subtype} generation failed: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+  }
+  return items;
+}
+
 async function genQuestions(
   section: Section,
   plan: Plan[],
@@ -199,38 +244,7 @@ async function genQuestions(
   const items: GenQuestion[] = [];
   for (const [stepIdx, step] of plan.entries()) {
     if (stepIdx > 0) await sleep(PACE_MS);
-    try {
-      const exemplars = await sampleExemplars(section, {
-        subtype: step.subtype,
-        limit: 3,
-      });
-      const data = await chatJSON<{ questions?: any[] }>(
-        promptFn(step.subtype, step.count, exemplars),
-        { temperature: 0.85 },
-      );
-      const raw = Array.isArray(data?.questions) ? data.questions : [];
-      let kept = 0;
-      for (const q of raw) {
-        if (kept >= step.count) break;
-        const norm = normalizeQuestion(q, step.subtype);
-        if (!norm) {
-          warnings.push(`malformed ${step.subtype} question discarded`);
-          continue;
-        }
-        if ((await maxSimilarityToKb(norm.prompt, section)) > LEAK_THRESHOLD) {
-          warnings.push(`near-duplicate ${step.subtype} question discarded`);
-          continue;
-        }
-        items.push(norm);
-        kept += 1;
-      }
-    } catch (e) {
-      warnings.push(
-        `${step.subtype} generation failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      );
-    }
+    items.push(...(await genQuestionStep(section, step, promptFn, warnings)));
   }
   return items;
 }
@@ -442,20 +456,18 @@ export function rcPayloadHasDuplicatePassages(payload: unknown): boolean {
   return false;
 }
 
-async function genRC(warnings: string[]): Promise<GenSubSet[]> {
-  const sets: GenSubSet[] = [];
-  const usedPassages: string[] = [];
-  const usedSigs: Set<string>[] = [];
-  const usedShingles: Set<string>[] = [];
+/** Build ONE RC sub-set (passage + 4 questions), avoiding any passage that is a
+ * near-duplicate of `existingPassages`. Extracted so the incremental builder can
+ * produce one passage per HTTP request. */
+async function genRCUnit(
+  existingPassages: string[],
+  warnings: string[],
+): Promise<GenSubSet | null> {
+  const usedPassages = [...existingPassages];
+  const usedSigs = existingPassages.map(passageSignature);
+  const usedShingles = existingPassages.map(openingShingles);
   const usedTopics: string[] = [];
 
-  // A candidate is a near-duplicate of a prior passage if ANY of:
-  //   - identical normalised opening (exact-ish reprint), or
-  //   - >40% of its opening word-trigrams overlap (same opening sentence,
-  //     even when the bodies later diverge — the reported twin-passage bug), or
-  //   - >45% content-word Jaccard over the whole passage (same subject reworded).
-  // A false positive only forces a fresh-topic synth, so we bias toward
-  // rejecting rather than ever serving two similar passages.
   const isDuplicate = (p: string): boolean => {
     const head = normHead(p);
     const sig = passageSignature(p);
@@ -468,8 +480,6 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
     );
   };
 
-  // LLM-synthesised passage, forced onto a fresh topic and told to avoid the
-  // ones already used so the two passages can never collide topically.
   const synthPassage = async (): Promise<{ passage: string; source: string; topic: string } | null> => {
     const available = RC_TOPICS.filter((t) => !usedTopics.includes(t));
     const pool = available.length ? available : RC_TOPICS;
@@ -488,11 +498,7 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
         { temperature: 0.85 },
       );
       if (synth?.passage && synth.passage.length > 400) {
-        return {
-          passage: synth.passage,
-          source: `LLM-generated essay on ${topic}`,
-          topic,
-        };
+        return { passage: synth.passage, source: `LLM-generated essay on ${topic}`, topic };
       }
     } catch {
       /* fall through */
@@ -500,74 +506,89 @@ async function genRC(warnings: string[]): Promise<GenSubSet[]> {
     return null;
   };
 
-  // Acquire one passage that is NOT a duplicate of those already used:
-  // Aeon (2 tries) -> KB exemplars -> forced-distinct LLM synth.
   const acquire = async (): Promise<{ passage: string; source: string; topic?: string } | null> => {
-    // One fast Aeon attempt for fresh source material; fall through quickly to
-    // the local KB and then the reliable LLM synth so we never block on a slow
-    // external fetch.
     const article = await fetchAeonArticle();
     if (article && !isDuplicate(article.text)) {
       return { passage: article.text, source: `Aeon: ${article.title}`, topic: article.title };
     }
-    const exs = await sampleExemplars("RC", {
-      subtype: "rc_passage",
-      limit: 8,
-      minWords: 250,
-    });
+    const exs = await sampleExemplars("RC", { subtype: "rc_passage", limit: 8, minWords: 250 });
     for (const e of exs) {
       const cleaned = cleanExemplar(e.stem);
-      if (!isDuplicate(cleaned)) {
-        return { passage: cleaned, source: "mock-derived passage" };
-      }
+      if (!isDuplicate(cleaned)) return { passage: cleaned, source: "mock-derived passage" };
     }
     return await synthPassage();
   };
 
+  const got = await acquire();
+  if (!got || !got.passage) {
+    warnings.push("no RC passage available for one set");
+    return null;
+  }
+  if (isDuplicate(got.passage)) {
+    const forced = await synthPassage();
+    if (!forced || isDuplicate(forced.passage)) {
+      warnings.push("RC duplicate passage rejected");
+      return null;
+    }
+    got.passage = forced.passage;
+    got.source = forced.source;
+  }
+  try {
+    const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
+    const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex), {
+      temperature: 0.7,
+    });
+    return normalizeSet(
+      { context: got.passage, questions: data?.questions },
+      "rc",
+      "Reading Comprehension",
+      got.passage,
+      got.source,
+      warnings,
+    );
+  } catch (e) {
+    warnings.push(
+      `RC generation failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
+  }
+}
+
+async function genRC(warnings: string[]): Promise<GenSubSet[]> {
+  const sets: GenSubSet[] = [];
   for (let i = 0; i < 2; i++) {
     if (i > 0) await sleep(PACE_MS);
-    const got = await acquire();
-    if (!got || !got.passage) {
-      warnings.push("no RC passage available for one set");
-      continue;
-    }
-    if (isDuplicate(got.passage)) {
-      // Last resort: force a synth on a guaranteed-fresh topic.
-      const forced = await synthPassage();
-      if (!forced || isDuplicate(forced.passage)) {
-        warnings.push("RC duplicate passage rejected");
-        continue;
-      }
-      got.passage = forced.passage;
-      got.source = forced.source;
-      got.topic = forced.topic;
-    }
-    usedPassages.push(got.passage);
-    usedSigs.push(passageSignature(got.passage));
-    usedShingles.push(openingShingles(got.passage));
-    if (got.topic) usedTopics.push(got.topic);
-    try {
-      const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
-      const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex), {
-        temperature: 0.7,
-      });
-      sets.push(
-        normalizeSet(
-          { context: got.passage, questions: data?.questions },
-          "rc",
-          "Reading Comprehension",
-          got.passage,
-          got.source,
-          warnings,
-        ),
-      );
-    } catch (e) {
-      warnings.push(
-        `RC generation failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
+    const set = await genRCUnit(
+      sets.map((s) => s.context ?? ""),
+      warnings,
+    );
+    if (set) sets.push(set);
   }
   return sets;
+}
+
+/** Build ONE Data-Interpretation / Logical-Reasoning sub-set (one LLM call).
+ * Extracted for the incremental builder. DI answer-verification is applied by
+ * the caller (generateUnit / generateSet) since it needs the set context. */
+async function genContextUnit(
+  section: Section,
+  label: string,
+  promptFn: (ex: any[]) => string,
+  warnings: string[],
+): Promise<GenSubSet | null> {
+  try {
+    const ex = await sampleExemplars(section, { limit: 2 });
+    const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8 });
+    const set = normalizeSet(data, section.toLowerCase(), label, "", "mock-derived", warnings);
+    if (set.questions.length) return set;
+    warnings.push(`${section} set had no valid questions`);
+    return null;
+  } catch (e) {
+    warnings.push(
+      `${section} generation failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
+  }
 }
 
 async function genContextSets(
@@ -579,21 +600,23 @@ async function genContextSets(
   const sets: GenSubSet[] = [];
   for (let i = 0; i < 2; i++) {
     if (i > 0) await sleep(PACE_MS);
-    try {
-      const ex = await sampleExemplars(section, { limit: 2 });
-      const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8 });
-      const set = normalizeSet(data, section.toLowerCase(), label, "", "mock-derived", warnings);
-      if (set.questions.length) sets.push(set);
-      else warnings.push(`${section} set ${i + 1} had no valid questions`);
-    } catch (e) {
-      warnings.push(
-        `${section} generation failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      );
-    }
+    const set = await genContextUnit(section, label, promptFn, warnings);
+    if (set) sets.push(set);
   }
   return sets;
+}
+
+/** Independently re-solve each question in a DI sub-set against its own table,
+ * dropping ones the verifier confidently disagrees with. Shared by the
+ * single-call and incremental DI paths. */
+async function verifyDiSet(set: GenSubSet, warnings: string[]): Promise<void> {
+  const kept: GenQuestion[] = [];
+  for (const [i, q] of set.questions.entries()) {
+    if (i > 0) await sleep(500);
+    if (await verifyAnswer(q, set.context)) kept.push(q);
+    else warnings.push("DI question failed answer verification and was dropped");
+  }
+  set.questions = kept;
 }
 
 // ---- public entry point ---------------------------------------------------
@@ -648,21 +671,67 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
     // DI keys are arithmetic; independently re-solve each question against its
     // own table and drop ones the verifier confidently disagrees with. This
     // kills the "table says 70 but the key computed with 60" inconsistency bug.
-    let verifyCalls = 0;
-    for (const set of sets) {
-      const kept: GenQuestion[] = [];
-      for (const q of set.questions) {
-        if (verifyCalls > 0) await sleep(500);
-        verifyCalls += 1;
-        if (await verifyAnswer(q, set.context)) kept.push(q);
-        else warnings.push("DI question failed answer verification and was dropped");
-      }
-      set.questions = kept;
-    }
+    for (const set of sets) await verifyDiSet(set, warnings);
     return { section, kind: "sets", sets, meta };
   }
 
   // LR
   const sets = await genContextSets("LR", "Logical Reasoning", lrPrompt, warnings);
   return { section, kind: "sets", sets, meta };
+}
+
+// ---- incremental pool building --------------------------------------------
+/** How many independently-generated "units" make up one full set per section.
+ * Each unit is ONE generation pass that fits comfortably under a serverless
+ * function's time cap, so the pool builder can assemble a set across several
+ * short HTTP requests instead of one long one that times out on a slow model. */
+export const SECTION_UNITS: Record<Section, number> = {
+  VA: VA_PLAN.length, // 4 plan steps
+  QA: QA_PLAN.length, // 5 plan steps
+  RC: 2, // 2 passages
+  DI: 2, // 2 data sets
+  LR: 2, // 2 reasoning sets
+};
+
+/** "questions" sections accumulate `items`; "sets" sections accumulate `sets`. */
+export function sectionKind(section: Section): "questions" | "sets" {
+  return section === "VA" || section === "QA" ? "questions" : "sets";
+}
+
+/** Generate the `unitIndex`-th unit of `section`, given what's already been
+ * accumulated (used for RC passage de-duplication). Returns the questions to
+ * append (VA/QA) or the sub-set to append (RC/DI/LR). This is the building
+ * block the /api/internal/build endpoint calls one unit at a time. */
+export async function generateUnit(
+  section: Section,
+  unitIndex: number,
+  accumulated: { items?: GenQuestion[]; sets?: GenSubSet[] },
+  warnings: string[],
+): Promise<{ items?: GenQuestion[]; set?: GenSubSet }> {
+  if (section === "VA") {
+    return { items: await genQuestionStep("VA", VA_PLAN[unitIndex], vaPrompt, warnings) };
+  }
+  if (section === "QA") {
+    const raw = await genQuestionStep("QA", QA_PLAN[unitIndex], qaPrompt, warnings);
+    const verified: GenQuestion[] = [];
+    for (const [vi, q] of raw.entries()) {
+      if (vi > 0) await sleep(500);
+      if (await verifyAnswer(q)) verified.push(q);
+      else warnings.push("QA question failed answer verification and was dropped");
+    }
+    return { items: verified };
+  }
+  if (section === "RC") {
+    const existing = (accumulated.sets ?? []).map((s) => s.context ?? "");
+    const set = await genRCUnit(existing, warnings);
+    return { set: set ?? undefined };
+  }
+  if (section === "DI") {
+    const set = await genContextUnit("DI", "Data Interpretation", diPrompt, warnings);
+    if (set) await verifyDiSet(set, warnings);
+    return { set: set ?? undefined };
+  }
+  // LR
+  const set = await genContextUnit("LR", "Logical Reasoning", lrPrompt, warnings);
+  return { set: set ?? undefined };
 }

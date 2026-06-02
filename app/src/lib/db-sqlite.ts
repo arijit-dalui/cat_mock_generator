@@ -234,6 +234,56 @@ export const sets = {
         .get(section) as { c: number }
     ).c;
   },
+
+  // ---- incremental draft building (mirror of db-pg.ts) -------------------
+  async getDraft(
+    section: string,
+    maxAgeMinutes = 180,
+  ): Promise<{ id: number; payload: string } | undefined> {
+    return db
+      .prepare(
+        `SELECT id, payload FROM generated_sets
+           WHERE section = ? AND status = 'draft'
+             AND created_at > datetime('now', ?)
+           ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(section, `-${maxAgeMinutes} minutes`) as
+      | { id: number; payload: string }
+      | undefined;
+  },
+  async createDraft(section: string, payload: unknown): Promise<number> {
+    const info = db
+      .prepare(
+        "INSERT INTO generated_sets (section, payload, status, created_by) VALUES (?, ?, 'draft', 'builder')",
+      )
+      .run(section, JSON.stringify(payload));
+    return Number(info.lastInsertRowid);
+  },
+  async updateDraft(id: number, payload: unknown): Promise<void> {
+    db.prepare(
+      "UPDATE generated_sets SET payload = ? WHERE id = ? AND status = 'draft'",
+    ).run(JSON.stringify(payload), id);
+  },
+  async finalizeDraft(
+    id: number,
+    payload: unknown,
+    qualityScore: number,
+    judgeNotes: string,
+  ): Promise<void> {
+    db.prepare(
+      `UPDATE generated_sets
+         SET payload = ?, status = 'pooled', quality_score = ?, judge_notes = ?
+         WHERE id = ? AND status = 'draft'`,
+    ).run(JSON.stringify(payload), qualityScore, judgeNotes, id);
+  },
+  async deleteDraft(id: number): Promise<void> {
+    db.prepare("DELETE FROM generated_sets WHERE id = ? AND status = 'draft'").run(id);
+  },
+  async purgeStaleDrafts(maxAgeMinutes = 180): Promise<void> {
+    db.prepare(
+      `DELETE FROM generated_sets WHERE status = 'draft' AND created_at < datetime('now', ?)`,
+    ).run(`-${maxAgeMinutes} minutes`);
+  },
 };
 
 export const userSeen = {

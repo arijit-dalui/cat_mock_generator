@@ -1,44 +1,44 @@
 name: Daily set generation
 
 # Generates a fixed number of fresh, judge-ACCEPTED sets for EVERY section,
-# once per day.
+# once per day, by driving the INCREMENTAL builder (/api/internal/build).
 #
-# Why one section per HTTP call? A single Vercel function is capped at 300s,
-# which is only enough for ONE set (generate + judge). So this workflow owns the
-# loop: per section it keeps asking the endpoint for one set (max=1&force=1)
-# until it has `rounds` ACCEPTED sets or it exhausts `rounds * maxtries`
-# attempts. force=1 makes the endpoint generate regardless of current pool depth
-# (so we add `rounds` brand-new sets per section every day rather than merely
-# topping up to poolTarget). Retrying-until-accepted matters because the quality
-# judge legitimately rejects some sets; driving one-section-at-a-time also keeps
-# Groq's free tier from being saturated, which is what timed out RC under the
-# old every-5-min storm.
+# Why incremental? A full set is several LLM calls; on a slow writer model that
+# whole job exceeds the serverless time cap ("generateSet timed out after
+# 185000ms") and loses all its work. /api/internal/build instead builds a set
+# one unit at a time, saving progress in a draft after each unit, and judges it
+# once complete. Each HTTP call is short and safe; this workflow just POSTs
+# repeatedly per section until it has `rounds` accepted sets.
 #
-# NOTE: "guaranteed 15/day" is a target, not a mathematical certainty — if the
-# judge rejects every one of a slot's `maxtries` attempts that section gets
-# fewer that day (logged, never fatal). Raise `maxtries`, lower MIN_QUALITY, or
-# use a stronger writer model to push the hit-rate toward 100%.
+# Per call the endpoint returns JSON {"status": ...}:
+#   building     -> a unit (or more) was added; keep calling to finish the set
+#   accepted     -> the completed set passed the judge and was pooled  (+1 set)
+#   rejected     -> the completed set failed the judge; draft discarded, restart
+#   unit_error   -> a unit timed out/erred; draft kept, just call again to resume
+#
+# NOTE: "15/day" is a target, not a certainty — if the judge keeps rejecting a
+# section's sets within its call budget it gets fewer that day (logged, never
+# fatal). Raise the budget, lower MIN_QUALITY, or use a stronger writer model.
 #
 # Required repo secrets:
-#   APP_URL      - production base URL, e.g. https://cat-mocks-assss-projects.vercel.app
+#   APP_URL      - production base URL (the live deployment)
 #   WORKER_TOKEN - same value as CRON_SECRET / WORKER_TOKEN in Vercel env
 
 on:
   schedule:
-    # Once per day at 01:30 UTC (~07:00 IST). GitHub may delay scheduled runs by
-    # a few minutes; that's fine for a daily batch.
+    # Once per day at 01:30 UTC (~07:00 IST). GitHub may delay scheduled runs.
     - cron: "30 1 * * *"
   workflow_dispatch:
     inputs:
       rounds:
-        description: "Accepted sets to generate per section"
+        description: "Accepted sets to build per section"
         default: "3"
       sections:
-        description: "Comma-separated sections to generate"
+        description: "Comma-separated sections to build"
         default: "VA,RC,DI,LR,QA"
-      maxtries:
-        description: "Max attempts per accepted set (retries when the judge rejects)"
-        default: "4"
+      maxcalls:
+        description: "Max build calls per section (budget guard)"
+        default: "40"
 
 concurrency:
   group: daily-generation
@@ -47,24 +47,23 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    # Worst case 5 sections x (rounds x maxtries) attempts x ~120s; the
-    # stop-at-`rounds`-accepted exit keeps the typical run far shorter. Cap so a
-    # stuck run always ends.
-    timeout-minutes: 180
+    # Incremental builds make many short calls; a slow writer model can still
+    # make a full day's run take a couple of hours. Public repo = free minutes.
+    timeout-minutes: 320
     steps:
-      - name: Generate N accepted sets per section
+      - name: Build N accepted sets per section
         env:
           APP_URL: ${{ secrets.APP_URL }}
           WORKER_TOKEN: ${{ secrets.WORKER_TOKEN }}
           ROUNDS: ${{ github.event.inputs.rounds || '3' }}
           SECTIONS: ${{ github.event.inputs.sections || 'VA,RC,DI,LR,QA' }}
-          MAXTRIES: ${{ github.event.inputs.maxtries || '4' }}
+          MAXCALLS: ${{ github.event.inputs.maxcalls || '40' }}
         run: |
           set -u
           if [ -z "${APP_URL:-}" ] || [ -z "${WORKER_TOKEN:-}" ]; then
             echo "APP_URL and WORKER_TOKEN secrets must be set"; exit 1
           fi
-          BASE="${APP_URL%/}/api/internal/cron-topup"
+          BUILD="${APP_URL%/}/api/internal/build"
           IFS=',' read -ra SECS <<< "$SECTIONS"
           total_accepted=0
           total_target=0
@@ -72,31 +71,25 @@ jobs:
             sec="$(echo "$raw" | tr -d '[:space:]')"
             [ -z "$sec" ] && continue
             total_target=$((total_target + ROUNDS))
-            URL="${BASE}?sections=${sec}&max=1&force=1"
             accepted=0
-            attempts=0
-            cap=$((ROUNDS * MAXTRIES))
-            while [ "$accepted" -lt "$ROUNDS" ] && [ "$attempts" -lt "$cap" ]; do
-              attempts=$((attempts + 1))
-              echo "===== ${sec}: accepted ${accepted}/${ROUNDS} | attempt ${attempts}/${cap} @ $(date -u '+%Y-%m-%dT%H:%M:%SZ') ====="
-              # A timeout / 429 / 5xx must never fail the workflow — just retry.
-              # -m 290 stays just under Vercel's 300s function cap.
-              code=$(curl -sS -m 290 -o /tmp/resp.json -w "%{http_code}" \
-                -X POST "$URL" -H "Authorization: Bearer ${WORKER_TOKEN}" || echo "000")
-              echo "HTTP ${code}"
-              head -c 800 /tmp/resp.json 2>/dev/null || true
-              echo
-              # The endpoint inserts only when the judge accepts; that shows up
-              # as "generated":1 for the requested section.
-              if grep -q '"generated":1' /tmp/resp.json 2>/dev/null; then
-                accepted=$((accepted + 1))
-              fi
-              # Brief pace to be gentle on Groq's free-tier limits.
-              sleep 5
+            calls=0
+            while [ "$accepted" -lt "$ROUNDS" ] && [ "$calls" -lt "$MAXCALLS" ]; do
+              calls=$((calls + 1))
+              echo "----- ${sec}: accepted ${accepted}/${ROUNDS} | call ${calls}/${MAXCALLS} @ $(date -u '+%H:%M:%SZ') -----"
+              # -m 295 stays just under Vercel's 300s cap; a curl timeout just
+              # means resume on the next call (progress is saved in the draft).
+              code=$(curl -sS -m 295 -o /tmp/resp.json -w "%{http_code}" \
+                -X POST "${BUILD}?section=${sec}" \
+                -H "Authorization: Bearer ${WORKER_TOKEN}" || echo "000")
+              body="$(cat /tmp/resp.json 2>/dev/null || true)"
+              echo "HTTP ${code} ${body}"
+              case "$body" in
+                *'"status":"accepted"'*) accepted=$((accepted + 1)) ;;
+              esac
+              sleep 3
             done
             total_accepted=$((total_accepted + accepted))
-            echo ">>> ${sec}: ${accepted}/${ROUNDS} accepted in ${attempts} attempts"
+            echo ">>> ${sec}: ${accepted}/${ROUNDS} accepted in ${calls} calls"
           done
           echo "===== summary: ${total_accepted}/${total_target} sets inserted across all sections ====="
-          # Always succeed; shortfalls are logged, not fatal.
           exit 0
