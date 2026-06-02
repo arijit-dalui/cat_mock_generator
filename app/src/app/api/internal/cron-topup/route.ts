@@ -64,6 +64,12 @@ async function topupOnce(req: Request) {
   };
   const poolTarget = qpInt("target", config.poolTarget);
   const maxPerTick = qpInt("max", config.maxPerTick);
+  // ?force=1 generates `max` sets for the requested sections REGARDLESS of the
+  // current pool depth. The daily generator uses this to add a fixed number of
+  // fresh sets per section per day instead of merely topping up to poolTarget.
+  const force = ["1", "true", "yes"].includes(
+    (url.searchParams.get("force") || "").toLowerCase(),
+  );
   const sectionsParam = url.searchParams.get("sections");
   const requested = sectionsParam
     ? sectionsParam.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
@@ -86,7 +92,9 @@ async function topupOnce(req: Request) {
     status[s].pool = await sets.qualityPoolCount(s);
   }
 
-  const needed = cronSet.filter((s) => status[s].pool < poolTarget);
+  const needed = force
+    ? cronSet
+    : cronSet.filter((s) => status[s].pool < poolTarget);
   if (needed.length === 0) {
     // Nothing to do for generation.
     return NextResponse.json({
@@ -122,13 +130,17 @@ async function topupOnce(req: Request) {
     // restricted to the cron-allowed list.
     const target = cronSet
       .map((s) => ({ s, depth: status[s].pool }))
-      .filter((x) => x.depth < poolTarget)
+      .filter((x) => force || x.depth < poolTarget)
       .sort((a, b) => a.depth - b.depth)[0];
     if (!target) break;
     const sec = target.s;
 
     try {
       const generated = await withTimeout(generateSet(sec), PER_SET_MS, `${sec} generateSet`);
+      if (url.searchParams.get("debug")) {
+        (status[sec] as unknown as { warnings?: string[] }).warnings =
+          generated.meta.warnings;
+      }
       const verdict = await withTimeout(judgeSet(generated), JUDGE_MS, `${sec} judge`);
       if (verdict.accept) {
         await sets.insertWithQuality(

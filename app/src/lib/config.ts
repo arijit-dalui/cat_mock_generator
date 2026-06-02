@@ -49,6 +49,17 @@ export const config = {
       .split(",")[0]
       ?.trim() || "",
     groqModel: env("GROQ_MODEL", "llama-3.1-8b-instant"),
+    // Groq's free ("on_demand") tier caps llama-3.1-8b-instant at 6000 tokens
+    // per minute, and a SINGLE request may not exceed that limit: prompt +
+    // max_tokens must stay under 6000 or Groq returns HTTP 413 "Request too
+    // large" outright (this was silently emptying every RC/DI/LR set — their
+    // prompts are large, and prompt + the old 8192 default always blew past
+    // 6000). 3500 leaves headroom for the biggest prompt (RC, ~2000 tokens
+    // with its embedded passage) while still fitting a full 4-question set.
+    // 3500 + the largest prompt (RC, ~1800 tokens worst case incl. passage)
+    // = ~5300, a comfortable margin under 6000. Raise via GROQ_MAX_TOKENS only
+    // if your keys are on a higher Groq tier (e.g. a 70B model with 12K TPM).
+    groqMaxTokens: parseInt(env("GROQ_MAX_TOKENS", "3500"), 10),
     // The judge is a SECOND model used to score freshly generated sets. We use
     // the fast instant model here: it's far cheaper on tokens-per-minute than a
     // reasoning model (qwen3-32b), which keeps judging from dominating the

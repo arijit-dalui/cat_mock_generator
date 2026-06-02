@@ -118,7 +118,9 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
     model: opts.model ?? config.llm.groqModel,
     messages,
     temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 8192,
+    // Cap defaults to config.llm.groqMaxTokens so prompt + max_tokens stays
+    // under Groq's free-tier 6000 TPM per-request limit (8192 always 413'd).
+    max_tokens: opts.maxTokens ?? config.llm.groqMaxTokens,
     response_format: { type: "json_object" },
   });
   const keys = config.llm.groqApiKeys.length
