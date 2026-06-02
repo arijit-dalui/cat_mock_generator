@@ -51,7 +51,10 @@ export interface AeonArticle {
  * (about `targetWords`, capped to whole paragraphs), or null on failure.
  */
 export async function fetchAeonArticle(
-  targetWords = 750,
+  // ~500 words is both a realistic CAT RC length AND keeps rcPrompt's token
+  // count low enough that prompt + max_tokens clears Groq's free-tier 6000 TPM
+  // per-request cap (a 750-word passage pushed the request over the limit).
+  targetWords = 500,
 ): Promise<AeonArticle | null> {
   const listing = await get(LISTING);
   if (!listing) return null;

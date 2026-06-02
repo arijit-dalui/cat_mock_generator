@@ -1,14 +1,23 @@
-name: Pool warm
+name: Daily set generation
 
-# Keeps the generated-set pool full so users are always served pre-made sets.
+# Generates a fixed number of fresh, judge-ACCEPTED sets for EVERY section,
+# once per day.
 #
-# Why a self-loop instead of `cron: "*/5"`? GitHub's scheduled `schedule`
-# trigger is best-effort and HEAVILY throttles high-frequency crons — in
-# practice "*/5" fired only ~once an hour here. So instead, GitHub only has to
-# start a run occasionally, and EACH run loops internally: it hits the topup
-# endpoint every 5 minutes for ~an hour. A timeout or Groq rate-limit on any
-# single tick is swallowed (logged, never fatal) so the loop keeps going and
-# the queue keeps filling every 5 minutes no matter what.
+# Why one section per HTTP call? A single Vercel function is capped at 300s,
+# which is only enough for ONE set (generate + judge). So this workflow owns the
+# loop: per section it keeps asking the endpoint for one set (max=1&force=1)
+# until it has `rounds` ACCEPTED sets or it exhausts `rounds * maxtries`
+# attempts. force=1 makes the endpoint generate regardless of current pool depth
+# (so we add `rounds` brand-new sets per section every day rather than merely
+# topping up to poolTarget). Retrying-until-accepted matters because the quality
+# judge legitimately rejects some sets; driving one-section-at-a-time also keeps
+# Groq's free tier from being saturated, which is what timed out RC under the
+# old every-5-min storm.
+#
+# NOTE: "guaranteed 15/day" is a target, not a mathematical certainty — if the
+# judge rejects every one of a slot's `maxtries` attempts that section gets
+# fewer that day (logged, never fatal). Raise `maxtries`, lower MIN_QUALITY, or
+# use a stronger writer model to push the hit-rate toward 100%.
 #
 # Required repo secrets:
 #   APP_URL      - production base URL, e.g. https://cat-mocks-assss-projects.vercel.app
@@ -16,74 +25,78 @@ name: Pool warm
 
 on:
   schedule:
-    # Start a fresh looping run every 15 min. GitHub may delay/drop some of
-    # these, but each run covers ~55 min on its own, so coverage is continuous.
-    - cron: "*/15 * * * *"
+    # Once per day at 01:30 UTC (~07:00 IST). GitHub may delay scheduled runs by
+    # a few minutes; that's fine for a daily batch.
+    - cron: "30 1 * * *"
   workflow_dispatch:
     inputs:
-      target:
-        description: "Pool depth to maintain per section"
-        default: "50"
-      minutes:
-        description: "How long this run keeps warming (minutes)"
-        default: "330"
-      max:
-        description: "Sets generated per 5-minute tick"
+      rounds:
+        description: "Accepted sets to generate per section"
         default: "3"
+      sections:
+        description: "Comma-separated sections to generate"
+        default: "VA,RC,DI,LR,QA"
+      maxtries:
+        description: "Max attempts per accepted set (retries when the judge rejects)"
+        default: "4"
 
 concurrency:
-  group: pool-warm
-  # Let a long-running loop finish rather than churn-restarting it every fire;
-  # overlapping scheduled fires are skipped while one run is active.
+  group: daily-generation
   cancel-in-progress: false
 
 jobs:
-  topup:
+  generate:
     runs-on: ubuntu-latest
-    # Each run self-loops for ~5.5h (public repo = unlimited Actions minutes),
-    # so a single run keeps filling every 5 min for hours. GitHub's sparse
-    # scheduling then only has to start a fresh run occasionally — NOT every
-    # 5 min. Expect FEW runs in the Actions tab by design; judge progress by
-    # pool depth, not run count.
-    timeout-minutes: 340
+    # Worst case 5 sections x (rounds x maxtries) attempts x ~120s; the
+    # stop-at-`rounds`-accepted exit keeps the typical run far shorter. Cap so a
+    # stuck run always ends.
+    timeout-minutes: 180
     steps:
-      - name: Warm the pool every 5 minutes (self-looping)
+      - name: Generate N accepted sets per section
         env:
           APP_URL: ${{ secrets.APP_URL }}
           WORKER_TOKEN: ${{ secrets.WORKER_TOKEN }}
-          TARGET: ${{ github.event.inputs.target || '50' }}
-          MINUTES: ${{ github.event.inputs.minutes || '55' }}
-          MAXPER: ${{ github.event.inputs.max || '3' }}
+          ROUNDS: ${{ github.event.inputs.rounds || '3' }}
+          SECTIONS: ${{ github.event.inputs.sections || 'VA,RC,DI,LR,QA' }}
+          MAXTRIES: ${{ github.event.inputs.maxtries || '4' }}
         run: |
           set -u
           if [ -z "${APP_URL:-}" ] || [ -z "${WORKER_TOKEN:-}" ]; then
             echo "APP_URL and WORKER_TOKEN secrets must be set"; exit 1
           fi
-          URL="${APP_URL%/}/api/internal/cron-topup?target=${TARGET}&max=${MAXPER}&sections=VA,RC,DI,LR,QA"
-          END=$(( $(date +%s) + MINUTES * 60 ))
-          tick=0
-          while :; do
-            tick=$((tick + 1))
-            start=$(date +%s)
-            echo "===== tick #${tick} @ $(date -u '+%Y-%m-%dT%H:%M:%SZ') ====="
-            # Best-effort: a timeout / 429 / 5xx must NEVER stop the loop.
-            code=$(curl -sS -m 285 -o /tmp/resp.json -w "%{http_code}" \
-              -X POST "$URL" -H "Authorization: Bearer ${WORKER_TOKEN}" || echo "000")
-            echo "HTTP ${code}"
-            head -c 800 /tmp/resp.json 2>/dev/null || true
-            echo
-            now=$(date +%s)
-            if [ "$now" -ge "$END" ]; then
-              echo "Warm window (${MINUTES}m) complete after ${tick} ticks."
-              break
-            fi
-            # Keep a ~5-minute cadence regardless of how long the call took.
-            elapsed=$((now - start))
-            sleep_for=$((300 - elapsed))
-            if [ "$sleep_for" -lt 10 ]; then sleep_for=10; fi
-            echo "next tick in ${sleep_for}s"
-            sleep "$sleep_for"
+          BASE="${APP_URL%/}/api/internal/cron-topup"
+          IFS=',' read -ra SECS <<< "$SECTIONS"
+          total_accepted=0
+          total_target=0
+          for raw in "${SECS[@]}"; do
+            sec="$(echo "$raw" | tr -d '[:space:]')"
+            [ -z "$sec" ] && continue
+            total_target=$((total_target + ROUNDS))
+            URL="${BASE}?sections=${sec}&max=1&force=1"
+            accepted=0
+            attempts=0
+            cap=$((ROUNDS * MAXTRIES))
+            while [ "$accepted" -lt "$ROUNDS" ] && [ "$attempts" -lt "$cap" ]; do
+              attempts=$((attempts + 1))
+              echo "===== ${sec}: accepted ${accepted}/${ROUNDS} | attempt ${attempts}/${cap} @ $(date -u '+%Y-%m-%dT%H:%M:%SZ') ====="
+              # A timeout / 429 / 5xx must never fail the workflow — just retry.
+              # -m 290 stays just under Vercel's 300s function cap.
+              code=$(curl -sS -m 290 -o /tmp/resp.json -w "%{http_code}" \
+                -X POST "$URL" -H "Authorization: Bearer ${WORKER_TOKEN}" || echo "000")
+              echo "HTTP ${code}"
+              head -c 800 /tmp/resp.json 2>/dev/null || true
+              echo
+              # The endpoint inserts only when the judge accepts; that shows up
+              # as "generated":1 for the requested section.
+              if grep -q '"generated":1' /tmp/resp.json 2>/dev/null; then
+                accepted=$((accepted + 1))
+              fi
+              # Brief pace to be gentle on Groq's free-tier limits.
+              sleep 5
+            done
+            total_accepted=$((total_accepted + accepted))
+            echo ">>> ${sec}: ${accepted}/${ROUNDS} accepted in ${attempts} attempts"
           done
-          # Always succeed. Rate limits / timeouts are expected and must not
-          # mark the workflow failed or interrupt the schedule.
+          echo "===== summary: ${total_accepted}/${total_target} sets inserted across all sections ====="
+          # Always succeed; shortfalls are logged, not fatal.
           exit 0
