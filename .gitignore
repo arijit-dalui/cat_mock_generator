@@ -28,7 +28,7 @@ extraction/manifest.json
 node_modules/
 .next/
 out/
-build/
+/build/
 dist/
 .cache/
 npm-debug.log*
