@@ -53,8 +53,17 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([p, timeout]).finally(() => clearTimeout(t)) as Promise<T>;
 }
 
-/** A draft is a GeneratedSet-in-progress plus how many units are done. */
-type Draft = GeneratedSet & { _unitsDone?: number };
+/** A draft is a GeneratedSet-in-progress plus how many units are done and how
+ * many times the CURRENT unit has come back empty (so a flaky unit is retried a
+ * bounded number of times before we move on). */
+type Draft = GeneratedSet & { _unitsDone?: number; _unitTries?: number };
+
+// A unit that yields no usable questions (e.g. a para-jumble whose options all
+// fail normalisation) is retried up to this many times before we advance past
+// it. Retrying the one flaky unit — rather than rebuilding the whole set — is
+// what keeps "assembled set too small" from recurring, while the cap (plus the
+// per-section call budget) still guarantees the builder can never wedge.
+const MAX_EMPTY_TRIES = 3;
 
 function freshDraft(section: Section): Draft {
   const kind = sectionKind(section);
@@ -127,22 +136,34 @@ async function handle(req: Request) {
           UNIT_MS,
           `${sec} unit ${idx + 1}/${total}`,
         );
-        if (unit.items && unit.items.length) {
+        const gotContent = (unit.items?.length ?? 0) > 0 || !!unit.set;
+        if (unit.items?.length) {
           payload.items = [...(payload.items ?? []), ...unit.items];
         }
         if (unit.set) {
           payload.sets = [...(payload.sets ?? []), unit.set];
         }
-        if (!unit.items?.length && !unit.set) lastErr = "empty unit";
-        // ALWAYS advance past the unit (like the original generator's one
-        // attempt per step). A unit that yields nothing just makes the set
-        // short, which the size guard / judge then rejects and the whole set is
-        // rebuilt — re-rolling that unit. This guarantees the builder can never
-        // wedge retrying a flaky unit (e.g. para-jumbles that occasionally all
-        // fail normalisation) forever. Persist after EVERY unit so a platform
-        // kill never loses prior units.
-        payload._unitsDone = idx + 1;
         payload.meta.warnings = warnings.slice(-40);
+        if (gotContent) {
+          // Unit produced something: keep it and move to the next unit.
+          payload._unitsDone = idx + 1;
+          payload._unitTries = 0;
+        } else {
+          // Empty unit: retry it up to MAX_EMPTY_TRIES before giving up, so one
+          // flaky unit doesn't force the whole set to be rebuilt (the cause of
+          // recurring "assembled set too small"). After the cap we advance
+          // anyway (short set -> rejected/rebuilt) so we can never wedge.
+          const tries = (payload._unitTries ?? 0) + 1;
+          if (tries >= MAX_EMPTY_TRIES) {
+            payload._unitsDone = idx + 1;
+            payload._unitTries = 0;
+            lastErr = `unit ${idx + 1} empty after ${tries} tries`;
+          } else {
+            payload._unitTries = tries;
+            lastErr = `unit ${idx + 1} empty, retrying (${tries}/${MAX_EMPTY_TRIES})`;
+          }
+        }
+        // Persist after EVERY unit so a platform kill never loses prior units.
         await sets.updateDraft(draftId, payload);
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
