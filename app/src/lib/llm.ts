@@ -152,8 +152,15 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
       return data?.choices?.[0]?.message?.content ?? "";
     }
     // Every key returned 429 this round — back off before the next round.
+    // CAP the wait: a daily-token-cap 429 carries a huge Retry-After (e.g.
+    // ~570s for the 70B model's 100K TPD). Honouring it verbatim stalls the
+    // caller until ITS timeout fires (the "unit timed out after 200000ms" bug).
+    // Cap at 25s so we fail fast and the caller can retry / move on instead.
     if (all429 && attempt < 3) {
-      await sleepMs(lastRetryAfter || Math.min(20_000, 5_000 * Math.pow(2, attempt)));
+      const capped = lastRetryAfter
+        ? Math.min(lastRetryAfter, 25_000)
+        : Math.min(20_000, 5_000 * Math.pow(2, attempt));
+      await sleepMs(capped);
     }
   }
   throw new Error("Groq chat failed: 429 after retries across all keys");
