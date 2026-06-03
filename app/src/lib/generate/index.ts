@@ -628,7 +628,11 @@ async function verifyDiSet(
     if (await verifyAnswer(q, set.context, model)) kept.push(q);
     else warnings.push("DI question failed answer verification and was dropped");
   }
-  set.questions = kept;
+  // A weak re-solver dropping good questions left DI sub-sets with <3 questions,
+  // which the size guard then rejected as "set too small" — over and over. Only
+  // trust the pruned set if it still has enough questions; otherwise keep the
+  // original and let the judge score answer-correctness instead (as RC/LR do).
+  set.questions = kept.length >= 3 ? kept : set.questions;
 }
 
 // ---- public entry point ---------------------------------------------------
@@ -732,7 +736,13 @@ export async function generateUnit(
       if (await verifyAnswer(q, undefined, model)) verified.push(q);
       else warnings.push("QA question failed answer verification and was dropped");
     }
-    return { items: verified };
+    // Don't let a weak verifier empty or over-prune a unit (which starved the
+    // 10-question total below the size guard). Keep the pruned set only if it
+    // dropped at most one question and isn't empty; otherwise keep the raw unit
+    // and let the judge gate answer-correctness.
+    const items =
+      verified.length > 0 && raw.length - verified.length <= 1 ? verified : raw;
+    return { items };
   }
   if (section === "RC") {
     const existing = (accumulated.sets ?? []).map((s) => s.context ?? "");
