@@ -168,11 +168,15 @@ async function handle(req: Request) {
           UNIT_MS,
           `${sec} unit ${idx + 1}/${total}`,
         );
-        const gotContent = (unit.items?.length ?? 0) > 0 || !!unit.set;
+        // A sub-set (RC/DI/LR) only counts if it has enough questions: a runt
+        // one (e.g. an LR scenario that yielded <3 valid questions) is retried
+        // like an empty unit instead of advancing into a "set too small" reject.
+        const subQ = unit.set ? unit.set.questions?.length ?? 0 : 0;
+        const gotContent = (unit.items?.length ?? 0) > 0 || subQ >= 3;
         if (unit.items?.length) {
           payload.items = [...(payload.items ?? []), ...unit.items];
         }
-        if (unit.set) {
+        if (unit.set && subQ >= 3) {
           payload.sets = [...(payload.sets ?? []), unit.set];
         }
         payload.meta.warnings = warnings.slice(-40);
