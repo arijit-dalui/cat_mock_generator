@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 
@@ -79,6 +80,9 @@ export default function AdminClient({ username }: { username: string }) {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
           <span className="font-bold text-slate-900">CAT Mock Generator - Admin</span>
           <div className="flex items-center gap-4 text-sm">
+            <Link href="/admin/questions" className="font-medium text-brand">
+              View question sets
+            </Link>
             <span className="text-slate-500">{username}</span>
             <button onClick={logout} className="btn-ghost">
               Log out

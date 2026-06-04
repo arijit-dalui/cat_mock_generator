@@ -90,7 +90,9 @@ export default function DashboardClient({ username }: { username: string }) {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
           <span className="font-bold text-slate-900">CAT Mock Generator</span>
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-500">{username}</span>
+            <Link href="/profile" className="font-medium text-brand">
+              {username}
+            </Link>
             <button onClick={logout} className="btn-ghost">
               Log out
             </button>

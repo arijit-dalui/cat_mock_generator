@@ -82,3 +82,14 @@ CREATE TABLE IF NOT EXISTS attempts (
   submitted_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
+
+-- Self-reported practice from sources outside this app (books, other mocks).
+-- One row per (user, section); upserted from the profile page.
+CREATE TABLE IF NOT EXISTS user_external_stats (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  section    TEXT NOT NULL,                 -- VA|RC|DI|LR|QA
+  solved     INTEGER NOT NULL DEFAULT 0,
+  accuracy   REAL,                          -- percentage, 0..100
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, section)
+);

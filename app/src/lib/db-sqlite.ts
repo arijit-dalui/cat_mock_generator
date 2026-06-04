@@ -76,6 +76,32 @@ export interface Attempt {
   submitted_at: string | null;
 }
 
+/** A row of the admin set-browser (payload kept as a JSON string). */
+export interface PagedSet {
+  id: number;
+  section: string;
+  payload: string;
+  status: string;
+  quality_score: number | null;
+  judge_notes: string | null;
+  created_at: string;
+}
+
+/** Per-section aggregate of a user's submitted attempts. */
+export interface SectionStat {
+  section: string;
+  attempts: number;
+  solved: number;
+  correct: number;
+}
+
+/** A user's self-reported practice from outside this app. */
+export interface ExternalStat {
+  section: string;
+  solved: number;
+  accuracy: number | null;
+}
+
 export const users = {
   async byUsername(username: string): Promise<User | undefined> {
     return db
@@ -234,6 +260,33 @@ export const sets = {
         .get(section) as { c: number }
     ).c;
   },
+  /** Admin browse: newest-first page of sets, optionally filtered by section.
+   * Fetch `limit`+1 rows so the caller can detect a next page cheaply. */
+  async listPaged(
+    section: string | null,
+    limit: number,
+    offset: number,
+  ): Promise<PagedSet[]> {
+    if (section) {
+      return db
+        .prepare(
+          `SELECT id, section, payload, status, quality_score, judge_notes, created_at
+             FROM generated_sets WHERE section = ?
+             ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        )
+        .all(section, limit, offset) as PagedSet[];
+    }
+    return db
+      .prepare(
+        `SELECT id, section, payload, status, quality_score, judge_notes, created_at
+           FROM generated_sets ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      )
+      .all(limit, offset) as PagedSet[];
+  },
+  /** Hard-delete a set. Cascades to attempts and user_seen_sets. */
+  async delete(id: number): Promise<void> {
+    db.prepare("DELETE FROM generated_sets WHERE id = ?").run(id);
+  },
 
   // ---- incremental draft building (mirror of db-pg.ts) -------------------
   async getDraft(
@@ -325,6 +378,45 @@ export const attempts = {
       `UPDATE attempts SET answers = ?, score = ?, total = ?, submitted = 1,
        submitted_at = datetime('now') WHERE id = ?`,
     ).run(JSON.stringify(answers), score, total, id);
+  },
+  /** Per-section totals over this user's SUBMITTED attempts. */
+  async statsByUser(userId: number): Promise<SectionStat[]> {
+    return db
+      .prepare(
+        `SELECT section,
+                COUNT(*) AS attempts,
+                COALESCE(SUM(total), 0) AS solved,
+                COALESCE(SUM(score), 0) AS correct
+           FROM attempts
+           WHERE user_id = ? AND submitted = 1
+           GROUP BY section`,
+      )
+      .all(userId) as SectionStat[];
+  },
+};
+
+// ---- user_external_stats (self-reported, other sources) ------------------
+export const externalStats = {
+  async list(userId: number): Promise<ExternalStat[]> {
+    return db
+      .prepare(
+        "SELECT section, solved, accuracy FROM user_external_stats WHERE user_id = ?",
+      )
+      .all(userId) as ExternalStat[];
+  },
+  async upsert(
+    userId: number,
+    section: string,
+    solved: number,
+    accuracy: number | null,
+  ): Promise<void> {
+    db.prepare(
+      `INSERT INTO user_external_stats (user_id, section, solved, accuracy, updated_at)
+         VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(user_id, section)
+         DO UPDATE SET solved = excluded.solved, accuracy = excluded.accuracy,
+                       updated_at = datetime('now')`,
+    ).run(userId, section, solved, accuracy);
   },
 };
 
