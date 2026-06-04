@@ -88,6 +88,12 @@ CREATE TABLE IF NOT EXISTS attempts (
   submitted_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
+CREATE TABLE IF NOT EXISTS user_external_stats (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  section TEXT NOT NULL, solved INTEGER NOT NULL DEFAULT 0, accuracy REAL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, section)
+);
 `;
 
 async function ensureSchema(): Promise<void> {
@@ -135,6 +141,32 @@ export interface Attempt {
   submitted: number;
   created_at: string;
   submitted_at: string | null;
+}
+
+/** A row of the admin set-browser (payload kept as a JSON string). */
+export interface PagedSet {
+  id: number;
+  section: string;
+  payload: string;
+  status: string;
+  quality_score: number | null;
+  judge_notes: string | null;
+  created_at: string;
+}
+
+/** Per-section aggregate of a user's submitted attempts. */
+export interface SectionStat {
+  section: string;
+  attempts: number;
+  solved: number;
+  correct: number;
+}
+
+/** A user's self-reported practice from outside this app. */
+export interface ExternalStat {
+  section: string;
+  solved: number;
+  accuracy: number | null;
 }
 
 function isoize(v: unknown): string {
@@ -333,6 +365,30 @@ export const sets = {
     >`SELECT COUNT(*)::int c FROM generated_sets WHERE section = ${section} AND quality_score IS NOT NULL`;
     return rows[0].c;
   },
+  /** Admin browse: newest-first page of sets, optionally filtered by section.
+   * Fetch `limit`+1 rows to let the caller detect a next page cheaply. */
+  async listPaged(
+    section: string | null,
+    limit: number,
+    offset: number,
+  ): Promise<PagedSet[]> {
+    await ready;
+    if (section) {
+      return await sql<PagedSet[]>`
+        SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+          FROM generated_sets WHERE section = ${section}
+          ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    }
+    return await sql<PagedSet[]>`
+      SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+        FROM generated_sets
+        ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+  },
+  /** Hard-delete a set. Cascades to attempts and user_seen_sets (ON DELETE CASCADE). */
+  async delete(id: number): Promise<void> {
+    await ready;
+    await sql`DELETE FROM generated_sets WHERE id = ${id}`;
+  },
 
   // ---- incremental draft building ----------------------------------------
   // A "draft" is a partially-built set (status='draft', quality_score NULL) so
@@ -443,6 +499,40 @@ export const attempts = {
   async submit(id: number, answers: unknown, score: number, total: number): Promise<void> {
     await ready;
     await sql`UPDATE attempts SET answers = ${sql.json(answers as Parameters<typeof sql.json>[0])}, score = ${score}, total = ${total}, submitted = TRUE, submitted_at = now() WHERE id = ${id}`;
+  },
+  /** Per-section totals over this user's SUBMITTED attempts. */
+  async statsByUser(userId: number): Promise<SectionStat[]> {
+    await ready;
+    return await sql<SectionStat[]>`
+      SELECT section,
+             COUNT(*)::int AS attempts,
+             COALESCE(SUM(total), 0)::int AS solved,
+             COALESCE(SUM(score), 0)::float AS correct
+        FROM attempts
+        WHERE user_id = ${userId} AND submitted = TRUE
+        GROUP BY section`;
+  },
+};
+
+// ---- user_external_stats (self-reported, other sources) ------------------
+export const externalStats = {
+  async list(userId: number): Promise<ExternalStat[]> {
+    await ready;
+    return await sql<ExternalStat[]>`
+      SELECT section, solved, accuracy FROM user_external_stats WHERE user_id = ${userId}`;
+  },
+  async upsert(
+    userId: number,
+    section: string,
+    solved: number,
+    accuracy: number | null,
+  ): Promise<void> {
+    await ready;
+    await sql`
+      INSERT INTO user_external_stats (user_id, section, solved, accuracy, updated_at)
+        VALUES (${userId}, ${section}, ${solved}, ${accuracy}, now())
+      ON CONFLICT (user_id, section)
+        DO UPDATE SET solved = ${solved}, accuracy = ${accuracy}, updated_at = now()`;
   },
 };
 
