@@ -24,6 +24,15 @@ function open(): Database.Database {
     "utf-8",
   );
   db.exec(schema);
+  // CREATE TABLE IF NOT EXISTS doesn't add columns to an already-created
+  // table, so a DB from before raw_score existed needs an explicit ALTER.
+  // Swallow "duplicate column" once it's already there - SQLite has no
+  // ADD COLUMN IF NOT EXISTS.
+  try {
+    db.exec("ALTER TABLE attempts ADD COLUMN raw_score REAL");
+  } catch {
+    /* column already exists */
+  }
   return db;
 }
 
@@ -71,6 +80,7 @@ export interface Attempt {
   answers: string | null;
   score: number | null;
   total: number | null;
+  raw_score: number | null;
   submitted: number;
   created_at: string;
   submitted_at: string | null;
@@ -373,11 +383,27 @@ export const attempts = {
       .prepare("SELECT * FROM attempts WHERE user_id = ? ORDER BY created_at DESC")
       .all(userId) as Attempt[];
   },
-  async submit(id: number, answers: unknown, score: number, total: number): Promise<void> {
+  async submit(id: number, answers: unknown, score: number, total: number, rawScore: number): Promise<void> {
     db.prepare(
-      `UPDATE attempts SET answers = ?, score = ?, total = ?, submitted = 1,
+      `UPDATE attempts SET answers = ?, score = ?, total = ?, raw_score = ?, submitted = 1,
        submitted_at = datetime('now') WHERE id = ?`,
-    ).run(JSON.stringify(answers), score, total, id);
+    ).run(JSON.stringify(answers), score, total, rawScore, id);
+  },
+  /** Percentile of `rawScore` among every submitted attempt in `section`
+   * (all users) - the share of attempts strictly below it. Real population
+   * data; returns null (not 0) until there's more than just this one
+   * attempt to compare against, so a lone user never sees a misleading
+   * 100th percentile. */
+  async percentile(section: string, rawScore: number): Promise<{ percentile: number; population: number } | null> {
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN raw_score < ? THEN 1 ELSE 0 END) AS below
+           FROM attempts WHERE section = ? AND submitted = 1 AND raw_score IS NOT NULL`,
+      )
+      .get(rawScore, section) as { total: number; below: number };
+    if (row.total < 2) return null;
+    return { percentile: (row.below / row.total) * 100, population: row.total };
   },
   /** Periodic autosave of in-progress answers, before submission. A no-op
    * once the attempt is submitted so a stray late autosave can't clobber

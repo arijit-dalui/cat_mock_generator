@@ -78,11 +78,15 @@ CREATE TABLE IF NOT EXISTS attempts (
   answers      JSONB,
   score        REAL,
   total        INTEGER,
+  raw_score    REAL,               -- CAT marking: +3/-1/0 (see practice.ts scoreSet)
   submitted    BOOLEAN NOT NULL DEFAULT FALSE,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   submitted_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS raw_score REAL;
+-- Percentile lookups scan submitted attempts by section across ALL users.
+CREATE INDEX IF NOT EXISTS idx_attempts_section_submitted ON attempts(section, submitted);
 
 -- Self-reported practice from sources outside this app (books, other mocks).
 -- One row per (user, section); upserted from the profile page.

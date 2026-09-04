@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ThemeToggle from "../components/ThemeToggle";
+import UserMenu from "../components/UserMenu";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -53,72 +53,6 @@ function barColor(p: number): string {
   return "bg-red-500";
 }
 
-interface AttemptSummary {
-  id: number;
-  section: string;
-  createdAt: string;
-  correct: number;
-  incorrect: number;
-  unanswered: number;
-  total: number;
-  rawScore: number;
-}
-interface TopicRow {
-  topic: string;
-  attempts: number;
-  correct: number;
-  wrong: number;
-}
-interface HistoryResponse {
-  history: AttemptSummary[];
-  topics: Record<string, TopicRow[]>;
-}
-
-/** Friendly labels for the question `type` field, which doubles as a
- * topic tag - falls back to the raw type for anything not listed. */
-const TOPIC_NAMES: Record<string, string> = {
-  para_completion: "Para Completion",
-  para_jumble: "Para Jumbles",
-  odd_one_out: "Odd One Out",
-  summary: "Para Summary",
-  rc: "Reading Comprehension",
-};
-
-/** A small hand-rolled line chart - no charting library needed for one
- * polyline. Honest empty state when there's nothing to plot yet. */
-function TrendChart({ points }: { points: { label: string; value: number }[] }) {
-  if (points.length === 0) {
-    return (
-      <div className="flex h-40 items-center justify-center text-sm text-slate-400">
-        Take your first mock to see your trend.
-      </div>
-    );
-  }
-  const w = 560;
-  const h = 160;
-  const padX = 28;
-  const padY = 16;
-  const values = points.map((p) => p.value);
-  const max = Math.max(...values, 3);
-  const min = Math.min(...values, 0);
-  const range = max - min || 1;
-  const step = points.length > 1 ? (w - padX * 2) / (points.length - 1) : 0;
-  const coords = points.map((p, i) => {
-    const x = padX + i * step;
-    const y = padY + (1 - (p.value - min) / range) * (h - padY * 2);
-    return { x, y, ...p };
-  });
-  const path = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x},${c.y}`).join(" ");
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="Score trend over time">
-      <path d={path} fill="none" stroke="currentColor" strokeWidth={2} className="text-brand" />
-      {coords.map((c, i) => (
-        <circle key={i} cx={c.x} cy={c.y} r={3.5} className="fill-brand" />
-      ))}
-    </svg>
-  );
-}
-
 export default function ProfileClient({
   username,
   role,
@@ -128,24 +62,9 @@ export default function ProfileClient({
   role: string;
   createdAt: string;
 }) {
-  const router = useRouter();
   const [stats, setStats] = useState<StatsResponse | null>(null);
-  const [history, setHistory] = useState<HistoryResponse | null>(null);
-  const [analysisTab, setAnalysisTab] = useState<Section>("VA");
   const [error, setError] = useState("");
   const [forms, setForms] = useState<Record<string, ExtForm>>({});
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/profile/history");
-        const d = await res.json();
-        if (res.ok) setHistory(d);
-      } catch {
-        /* non-fatal - the trend/topic sections just show their empty state */
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -173,12 +92,6 @@ export default function ProfileClient({
       }
     })();
   }, []);
-
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
 
   function setForm(section: Section, patch: Partial<ExtForm>) {
     setForms((prev) => ({ ...prev, [section]: { ...prev[section], ...patch } }));
@@ -264,10 +177,17 @@ export default function ProfileClient({
     <div className="app-shell min-h-screen">
       <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <Link href="/dashboard" className="text-sm font-medium text-brand">
-            &larr; Dashboard
-          </Link>
-          <div className="flex items-center gap-3"><ThemeToggle /><button onClick={logout} className="btn-ghost">Log out</button></div>
+          <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
+          <div className="flex items-center gap-5 text-sm">
+            <Link href="/dashboard" className="font-medium text-slate-500 hover:text-brand">
+              Dashboard
+            </Link>
+            <Link href="/analysis" className="font-medium text-slate-500 hover:text-brand">
+              Analysis
+            </Link>
+            <ThemeToggle />
+            <UserMenu username={username} role={role} />
+          </div>
         </div>
       </header>
 
@@ -301,138 +221,6 @@ export default function ProfileClient({
             value={overall.best ? overall.best.section : "-"}
             sub={overall.best ? `${overall.best.acc.toFixed(0)}%` : undefined}
           />
-        </section>
-
-        {/* Analysis: score trend, mock history, topic accuracy - all
-         * computed from this user's own submitted attempts, nothing
-         * modeled or fabricated. */}
-        <section className="card p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="display-type text-2xl font-bold text-slate-900">Your analysis</h2>
-            <div className="flex flex-wrap gap-2">
-              {SECTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setAnalysisTab(s)}
-                  className={
-                    "rounded-lg px-3 py-1.5 text-xs font-semibold " +
-                    (analysisTab === s
-                      ? "bg-brand text-white"
-                      : "border border-slate-300 text-slate-600 hover:bg-slate-50")
-                  }
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {(() => {
-            const sectionHistory = (history?.history ?? []).filter((h) => h.section === analysisTab);
-            const sectionTopics = history?.topics[analysisTab] ?? [];
-            const trendPoints = sectionHistory.map((h, i) => ({
-              label: `#${i + 1}`,
-              value: h.rawScore,
-            }));
-            return (
-              <>
-                <div className="mt-5">
-                  <p className="text-sm font-semibold text-slate-700">
-                    Score trend - {SECTION_NAMES[analysisTab]}
-                  </p>
-                  <div className="mt-2 text-brand">
-                    <TrendChart points={trendPoints} />
-                  </div>
-                </div>
-
-                <div className="mt-8">
-                  <p className="text-sm font-semibold text-slate-700">Mock history</p>
-                  {sectionHistory.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-400">
-                      No {analysisTab} mocks submitted yet.
-                    </p>
-                  ) : (
-                    <div className="mt-2 overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs uppercase text-slate-400">
-                            <th className="py-2">Date</th>
-                            <th>Correct</th>
-                            <th>Incorrect</th>
-                            <th>Unanswered</th>
-                            <th>Marks</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...sectionHistory].reverse().map((h) => (
-                            <tr key={h.id} className="border-t border-slate-100">
-                              <td className="py-2 pr-3 text-slate-600">{fmtDate(h.createdAt)}</td>
-                              <td className="pr-3 font-medium text-green-600">{h.correct}</td>
-                              <td className="pr-3 font-medium text-red-600">{h.incorrect}</td>
-                              <td className="pr-3 text-slate-500">{h.unanswered}</td>
-                              <td className="pr-3 font-semibold text-slate-900">{h.rawScore}</td>
-                              <td>
-                                <Link href={`/practice/${h.id}`} className="text-xs font-medium text-brand">
-                                  View
-                                </Link>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-8">
-                  <p className="text-sm font-semibold text-slate-700">
-                    Topic accuracy - {SECTION_NAMES[analysisTab]}
-                  </p>
-                  {sectionTopics.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-400">
-                      Submit a {analysisTab} mock to see topic-wise accuracy.
-                    </p>
-                  ) : (
-                    <div className="mt-2 overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs uppercase text-slate-400">
-                            <th className="py-2">Topic</th>
-                            <th>Attempts</th>
-                            <th>Correct</th>
-                            <th>Wrong</th>
-                            <th>Accuracy</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sectionTopics.map((t) => {
-                            const acc = t.attempts > 0 ? (t.correct / t.attempts) * 100 : 0;
-                            return (
-                              <tr key={t.topic} className="border-t border-slate-100">
-                                <td className="py-2 pr-3 font-medium text-slate-700">
-                                  {TOPIC_NAMES[t.topic] || t.topic}
-                                  {acc < 50 && (
-                                    <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600">
-                                      Weak
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="pr-3">{t.attempts}</td>
-                                <td className="pr-3 font-medium text-green-600">{t.correct}</td>
-                                <td className="pr-3 font-medium text-red-600">{t.wrong}</td>
-                                <td className="pr-3 font-semibold text-slate-900">{acc.toFixed(0)}%</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
         </section>
 
         {/* Per-section tracker */}

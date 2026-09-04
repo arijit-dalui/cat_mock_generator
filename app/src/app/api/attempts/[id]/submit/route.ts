@@ -65,7 +65,7 @@ export async function POST(
     });
   }
 
-  await attempts.submit(attempt.id, answers, correct, total);
+  await attempts.submit(attempt.id, answers, correct, total, result.rawScore);
   await events.log("solve", user.id, attempt.section, {
     score: correct,
     total,

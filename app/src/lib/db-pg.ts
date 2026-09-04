@@ -83,11 +83,14 @@ CREATE TABLE IF NOT EXISTS attempts (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   set_id INTEGER NOT NULL REFERENCES generated_sets(id) ON DELETE CASCADE,
   section TEXT NOT NULL, answers JSONB, score REAL, total INTEGER,
+  raw_score REAL,
   submitted BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   submitted_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS raw_score REAL;
+CREATE INDEX IF NOT EXISTS idx_attempts_section_submitted ON attempts(section, submitted);
 CREATE TABLE IF NOT EXISTS user_external_stats (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   section TEXT NOT NULL, solved INTEGER NOT NULL DEFAULT 0, accuracy REAL,
@@ -496,9 +499,24 @@ export const attempts = {
               (submitted)::int AS submitted, created_at::text, submitted_at::text
         FROM attempts WHERE user_id = ${userId} ORDER BY created_at DESC`;
   },
-  async submit(id: number, answers: unknown, score: number, total: number): Promise<void> {
+  async submit(id: number, answers: unknown, score: number, total: number, rawScore: number): Promise<void> {
     await ready;
-    await sql`UPDATE attempts SET answers = ${sql.json(answers as Parameters<typeof sql.json>[0])}, score = ${score}, total = ${total}, submitted = TRUE, submitted_at = now() WHERE id = ${id}`;
+    await sql`UPDATE attempts SET answers = ${sql.json(answers as Parameters<typeof sql.json>[0])}, score = ${score}, total = ${total}, raw_score = ${rawScore}, submitted = TRUE, submitted_at = now() WHERE id = ${id}`;
+  },
+  /** Percentile of `rawScore` among every submitted attempt in `section`
+   * (all users) - the share of attempts strictly below it. Real population
+   * data; returns null (not 0) until there's more than just this one
+   * attempt to compare against, so a lone user never sees a misleading
+   * 100th percentile. */
+  async percentile(section: string, rawScore: number): Promise<{ percentile: number; population: number } | null> {
+    await ready;
+    const rows = await sql<{ total: number; below: number }[]>`
+      SELECT COUNT(*)::int AS total,
+             SUM(CASE WHEN raw_score < ${rawScore} THEN 1 ELSE 0 END)::int AS below
+        FROM attempts WHERE section = ${section} AND submitted = TRUE AND raw_score IS NOT NULL`;
+    const row = rows[0];
+    if (!row || row.total < 2) return null;
+    return { percentile: (row.below / row.total) * 100, population: row.total };
   },
   /** Periodic autosave of in-progress answers, before submission. A no-op
    * once the attempt is submitted so a stray late autosave can't clobber

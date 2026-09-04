@@ -109,5 +109,18 @@ export async function GET() {
     topics[section] = Array.from(map.values()).sort((a, b) => b.attempts - a.attempts);
   }
 
-  return NextResponse.json({ history, topics });
+  // Comparative: this user's most recent attempt per section, ranked against
+  // every submitted attempt in that section across ALL users. Real
+  // population data only - null (not 0%) until there's more than one
+  // attempt to compare against, so a lone user isn't shown a fake 100th
+  // percentile.
+  const latestBySection = new Map<string, AttemptSummary>();
+  for (const h of history) latestBySection.set(h.section, h); // sorted ascending, so last write wins
+  const percentile: Record<string, { percentile: number; population: number; rawScore: number } | null> = {};
+  for (const [section, latest] of latestBySection) {
+    const result = await attempts.percentile(section, latest.rawScore);
+    percentile[section] = result ? { ...result, rawScore: latest.rawScore } : null;
+  }
+
+  return NextResponse.json({ history, topics, percentile });
 }

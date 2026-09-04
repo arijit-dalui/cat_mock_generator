@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ThemeToggle from "../components/ThemeToggle";
+import UserMenu from "../components/UserMenu";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -98,25 +99,20 @@ export default function DashboardClient({ username }: { username: string }) {
     }
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
-
   return (
     <div className="app-shell min-h-screen">
       <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/profile" className="font-medium text-brand">
-              {username}
+          <div className="flex items-center gap-5 text-sm">
+            <Link href="/dashboard" className="font-medium text-brand">
+              Dashboard
+            </Link>
+            <Link href="/analysis" className="font-medium text-slate-500 hover:text-brand">
+              Analysis
             </Link>
             <ThemeToggle />
-            <button onClick={logout} className="btn-ghost">
-              Log out
-            </button>
+            <UserMenu username={username} />
           </div>
         </div>
       </header>
