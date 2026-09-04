@@ -379,6 +379,14 @@ export const attempts = {
        submitted_at = datetime('now') WHERE id = ?`,
     ).run(JSON.stringify(answers), score, total, id);
   },
+  /** Periodic autosave of in-progress answers, before submission. A no-op
+   * once the attempt is submitted so a stray late autosave can't clobber
+   * the final scored answers. */
+  async saveDraft(id: number, answers: unknown): Promise<void> {
+    db.prepare(
+      "UPDATE attempts SET answers = ? WHERE id = ? AND submitted = 0",
+    ).run(JSON.stringify(answers), id);
+  },
   /** Per-section totals over this user's SUBMITTED attempts. */
   async statsByUser(userId: number): Promise<SectionStat[]> {
     return db

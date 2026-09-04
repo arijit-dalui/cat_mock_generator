@@ -106,7 +106,7 @@ input:focus-visible {
 .dark .border-slate-100,
 .dark .border-slate-200,
 .dark .border-slate-300 { border-color: var(--line) !important; }
-.dark .hover\\:bg-slate-50:hover { background-color: #26322c !important; }
+.dark .hover\:bg-slate-50:hover { background-color: #26322c !important; }
 .dark .input { background: #111714; color: #f0f5f0; border-color: #415048; }
 .dark .skeleton { background: linear-gradient(90deg, #26322c 25%, #354139 40%, #26322c 60%); background-size: 200% 100%; }
 

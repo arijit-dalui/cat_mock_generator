@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { sectionDeadline } from "@/lib/exam";
+import { SECTION_DURATION_MIN } from "@/lib/exam";
 
 interface GenQuestion {
   id: string;
@@ -49,7 +49,43 @@ interface NavItem {
   source?: string;
 }
 
-const OPT = ["A", "B", "C", "D"];
+/** Reserved keys that ride inside the `answers` JSON blob alongside real
+ * question ids, so autosave/resume needs no extra DB columns. No generated
+ * question id collides with these. */
+const MARKED_KEY = "__marked";
+const DEADLINE_KEY = "__deadline";
+
+const SECTION_FULL_NAMES: Record<string, string> = {
+  VA: "Verbal Ability",
+  RC: "Reading Comprehension",
+  DI: "Data Interpretation",
+  LR: "Logical Reasoning",
+  QA: "Quantitative Ability",
+};
+
+// The live exam screen intentionally renders as a fixed light theme,
+// independent of the app's dark-mode toggle - real CAT test-day software
+// has no dark mode, and matching it builds the same visual muscle memory.
+const EXAM_COLORS = {
+  headerBg: "#1c2b3a",
+  headerText: "#e8edf3",
+  tabBarBg: "#eef1f5",
+  tabActiveBg: "#3f6db0",
+  border: "#c7d0da",
+  panelBg: "#ffffff",
+  paletteBg: "#dce8f5",
+  text: "#1a1a1a",
+  textMuted: "#5a6472",
+  answered: "#3fa84a",
+  answeredBg: "#e7f5e9",
+  notAnswered: "#d9534f",
+  notAnsweredBg: "#fbeceb",
+  marked: "#7c4dbe",
+  markedBg: "#ece3f7",
+  notVisited: "#e2e6ea",
+  notVisitedText: "#5a6472",
+  primary: "#3f6db0",
+};
 
 function escapeHtml(s: string): string {
   return s
@@ -67,13 +103,12 @@ function renderContext(src: string): string {
   let i = 0;
   const inlineFmt = (t: string) =>
     escapeHtml(t)
-      .replace(/`([^`]+)`/g, '<code class="rounded bg-slate-100 px-1">$1</code>')
+      .replace(/`([^`]+)`/g, '<code style="background:#f1f3f5;border-radius:3px;padding:0 4px;">$1</code>')
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\*([^*]+)\*/g, "<em>$1</em>");
 
   while (i < lines.length) {
     const ln = lines[i];
-    // Markdown table: header row + separator row + body rows
     if (
       ln.trim().startsWith("|") &&
       i + 1 < lines.length &&
@@ -93,14 +128,12 @@ function renderContext(src: string): string {
         i++;
       }
       out.push(
-        `<div class="overflow-x-auto"><table class="my-2 w-full border-collapse text-sm">` +
+        `<div style="overflow-x:auto"><table style="margin:8px 0;width:100%;border-collapse:collapse;font-size:13px;">` +
           `<thead><tr>` +
           headers
             .map(
               (h) =>
-                `<th class="border border-slate-300 bg-slate-50 px-3 py-1.5 text-left font-semibold">${inlineFmt(
-                  h,
-                )}</th>`,
+                `<th style="border:1px solid #c7d0da;background:#f1f3f5;padding:6px 10px;text-align:left;font-weight:600;">${inlineFmt(h)}</th>`,
             )
             .join("") +
           `</tr></thead><tbody>` +
@@ -108,14 +141,7 @@ function renderContext(src: string): string {
             .map(
               (r) =>
                 `<tr>` +
-                r
-                  .map(
-                    (c) =>
-                      `<td class="border border-slate-300 px-3 py-1.5">${inlineFmt(
-                        c,
-                      )}</td>`,
-                  )
-                  .join("") +
+                r.map((c) => `<td style="border:1px solid #c7d0da;padding:6px 10px;">${inlineFmt(c)}</td>`).join("") +
                 `</tr>`,
             )
             .join("") +
@@ -128,7 +154,7 @@ function renderContext(src: string): string {
       i++;
       continue;
     }
-    out.push(`<p class="my-1">${inlineFmt(ln)}</p>`);
+    out.push(`<p style="margin:4px 0;">${inlineFmt(ln)}</p>`);
     i++;
   }
   return out.join("\n");
@@ -171,11 +197,44 @@ function withInstructionFallback(q: GenQuestion): string {
 
 function formatClock(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(total / 60)
+  const h = Math.floor(total / 3600)
+    .toString()
+    .padStart(2, "0");
+  const m = Math.floor((total % 3600) / 60)
     .toString()
     .padStart(2, "0");
   const s = (total % 60).toString().padStart(2, "0");
-  return `${m}:${s}`;
+  return `${h}:${m}:${s}`;
+}
+
+function Instructions({ section }: { section: string }) {
+  const fullName = SECTION_FULL_NAMES[section] || section;
+  return (
+    <>
+      <p style={{ fontWeight: 600, marginBottom: 12 }}>General Instructions for Candidate:</p>
+      <ol style={{ paddingLeft: 20, lineHeight: 1.7, fontSize: 14 }}>
+        <li>The test has 1 (one) section: {fullName}. The total duration is {SECTION_DURATION_MIN} minutes.</li>
+        <li>
+          As soon as you start the section the clock (top right of the screen) will start. On completion of{" "}
+          {SECTION_DURATION_MIN} minutes, the section will auto-submit.
+        </li>
+        <li>The question paper has a mix of Multiple Choice (MCQ) and Type-In-The-Answer (TITA) questions.</li>
+        <li>
+          MCQ-type questions carry +3 for a correct answer, -1 for a wrong answer, and 0 for an unattempted
+          question. TITA questions carry +3 for correct and 0 for wrong or unattempted - no negative marking.
+        </li>
+        <li>Your answers are saved to the server automatically as you work, in case of a refresh or disconnect.</li>
+        <li>
+          The question palette on the right shows each question&apos;s status: not visited, visited but not
+          answered, answered, marked for review, or answered and marked for review.
+        </li>
+        <li>
+          Click &lsquo;Save and Next&rsquo; to save your answer and move on, or &lsquo;Mark for Review &amp; Next&rsquo;
+          to flag a question for a second look before you submit.
+        </li>
+      </ol>
+    </>
+  );
 }
 
 export default function SolveClient({ attemptId }: { attemptId: string }) {
@@ -190,9 +249,22 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deadline, setDeadline] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const autoSubmitted = useRef(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [showQuestionPaper, setShowQuestionPaper] = useState(false);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  // Sectional-only grace: when the clock hits zero, ask whether to submit as
+  // timed or keep practicing untimed, instead of force-submitting outright.
+  // Full mocks (once they exist) should skip this and always force-submit -
+  // gate this whole block on an attempt "mode" once that mode is added.
+  const [timeUp, setTimeUp] = useState(false);
+  const [overtime, setOvertime] = useState(false);
+  const timeUpHandled = useRef(false);
+  // Anti-cheat: fullscreen exit / tab switch detection.
+  const [violations, setViolations] = useState(0);
+  const [showViolation, setShowViolation] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -208,6 +280,18 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
           setAnswers(d.attempt.answers || {});
           setReviewed(true);
           setScore({ correct: d.attempt.score, total: d.attempt.total });
+        } else {
+          // Restore a resumed attempt's saved answers, marked-for-review
+          // state, and the clock's deadline. These ride inside the same
+          // JSON blob under reserved keys so no schema migration is needed.
+          const draft = { ...(d.attempt.answers || {}) } as Record<string, unknown>;
+          const markedIds = Array.isArray(draft[MARKED_KEY]) ? (draft[MARKED_KEY] as string[]) : [];
+          const savedDeadline = typeof draft[DEADLINE_KEY] === "number" ? (draft[DEADLINE_KEY] as number) : null;
+          delete draft[MARKED_KEY];
+          delete draft[DEADLINE_KEY];
+          setAnswers(draft);
+          setMarked(new Set(markedIds));
+          if (savedDeadline) setDeadline(savedDeadline);
         }
       } catch {
         setError("Network error.");
@@ -232,11 +316,11 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
 
   // Mark the current question visited whenever it changes.
   useEffect(() => {
-    if (reviewed || nav.length === 0) return;
+    if (reviewed || nav.length === 0 || deadline === null) return;
     const id = nav[current]?.q.id;
     if (!id) return;
     setVisited((v) => (v.has(id) ? v : new Set(v).add(id)));
-  }, [current, nav, reviewed]);
+  }, [current, nav, reviewed, deadline]);
 
   const submit = useCallback(async () => {
     setBusy(true);
@@ -262,39 +346,110 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
     }
   }, [attemptId, answers]);
 
-  // Sectional countdown. Deadline is derived from when the attempt was
-  // created server-side, so a page refresh can't reset the clock.
+  // Sectional countdown - only runs once the candidate has clicked "Start
+  // Test" (deadline is set). Persisted so a refresh can't reset the clock.
+  // At zero, sectional practice offers a choice (see timeUp state above)
+  // instead of force-submitting - full mocks should force-submit instead.
   useEffect(() => {
-    if (!data || reviewed) return;
-    const deadline = sectionDeadline(data.attempt.createdAt);
+    if (reviewed || deadline === null) return;
     const tick = () => {
       const left = deadline - Date.now();
       setRemainingMs(left);
-      if (left <= 0 && !autoSubmitted.current) {
-        autoSubmitted.current = true;
-        submit();
+      if (left <= 0 && !timeUpHandled.current) {
+        timeUpHandled.current = true;
+        setTimeUp(true);
       }
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [data, reviewed, submit]);
+  }, [deadline, reviewed]);
 
-  const pick = useCallback(
-    (qid: string, idx: number) => {
-      if (reviewed) return;
-      setAnswers((a) => ({ ...a, [qid]: idx }));
+  const saveDraft = useCallback(
+    (nextAnswers: Record<string, unknown>, nextMarked: Set<string>, nextDeadline: number | null) => {
+      const draft = { ...nextAnswers, [MARKED_KEY]: Array.from(nextMarked), [DEADLINE_KEY]: nextDeadline };
+      fetch(`/api/attempts/${attemptId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: draft }),
+      }).catch(() => {
+        /* best-effort - the next edit will retry the save */
+      });
     },
-    [reviewed],
+    [attemptId],
   );
 
-  const typeAnswer = useCallback(
-    (qid: string, value: string) => {
-      if (reviewed) return;
-      setAnswers((a) => ({ ...a, [qid]: value }));
-    },
-    [reviewed],
-  );
+  // Autosave: debounce a PATCH after answers/marked settle.
+  useEffect(() => {
+    if (reviewed || deadline === null) return;
+    const id = setTimeout(() => saveDraft(answers, marked, deadline), 1200);
+    return () => clearTimeout(id);
+  }, [answers, marked, deadline, reviewed, saveDraft]);
+
+  function startTest() {
+    const d = Date.now() + SECTION_DURATION_MIN * 60_000;
+    setDeadline(d);
+    saveDraft(answers, marked, d);
+    // Best-effort fullscreen - some browsers/embeds refuse it silently even
+    // from a click handler, so a failure here should never block the test.
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+
+  const reportViolation = useCallback(() => {
+    setViolations((v) => {
+      const next = v + 1;
+      if (next >= 3) submit();
+      return next;
+    });
+    setShowViolation(true);
+  }, [submit]);
+
+  // Anti-cheat: flag leaving the tab/window or exiting fullscreen while a
+  // timed section is in progress. This can't physically stop someone from
+  // switching apps, but it detects it, warns, and auto-submits after
+  // repeated violations - the same trade-off real proctored exam software
+  // makes. Not a substitute for identity/proctoring controls.
+  useEffect(() => {
+    if (reviewed || deadline === null) return;
+    const onVisibility = () => {
+      if (document.hidden) reportViolation();
+    };
+    const onBlur = () => reportViolation();
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) reportViolation();
+    };
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+    const onCopy = (e: ClipboardEvent) => e.preventDefault();
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Block the browser's own find-in-page, which would otherwise let a
+      // candidate search the passage/options outside the exam UI.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") e.preventDefault();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("contextmenu", onContextMenu);
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("cut", onCopy);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("contextmenu", onContextMenu);
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("cut", onCopy);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [reviewed, deadline, reportViolation]);
+
+  const pick = useCallback((qid: string, idx: number) => {
+    setAnswers((a) => ({ ...a, [qid]: idx }));
+  }, []);
+
+  const typeAnswer = useCallback((qid: string, value: string) => {
+    setAnswers((a) => ({ ...a, [qid]: value }));
+  }, []);
 
   const toggleMark = useCallback((qid: string) => {
     setMarked((m) => {
@@ -365,7 +520,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
               return (
                 <div key={i}>
                   <div className={"w-full rounded-lg border px-3 py-2 text-left text-sm " + cls}>
-                    <span className="font-semibold text-slate-500">{OPT[i]}.</span> {opt}
+                    <span className="font-semibold text-slate-500">{String.fromCharCode(65 + i)}.</span> {opt}
                   </div>
                   <p className="mt-1 px-3 text-xs text-slate-500">{q.explanations[i]}</p>
                 </div>
@@ -383,7 +538,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
     );
   }
 
-  // ---- Post-submit review: full list, no timer, no palette -------------
+  // ---- Post-submit review: full list, app theme (dark-mode aware) -------
   if (reviewed) {
     return (
       <div className="min-h-screen">
@@ -445,7 +600,6 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
     );
   }
 
-  // ---- Live attempt: one question at a time + palette -------------------
   if (isEmpty) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
@@ -464,10 +618,59 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
     );
   }
 
+  const sectionTitle = `${SECTION_FULL_NAMES[data.set.section] || data.set.section} Sectional`;
+
+  // ---- Instructions gate: shown once, before the clock starts -----------
+  if (deadline === null) {
+    return (
+      <div style={{ minHeight: "100vh", background: EXAM_COLORS.panelBg, color: EXAM_COLORS.text, colorScheme: "light" }}>
+        <div style={{ background: EXAM_COLORS.headerBg, color: EXAM_COLORS.headerText, padding: "10px 20px", fontSize: 14, fontWeight: 600 }}>
+          {sectionTitle} - Instructions
+        </div>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 20px 90px" }}>
+          <p style={{ fontWeight: 700, fontSize: 18 }}>{sectionTitle}</p>
+          <p style={{ marginTop: 8, fontSize: 20, fontWeight: 700 }}>{formatClock(SECTION_DURATION_MIN * 60_000)}</p>
+          <p style={{ fontSize: 12, color: EXAM_COLORS.textMuted, marginBottom: 20 }}>Section duration</p>
+          <Instructions section={data.set.section} />
+        </div>
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: EXAM_COLORS.panelBg,
+            borderTop: `1px solid ${EXAM_COLORS.border}`,
+            padding: "12px 20px",
+            display: "flex",
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            onClick={startTest}
+            style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "10px 28px", fontWeight: 600, cursor: "pointer" }}
+          >
+            Start Test
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const item = nav[current];
   const total = nav.length;
   const answeredCount = nav.filter((it) => answers[it.q.id] !== undefined && String(answers[it.q.id]).trim() !== "").length;
-  const unansweredCount = total - answeredCount;
+  const notAnsweredCount = nav.filter(
+    (it) => visited.has(it.q.id) && !marked.has(it.q.id) && (answers[it.q.id] === undefined || String(answers[it.q.id]).trim() === ""),
+  ).length;
+  const notVisitedCount = nav.filter((it) => !visited.has(it.q.id)).length;
+  const markedOnlyCount = nav.filter(
+    (it) => marked.has(it.q.id) && (answers[it.q.id] === undefined || String(answers[it.q.id]).trim() === ""),
+  ).length;
+  const answeredMarkedCount = nav.filter(
+    (it) => marked.has(it.q.id) && answers[it.q.id] !== undefined && String(answers[it.q.id]).trim() !== "",
+  ).length;
+  const unansweredForSubmit = total - answeredCount;
   const lowTime = remainingMs !== null && remainingMs < 5 * 60_000;
   const isTita = item.q.format === "tita";
   const chosen = answers[item.q.id] === undefined ? undefined : Number(answers[item.q.id]);
@@ -485,12 +688,12 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
     return "unvisited";
   }
 
-  const statusStyle: Record<string, string> = {
-    unvisited: "bg-slate-100 text-slate-500 border-slate-200",
-    visited: "bg-red-50 text-red-700 border-red-300",
-    answered: "bg-green-100 text-green-800 border-green-400",
-    marked: "bg-purple-100 text-purple-800 border-purple-400",
-    "answered-marked": "bg-purple-100 text-purple-800 border-purple-400 ring-2 ring-green-400",
+  const paletteStyle: Record<string, { bg: string; color: string; border: string }> = {
+    unvisited: { bg: EXAM_COLORS.notVisited, color: EXAM_COLORS.notVisitedText, border: EXAM_COLORS.notVisited },
+    visited: { bg: EXAM_COLORS.notAnswered, color: "#fff", border: EXAM_COLORS.notAnswered },
+    answered: { bg: EXAM_COLORS.answered, color: "#fff", border: EXAM_COLORS.answered },
+    marked: { bg: EXAM_COLORS.marked, color: "#fff", border: EXAM_COLORS.marked },
+    "answered-marked": { bg: EXAM_COLORS.marked, color: "#fff", border: EXAM_COLORS.answered },
   };
 
   function goTo(idx: number) {
@@ -506,173 +709,480 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
     if (current < total - 1) goTo(current + 1);
   }
 
+  const statBoxes: { label: string; count: number; color: string; bg: string; checkBadge?: boolean }[] = [
+    { label: "Answered", count: answeredCount, color: EXAM_COLORS.answered, bg: EXAM_COLORS.answeredBg },
+    { label: "Not Answered", count: notAnsweredCount, color: EXAM_COLORS.notAnswered, bg: EXAM_COLORS.notAnsweredBg },
+    { label: "Not Visited", count: notVisitedCount, color: EXAM_COLORS.notVisitedText, bg: EXAM_COLORS.notVisited },
+    { label: "Marked for Review", count: markedOnlyCount, color: EXAM_COLORS.marked, bg: EXAM_COLORS.markedBg },
+    {
+      label: "Answered & Marked for Review",
+      count: answeredMarkedCount,
+      color: EXAM_COLORS.marked,
+      bg: EXAM_COLORS.markedBg,
+      checkBadge: true,
+    },
+  ];
+
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <Link href="/dashboard" className="text-sm font-medium text-brand">
-            &larr; Exit
+    <div style={{ minHeight: "100vh", background: EXAM_COLORS.panelBg, color: EXAM_COLORS.text, colorScheme: "light", userSelect: "none" }}>
+      {/* Top bar */}
+      <div style={{ background: EXAM_COLORS.headerBg, color: EXAM_COLORS.headerText, padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+        <span style={{ fontWeight: 600 }}>{sectionTitle}</span>
+        <div style={{ display: "flex", gap: 16 }}>
+          <button onClick={() => setShowQuestionPaper(true)} style={{ background: "none", border: "none", color: EXAM_COLORS.headerText, cursor: "pointer", fontSize: 13 }}>
+            Question Paper
+          </button>
+          <button onClick={() => setShowInstructions(true)} style={{ background: "none", border: "none", color: EXAM_COLORS.headerText, cursor: "pointer", fontSize: 13 }}>
+            View Instructions
+          </button>
+          <Link href="/dashboard" style={{ color: EXAM_COLORS.headerText, textDecoration: "none" }}>
+            Exit
           </Link>
-          <span className="text-sm font-medium text-slate-600">{data.set.section} - Set #{data.attempt.id}</span>
-          <div
-            className={
-              "rounded-lg border px-3 py-1 font-mono text-sm font-semibold " +
-              (lowTime ? "border-red-400 bg-red-50 text-red-700" : "border-slate-300 bg-slate-50 text-slate-700")
-            }
-          >
-            {remainingMs === null ? "--:--" : formatClock(remainingMs)}
-          </div>
         </div>
-      </header>
+      </div>
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-6 lg:flex-row">
-        <div className="flex-1">
-          {item.context && (
-            <div className="card mb-4 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-brand">{item.contextLabel}</p>
-              <div
-                className="prose-cat mt-2 text-sm leading-relaxed text-slate-700"
-                dangerouslySetInnerHTML={{ __html: renderContext(item.context) }}
-              />
-              {item.source && <p className="mt-2 text-xs text-slate-400">Source: {item.source}</p>}
-            </div>
-          )}
+      {/* Timer + marks row */}
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: 16, padding: "8px 20px 4px", borderBottom: `1px solid ${EXAM_COLORS.border}` }}>
+        <span style={{ fontSize: 12, color: EXAM_COLORS.textMuted }}>
+          Marks for correct answer 3 | Negative Marks {isTita ? 0 : 1}
+        </span>
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: 14,
+            color: overtime ? "#b8860b" : lowTime ? EXAM_COLORS.notAnswered : EXAM_COLORS.text,
+          }}
+        >
+          {overtime
+            ? `Overtime (practice) : +${formatClock(Math.abs(remainingMs ?? 0))}`
+            : `Time Left : ${remainingMs === null ? formatClock(SECTION_DURATION_MIN * 60_000) : formatClock(remainingMs)}`}
+        </span>
+      </div>
 
-          <div className="card p-5">
-            <div className="flex items-start justify-between gap-4">
-              <p className="font-medium text-slate-900">
-                <span className="text-slate-400">Q{current + 1} of {total}.</span>{" "}
-                <span className="whitespace-pre-wrap">{withInstructionFallback(item.q)}</span>
-              </p>
-              <button
-                onClick={() => toggleMark(item.q.id)}
-                className={
-                  "shrink-0 rounded-lg border px-3 py-1 text-xs font-semibold " +
-                  (isMarked ? "border-purple-400 bg-purple-100 text-purple-800" : "border-slate-300 text-slate-500 hover:bg-slate-50")
-                }
-              >
-                {isMarked ? "Marked" : "Mark for Review"}
-              </button>
-            </div>
-
-            {isTita ? (
-              <div className="mt-4 max-w-xs">
-                <label className="label" htmlFor={`answer-${item.q.id}`}>Your answer</label>
-                <input
-                  id={`answer-${item.q.id}`}
-                  inputMode="decimal"
-                  className="input font-mono"
-                  value={typedAnswer}
-                  onChange={(e) => typeAnswer(item.q.id, e.target.value)}
-                  placeholder="Type your answer"
-                />
-                <p className="mt-2 text-xs text-slate-500">
-                  Type in the answer. Incorrect TITA answers do not carry negative marks.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-4 space-y-2">
-                {item.q.options.map((opt, i) => {
-                  const isChosen = chosen === i;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => pick(item.q.id, i)}
-                      className={
-                        "w-full rounded-lg border px-3 py-2 text-left text-sm " +
-                        (isChosen ? "border-brand bg-brand/5" : "border-slate-300 hover:bg-slate-50")
-                      }
-                    >
-                      <span className="font-semibold text-slate-500">{OPT[i]}.</span> {opt}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button className="btn-ghost" onClick={() => goTo(current - 1)} disabled={current === 0}>
-                Previous
-              </button>
-              <button className="btn-ghost" onClick={() => clearResponse(item.q.id)} disabled={!isAnswered}>
-                Clear response
-              </button>
-              <button className="btn-ghost" onClick={markAndNext}>
-                Mark for Review &amp; Next
-              </button>
-              {current < total - 1 ? (
-                <button className="btn-primary" onClick={saveAndNext}>
-                  Save &amp; Next
-                </button>
-              ) : (
-                <button className="btn-primary" onClick={() => setConfirmOpen(true)} disabled={busy}>
-                  Submit test
-                </button>
-              )}
-            </div>
+      <div style={{ display: "flex", alignItems: "stretch" }}>
+        {/* Passage pane (RC/DI/LR only) */}
+        {item.context && (
+          <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, maxHeight: "calc(100vh - 156px)", overflowY: "auto" }}>
+            <p style={{ fontWeight: 700, marginBottom: 8, fontSize: 14 }}>{item.contextLabel}</p>
+            <div
+              style={{ fontSize: 14, lineHeight: 1.6 }}
+              dangerouslySetInnerHTML={{ __html: renderContext(item.context) }}
+            />
+            {item.source && <p style={{ marginTop: 8, fontSize: 11, color: EXAM_COLORS.textMuted }}>Source: {item.source}</p>}
           </div>
+        )}
 
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-        </div>
-
-        <aside className="w-full shrink-0 lg:w-64">
-          <div className="card sticky top-20 p-4">
-            <p className="text-sm font-semibold text-slate-700">Question palette</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {answeredCount} answered - {unansweredCount} remaining
-            </p>
-            <div className="mt-3 grid grid-cols-6 gap-1.5 lg:grid-cols-5">
-              {nav.map((it, idx) => (
-                <button
-                  key={it.q.id}
-                  onClick={() => goTo(idx)}
-                  className={
-                    "flex h-8 w-8 items-center justify-center rounded border text-xs font-semibold " +
-                    statusStyle[statusOf(it.q.id)] +
-                    (idx === current ? " ring-2 ring-brand" : "")
-                  }
-                >
-                  {idx + 1}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 space-y-1.5 text-xs text-slate-500">
-              <p><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-green-400" />Answered</p>
-              <p><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-red-300" />Not answered</p>
-              <p><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-purple-400" />Marked for review</p>
-              <p><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-slate-200" />Not visited</p>
-            </div>
-            <button className="btn-primary mt-4 w-full" onClick={() => setConfirmOpen(true)} disabled={busy}>
-              {busy ? "Submitting..." : "Submit test"}
+        {/* Question pane */}
+        <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, maxHeight: "calc(100vh - 156px)", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+            <p style={{ fontWeight: 700, fontSize: 14 }}>Question No. {current + 1}</p>
+            <button
+              onClick={() => toggleMark(item.q.id)}
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                border: `1px solid ${isMarked ? EXAM_COLORS.marked : EXAM_COLORS.border}`,
+                background: isMarked ? EXAM_COLORS.markedBg : "#fff",
+                color: isMarked ? EXAM_COLORS.marked : EXAM_COLORS.textMuted,
+                borderRadius: 4,
+                padding: "4px 10px",
+                cursor: "pointer",
+              }}
+            >
+              {isMarked ? "Marked" : "Mark for Review"}
             </button>
           </div>
-        </aside>
-      </main>
+          <p style={{ fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{withInstructionFallback(item.q)}</p>
 
+          {isTita ? (
+            <div style={{ marginTop: 16, maxWidth: 260 }}>
+              <input
+                value={typedAnswer}
+                onChange={(e) => typeAnswer(item.q.id, e.target.value)}
+                inputMode="decimal"
+                placeholder="Type your answer"
+                style={{ width: "100%", border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 4, padding: "8px 10px", fontSize: 14, fontFamily: "monospace" }}
+              />
+            </div>
+          ) : (
+            <div style={{ marginTop: 16 }}>
+              {item.q.options.map((opt, i) => (
+                <label key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 0", fontSize: 14, cursor: "pointer" }}>
+                  <input type="radio" checked={chosen === i} onChange={() => pick(item.q.id, i)} style={{ marginTop: 3 }} />
+                  <span>{opt}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Collapse toggle: hides the palette so the passage/question panes
+         * can use the full width, matching the reference exam software. */}
+        <button
+          onClick={() => setPaletteCollapsed((c) => !c)}
+          title={paletteCollapsed ? "Show question palette" : "Hide question palette"}
+          style={{
+            position: "sticky",
+            top: "50%",
+            width: 18,
+            height: 40,
+            flexShrink: 0,
+            border: "none",
+            background: EXAM_COLORS.answered,
+            color: "#fff",
+            cursor: "pointer",
+            borderRadius: "4px 0 0 4px",
+            fontSize: 12,
+          }}
+        >
+          {paletteCollapsed ? "‹" : "›"}
+        </button>
+
+        {/* Question palette */}
+        <div
+          style={{
+            width: paletteCollapsed ? 0 : 300,
+            flexShrink: 0,
+            background: EXAM_COLORS.paletteBg,
+            padding: paletteCollapsed ? 0 : 16,
+            maxHeight: "calc(100vh - 156px)",
+            overflowY: "auto",
+            overflowX: "hidden",
+            transition: "width 0.15s ease, padding 0.15s ease",
+          }}
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+            {statBoxes.map((s) => (
+              <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+                <span
+                  style={{
+                    position: "relative",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 22,
+                    height: 22,
+                    borderRadius: 4,
+                    background: s.bg,
+                    color: s.color,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  {s.count}
+                  {s.checkBadge && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        bottom: -6,
+                        right: -6,
+                        width: 16,
+                        height: 16,
+                        borderRadius: "50%",
+                        background: EXAM_COLORS.answered,
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        lineHeight: "14px",
+                        border: "2px solid #fff",
+                      }}
+                    >
+                      ✓
+                    </span>
+                  )}
+                </span>
+                <span style={{ color: EXAM_COLORS.textMuted }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: EXAM_COLORS.tabActiveBg, color: "#fff", padding: "6px 10px", fontSize: 12, fontWeight: 600, borderRadius: "4px 4px 0 0" }}>
+            {sectionTitle}
+          </div>
+          <div style={{ background: "#fff", border: `1px solid ${EXAM_COLORS.border}`, borderTop: "none", borderRadius: "0 0 4px 4px", padding: 12 }}>
+            <p style={{ fontSize: 11, color: EXAM_COLORS.textMuted, marginBottom: 8 }}>Choose a question</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+              {nav.map((it, idx) => {
+                const status = statusOf(it.q.id);
+                const st = paletteStyle[status];
+                return (
+                  <button
+                    key={it.q.id}
+                    onClick={() => goTo(idx)}
+                    style={{
+                      position: "relative",
+                      width: 32,
+                      height: 32,
+                      borderRadius: 4,
+                      border: idx === current ? `2px solid ${EXAM_COLORS.text}` : `1px solid ${st.border}`,
+                      background: st.bg,
+                      color: st.color,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {idx + 1}
+                    {/* Answered & Marked gets a green corner check so it reads
+                     * differently from plain Marked at a glance. */}
+                    {status === "answered-marked" && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          bottom: -6,
+                          right: -6,
+                          width: 18,
+                          height: 18,
+                          borderRadius: "50%",
+                          background: EXAM_COLORS.answered,
+                          color: "#fff",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          lineHeight: "16px",
+                          border: "2px solid #fff",
+                        }}
+                      >
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={busy}
+            style={{ marginTop: 16, width: "100%", background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "10px 0", fontWeight: 600, cursor: "pointer" }}
+          >
+            {busy ? "Submitting..." : "Submit test"}
+          </button>
+          {error && <p style={{ marginTop: 8, fontSize: 12, color: EXAM_COLORS.notAnswered }}>{error}</p>}
+        </div>
+      </div>
+
+      {/* Bottom action bar - pinned to the viewport so it never shifts with
+       * content height (matches the real exam software's fixed footer). */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderTop: `1px solid ${EXAM_COLORS.border}`,
+          background: "#fff",
+          padding: "10px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          zIndex: 20,
+        }}
+      >
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={markAndNext}
+            style={{ border: `1px solid ${EXAM_COLORS.border}`, background: "#fff", borderRadius: 4, padding: "8px 14px", fontSize: 13, cursor: "pointer" }}
+          >
+            Mark For Review &amp; Next
+          </button>
+          <button
+            onClick={() => clearResponse(item.q.id)}
+            disabled={!isAnswered}
+            style={{ border: `1px solid ${EXAM_COLORS.border}`, background: "#fff", borderRadius: 4, padding: "8px 14px", fontSize: 13, cursor: isAnswered ? "pointer" : "not-allowed", opacity: isAnswered ? 1 : 0.5 }}
+          >
+            Clear Response
+          </button>
+        </div>
+        {current < total - 1 ? (
+          <button
+            onClick={saveAndNext}
+            style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+          >
+            Save and Next
+          </button>
+        ) : (
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={busy}
+            style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+          >
+            Save and Submit
+          </button>
+        )}
+      </div>
+
+      {/* Submit confirmation */}
       {confirmOpen && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4">
-          <div className="card w-full max-w-sm p-6">
-            <p className="font-semibold text-slate-900">Submit this section?</p>
-            <p className="mt-2 text-sm text-slate-600">
-              {unansweredCount > 0
-                ? `${unansweredCount} question${unansweredCount === 1 ? "" : "s"} left unanswered. You can't change answers after submitting.`
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 30 }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 360, width: "90%" }}>
+            <p style={{ fontWeight: 700, marginBottom: 8 }}>Submit this section?</p>
+            <p style={{ fontSize: 13, color: EXAM_COLORS.textMuted, marginBottom: 16 }}>
+              {unansweredForSubmit > 0
+                ? `${unansweredForSubmit} question${unansweredForSubmit === 1 ? "" : "s"} left unanswered. You can't change answers after submitting.`
                 : "All questions answered. You can't change answers after submitting."}
             </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => setConfirmOpen(false)}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => setConfirmOpen(false)}
+                style={{ border: `1px solid ${EXAM_COLORS.border}`, background: "#fff", borderRadius: 4, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}
+              >
                 Keep working
               </button>
               <button
-                className="btn-primary"
                 onClick={() => {
                   setConfirmOpen(false);
                   submit();
                 }}
                 disabled={busy}
+                style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
               >
                 Submit
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time-up choice: sectional practice only - a full mock (once it
+       * exists) should force-submit here instead of offering a choice. */}
+      {timeUp && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40 }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 380, width: "90%" }}>
+            <p style={{ fontWeight: 700, marginBottom: 8 }}>Time&apos;s up</p>
+            <p style={{ fontSize: 13, color: EXAM_COLORS.textMuted, marginBottom: 16 }}>
+              The {SECTION_DURATION_MIN}-minute section timer has ended. Submit now to have this scored as
+              a timed attempt, or keep practicing untimed - untimed extra time is only offered on
+              individual sectionals, not full mocks.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => {
+                  setTimeUp(false);
+                  setOvertime(true);
+                }}
+                style={{ border: `1px solid ${EXAM_COLORS.border}`, background: "#fff", borderRadius: 4, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}
+              >
+                Keep practicing
+              </button>
+              <button
+                onClick={() => {
+                  setTimeUp(false);
+                  submit();
+                }}
+                disabled={busy}
+                style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Submit now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Anti-cheat violation warning */}
+      {showViolation && !timeUp && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40 }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 380, width: "90%" }}>
+            <p style={{ fontWeight: 700, marginBottom: 8, color: EXAM_COLORS.notAnswered }}>
+              Warning {violations}/3: left the test window
+            </p>
+            <p style={{ fontSize: 13, color: EXAM_COLORS.textMuted, marginBottom: 16 }}>
+              Switching tabs, exiting fullscreen, or leaving this window is flagged. Reaching 3 warnings
+              auto-submits the section.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  setShowViolation(false);
+                  document.documentElement.requestFullscreen?.().catch(() => {});
+                }}
+                style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Resume test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Instructions overlay */}
+      {showInstructions && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 30 }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 640, width: "90%", maxHeight: "80vh", overflowY: "auto" }}>
+            <Instructions section={data.set.section} />
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+              <button
+                onClick={() => setShowInstructions(false)}
+                style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Question Paper overlay: the whole paper, full text and options,
+       * scrollable top to bottom like a physical paper. Read-only - it's a
+       * reference view, not an alternate way to answer. */}
+      {showQuestionPaper && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 30 }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 760, width: "94%", maxHeight: "88vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, position: "sticky", top: -24, background: "#fff", paddingTop: 24, marginTop: -24 }}>
+              <p style={{ fontWeight: 700 }}>Question Paper - {sectionTitle}</p>
+              <button
+                onClick={() => setShowQuestionPaper(false)}
+                style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "6px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Close
+              </button>
+            </div>
+            {(data.set.kind === "sets" ? subsets : [null]).map((ss, groupIdx) => {
+              const groupItems = ss ? nav.filter((it) => it.contextLabel === ss.contextLabel && it.context === ss.context) : nav;
+              return (
+                <div key={ss ? ss.id : "flat"} style={{ marginBottom: 28 }}>
+                  {ss && (
+                    <div style={{ marginBottom: 12, padding: 12, background: EXAM_COLORS.paletteBg, borderRadius: 6 }}>
+                      <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{ss.contextLabel}</p>
+                      <div style={{ fontSize: 13, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: renderContext(ss.context) }} />
+                    </div>
+                  )}
+                  {groupItems.map((it) => {
+                    const idx = nav.indexOf(it);
+                    return (
+                      <div key={it.q.id} style={{ marginBottom: 18 }}>
+                        <p style={{ fontWeight: 600, fontSize: 14, whiteSpace: "pre-wrap" }}>
+                          Q{idx + 1}. {withInstructionFallback(it.q)}
+                        </p>
+                        {it.q.format === "tita" ? (
+                          <p style={{ fontSize: 13, color: EXAM_COLORS.textMuted, marginTop: 4 }}>(Type-in-the-answer question)</p>
+                        ) : (
+                          <div style={{ marginTop: 6 }}>
+                            {it.q.options.map((opt, i) => (
+                              <p key={i} style={{ fontSize: 13, margin: "4px 0" }}>
+                                <span style={{ fontWeight: 600 }}>{String.fromCharCode(65 + i)}.</span> {opt}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => {
+                            goTo(idx);
+                            setShowQuestionPaper(false);
+                          }}
+                          style={{ marginTop: 6, fontSize: 12, color: EXAM_COLORS.primary, background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                        >
+                          Go to this question
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {groupIdx < (data.set.kind === "sets" ? subsets.length : 1) - 1 && (
+                    <hr style={{ border: "none", borderTop: `1px solid ${EXAM_COLORS.border}`, margin: "18px 0" }} />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

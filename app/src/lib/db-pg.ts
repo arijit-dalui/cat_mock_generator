@@ -500,6 +500,13 @@ export const attempts = {
     await ready;
     await sql`UPDATE attempts SET answers = ${sql.json(answers as Parameters<typeof sql.json>[0])}, score = ${score}, total = ${total}, submitted = TRUE, submitted_at = now() WHERE id = ${id}`;
   },
+  /** Periodic autosave of in-progress answers, before submission. A no-op
+   * once the attempt is submitted so a stray late autosave can't clobber
+   * the final scored answers. */
+  async saveDraft(id: number, answers: unknown): Promise<void> {
+    await ready;
+    await sql`UPDATE attempts SET answers = ${sql.json(answers as Parameters<typeof sql.json>[0])} WHERE id = ${id} AND submitted = FALSE`;
+  },
   /** Per-section totals over this user's SUBMITTED attempts. */
   async statsByUser(userId: number): Promise<SectionStat[]> {
     await ready;
