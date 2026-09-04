@@ -80,18 +80,34 @@ CREATE TABLE IF NOT EXISTS user_seen_sets (
   PRIMARY KEY (user_id, set_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_seen_user ON user_seen_sets(user_id);
+CREATE TABLE IF NOT EXISTS mocks (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  submitted BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  submitted_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_mocks_user ON mocks(user_id);
 CREATE TABLE IF NOT EXISTS attempts (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   set_id INTEGER NOT NULL REFERENCES generated_sets(id) ON DELETE CASCADE,
   section TEXT NOT NULL, answers JSONB, score REAL, total INTEGER,
   raw_score REAL,
+  mock_id INTEGER REFERENCES mocks(id) ON DELETE CASCADE,
+  phase TEXT,
   submitted BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   submitted_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS raw_score REAL;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS mock_id INTEGER REFERENCES mocks(id) ON DELETE CASCADE;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS phase TEXT;
+-- These indexes must come AFTER the ALTERs above - on an existing (pre-mock)
+-- database the columns don't exist until those ALTERs run, and an index on
+-- a missing column errors, aborting this whole multi-statement batch.
+CREATE INDEX IF NOT EXISTS idx_attempts_mock ON attempts(mock_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_section_submitted ON attempts(section, submitted);
 CREATE TABLE IF NOT EXISTS user_external_stats (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -149,6 +165,9 @@ export interface Attempt {
   answers: string | null;
   score: number | null;
   total: number | null;
+  raw_score: number | null;
+  mock_id: number | null;
+  phase: string | null;
   submitted: number;
   created_at: string;
   submitted_at: string | null;
@@ -490,11 +509,17 @@ export const userSeen = {
 
 // ---- attempts ------------------------------------------------------------
 export const attempts = {
-  async create(userId: number, setId: number, section: string): Promise<number> {
+  async create(
+    userId: number,
+    setId: number,
+    section: string,
+    extra?: { mockId?: number; phase?: string },
+  ): Promise<number> {
     await ready;
     const rows = await sql<
       { id: number }[]
-    >`INSERT INTO attempts (user_id, set_id, section) VALUES (${userId}, ${setId}, ${section}) RETURNING id`;
+    >`INSERT INTO attempts (user_id, set_id, section, mock_id, phase)
+      VALUES (${userId}, ${setId}, ${section}, ${extra?.mockId ?? null}, ${extra?.phase ?? null}) RETURNING id`;
     return rows[0].id;
   },
   async byId(id: number): Promise<Attempt | undefined> {
@@ -503,26 +528,35 @@ export const attempts = {
       Attempt[]
     >`SELECT id, user_id, set_id, section,
               answers::text AS answers,
-              score, total,
+              score, total, raw_score, mock_id, phase,
               (submitted)::int AS submitted,
               created_at::text,
               submitted_at::text
         FROM attempts WHERE id = ${id}`;
     return rows[0];
   },
+  async byMock(mockId: number): Promise<Attempt[]> {
+    await ready;
+    return await sql<
+      Attempt[]
+    >`SELECT id, user_id, set_id, section, answers::text AS answers,
+              score, total, raw_score, mock_id, phase,
+              (submitted)::int AS submitted, created_at::text, submitted_at::text
+        FROM attempts WHERE mock_id = ${mockId} ORDER BY id`;
+  },
   async listForUser(userId: number, section?: string): Promise<Attempt[]> {
     await ready;
     if (section) {
       return await sql<
         Attempt[]
-      >`SELECT id, user_id, set_id, section, answers::text AS answers, score, total,
+      >`SELECT id, user_id, set_id, section, answers::text AS answers, score, total, raw_score, mock_id, phase,
                 (submitted)::int AS submitted, created_at::text, submitted_at::text
           FROM attempts WHERE user_id = ${userId} AND section = ${section}
           ORDER BY created_at DESC`;
     }
     return await sql<
       Attempt[]
-    >`SELECT id, user_id, set_id, section, answers::text AS answers, score, total,
+    >`SELECT id, user_id, set_id, section, answers::text AS answers, score, total, raw_score, mock_id, phase,
               (submitted)::int AS submitted, created_at::text, submitted_at::text
         FROM attempts WHERE user_id = ${userId} ORDER BY created_at DESC`;
   },
@@ -571,6 +605,41 @@ export const attempts = {
         FROM attempts
         WHERE user_id = ${userId} AND submitted = TRUE
         GROUP BY section`;
+  },
+};
+
+export interface Mock {
+  id: number;
+  user_id: number;
+  submitted: number;
+  created_at: string;
+  submitted_at: string | null;
+}
+
+// ---- mocks: full 3-phase (VARC/DILR/QA) attempts --------------------------
+export const mocks = {
+  async create(userId: number): Promise<number> {
+    await ready;
+    const rows = await sql<{ id: number }[]>`INSERT INTO mocks (user_id) VALUES (${userId}) RETURNING id`;
+    return rows[0].id;
+  },
+  async byId(id: number): Promise<Mock | undefined> {
+    await ready;
+    const rows = await sql<Mock[]>`SELECT id, user_id, (submitted)::int AS submitted, created_at::text, submitted_at::text FROM mocks WHERE id = ${id}`;
+    return rows[0];
+  },
+  async listForUser(userId: number): Promise<Mock[]> {
+    await ready;
+    return await sql<Mock[]>`SELECT id, user_id, (submitted)::int AS submitted, created_at::text, submitted_at::text FROM mocks WHERE user_id = ${userId} ORDER BY created_at DESC`;
+  },
+  async submit(id: number): Promise<void> {
+    await ready;
+    await sql`UPDATE mocks SET submitted = TRUE, submitted_at = now() WHERE id = ${id}`;
+  },
+  /** Cleans up a mock that failed to fully build (cascades to its attempts). */
+  async remove(id: number): Promise<void> {
+    await ready;
+    await sql`DELETE FROM mocks WHERE id = ${id}`;
   },
 };
 

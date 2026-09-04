@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS user_seen_sets (
 );
 CREATE INDEX IF NOT EXISTS idx_user_seen_user ON user_seen_sets(user_id);
 
+-- A full mock: three timed phases (VARC, DILR, QA) bundling five section
+-- attempts. Sectional attempts (the existing single-section flow) leave
+-- mock_id NULL on the attempts row below.
+CREATE TABLE IF NOT EXISTS mocks (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  submitted     INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  submitted_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mocks_user ON mocks(user_id);
+
 -- User attempts at a generated set.
 CREATE TABLE IF NOT EXISTS attempts (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,11 +91,18 @@ CREATE TABLE IF NOT EXISTS attempts (
   score        REAL,
   total        INTEGER,
   raw_score    REAL,               -- CAT marking: +3/-1/0 (see practice.ts scoreSet)
+  mock_id      INTEGER REFERENCES mocks(id) ON DELETE CASCADE,  -- NULL for a standalone sectional attempt
+  phase        TEXT,               -- 'VARC' | 'DILR' | 'QA' when part of a mock
   submitted    INTEGER NOT NULL DEFAULT 0,  -- 0 | 1
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   submitted_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
+-- idx_attempts_mock is created in db-sqlite.ts, after the guarded ALTER
+-- that adds mock_id - an existing DB's attempts table won't have that
+-- column yet at this point in schema application, and an index on a
+-- missing column throws (aborting this entire script, schema.sql runs as
+-- one batch).
 -- Percentile lookups scan submitted attempts by section across ALL users.
 CREATE INDEX IF NOT EXISTS idx_attempts_section_submitted ON attempts(section, submitted);
 

@@ -13,7 +13,10 @@ ADMIN_CREDENTIALS.txt
 **/data/*.db-shm
 
 # ---- huge knowledge-base inputs (not part of the app) ----
-mocks/
+# Scoped to extraction/ specifically - a bare "mocks/" also matched
+# app/src/app/mocks/ and app/src/app/api/mocks/ (the full-mock feature's
+# actual source code), silently excluding them from every commit.
+extraction/mocks/
 extraction/extracted/
 extraction/docs/
 extraction/cache/

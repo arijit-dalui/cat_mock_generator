@@ -72,6 +72,15 @@ CREATE TABLE IF NOT EXISTS user_seen_sets (
 );
 CREATE INDEX IF NOT EXISTS idx_user_seen_user ON user_seen_sets(user_id);
 
+CREATE TABLE IF NOT EXISTS mocks (
+  id            SERIAL PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  submitted     BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  submitted_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_mocks_user ON mocks(user_id);
+
 CREATE TABLE IF NOT EXISTS attempts (
   id           SERIAL PRIMARY KEY,
   user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -81,12 +90,18 @@ CREATE TABLE IF NOT EXISTS attempts (
   score        REAL,
   total        INTEGER,
   raw_score    REAL,               -- CAT marking: +3/-1/0 (see practice.ts scoreSet)
+  mock_id      INTEGER REFERENCES mocks(id) ON DELETE CASCADE,
+  phase        TEXT,
   submitted    BOOLEAN NOT NULL DEFAULT FALSE,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   submitted_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS raw_score REAL;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS mock_id INTEGER REFERENCES mocks(id) ON DELETE CASCADE;
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS phase TEXT;
+-- Must come after the ALTERs above - see db-pg.ts for why.
+CREATE INDEX IF NOT EXISTS idx_attempts_mock ON attempts(mock_id);
 -- Percentile lookups scan submitted attempts by section across ALL users.
 CREATE INDEX IF NOT EXISTS idx_attempts_section_submitted ON attempts(section, submitted);
 

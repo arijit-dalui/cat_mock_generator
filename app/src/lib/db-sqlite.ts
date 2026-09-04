@@ -38,6 +38,19 @@ function open(): Database.Database {
   } catch {
     /* column already exists */
   }
+  try {
+    db.exec("ALTER TABLE attempts ADD COLUMN mock_id INTEGER REFERENCES mocks(id) ON DELETE CASCADE");
+  } catch {
+    /* column already exists */
+  }
+  try {
+    db.exec("ALTER TABLE attempts ADD COLUMN phase TEXT");
+  } catch {
+    /* column already exists */
+  }
+  // Deferred until here: an index on mock_id would throw during
+  // db.exec(schema) above on any DB from before that column existed.
+  db.exec("CREATE INDEX IF NOT EXISTS idx_attempts_mock ON attempts(mock_id)");
   return db;
 }
 
@@ -92,6 +105,8 @@ export interface Attempt {
   score: number | null;
   total: number | null;
   raw_score: number | null;
+  mock_id: number | null;
+  phase: string | null;
   submitted: number;
   created_at: string;
   submitted_at: string | null;
@@ -389,18 +404,26 @@ export const userSeen = {
 };
 
 export const attempts = {
-  async create(userId: number, setId: number, section: string): Promise<number> {
+  async create(
+    userId: number,
+    setId: number,
+    section: string,
+    extra?: { mockId?: number; phase?: string },
+  ): Promise<number> {
     const info = db
       .prepare(
-        "INSERT INTO attempts (user_id, set_id, section) VALUES (?, ?, ?)",
+        "INSERT INTO attempts (user_id, set_id, section, mock_id, phase) VALUES (?, ?, ?, ?, ?)",
       )
-      .run(userId, setId, section);
+      .run(userId, setId, section, extra?.mockId ?? null, extra?.phase ?? null);
     return Number(info.lastInsertRowid);
   },
   async byId(id: number): Promise<Attempt | undefined> {
     return db.prepare("SELECT * FROM attempts WHERE id = ?").get(id) as
       | Attempt
       | undefined;
+  },
+  async byMock(mockId: number): Promise<Attempt[]> {
+    return db.prepare("SELECT * FROM attempts WHERE mock_id = ? ORDER BY id").all(mockId) as Attempt[];
   },
   async listForUser(userId: number, section?: string): Promise<Attempt[]> {
     if (section) {
@@ -467,6 +490,35 @@ export const attempts = {
            GROUP BY section`,
       )
       .all(userId) as SectionStat[];
+  },
+};
+
+export interface Mock {
+  id: number;
+  user_id: number;
+  submitted: number;
+  created_at: string;
+  submitted_at: string | null;
+}
+
+// ---- mocks: full 3-phase (VARC/DILR/QA) attempts --------------------------
+export const mocks = {
+  async create(userId: number): Promise<number> {
+    const info = db.prepare("INSERT INTO mocks (user_id) VALUES (?)").run(userId);
+    return Number(info.lastInsertRowid);
+  },
+  async byId(id: number): Promise<Mock | undefined> {
+    return db.prepare("SELECT * FROM mocks WHERE id = ?").get(id) as Mock | undefined;
+  },
+  async listForUser(userId: number): Promise<Mock[]> {
+    return db.prepare("SELECT * FROM mocks WHERE user_id = ? ORDER BY created_at DESC").all(userId) as Mock[];
+  },
+  async submit(id: number): Promise<void> {
+    db.prepare("UPDATE mocks SET submitted = 1, submitted_at = datetime('now') WHERE id = ?").run(id);
+  },
+  /** Cleans up a mock that failed to fully build (cascades to its attempts). */
+  async remove(id: number): Promise<void> {
+    db.prepare("DELETE FROM mocks WHERE id = ?").run(id);
   },
 };
 
