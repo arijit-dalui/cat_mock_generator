@@ -3,7 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --bg: #f8fafc;
+  --bg: #f6f2eb;
+  --ink: #17261f;
+  --muted: #64706a;
+  --surface: #fffdf9;
+  --line: #ded9cf;
+  --focus: #a8472c;
 }
 
 html,
@@ -11,9 +16,9 @@ body {
   padding: 0;
   margin: 0;
   background: var(--bg);
-  color: #0f172a;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  font-family: "Aptos", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -21,12 +26,14 @@ body {
 }
 
 .card {
-  @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  box-shadow: 0 14px 34px rgb(37 33 27 / 0.06);
 }
 
 .btn {
   @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm
-    font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-50
+    active:translate-y-px;
 }
 
 .btn-primary {
@@ -34,7 +41,7 @@ body {
 }
 
 .btn-ghost {
-  @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  @apply btn border border-slate-300 bg-white text-slate-700 hover:border-brand/40 hover:bg-brand/5 hover:text-brand;
 }
 
 .input {
@@ -45,3 +52,83 @@ body {
 .label {
   @apply mb-1 block text-sm font-medium text-slate-700;
 }
+
+.display-type {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: -0.035em;
+}
+
+.app-shell {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(168 71 44 / 0.1), transparent 25rem),
+    radial-gradient(circle at 0% 100%, rgb(24 71 53 / 0.08), transparent 30rem),
+    var(--bg);
+}
+
+.focus-ring:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgb(168 71 44 / 0.38);
+  outline-offset: 3px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e9e4da 25%, #f4f0e9 40%, #e9e4da 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.25s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+.dark {
+  --bg: #111714;
+  --ink: #eff4ed;
+  --muted: #aeb8b0;
+  --surface: #19211d;
+  --line: #304039;
+  color-scheme: dark;
+}
+
+.dark body,
+.dark .bg-white { background-color: var(--surface) !important; }
+.dark [class~="bg-white/90"] { background-color: rgb(25 33 29 / 0.9) !important; }
+.dark .bg-slate-50 { background-color: #1e2823 !important; }
+.dark .bg-slate-100 { background-color: #26322c !important; }
+.dark .bg-slate-200 { background-color: #354139 !important; }
+.dark .text-slate-900 { color: #f0f5f0 !important; }
+.dark .text-slate-700 { color: #d6ded7 !important; }
+.dark .text-slate-600 { color: #c0c9c2 !important; }
+.dark .text-slate-500,
+.dark .text-slate-400 { color: #aeb8b0 !important; }
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300 { border-color: var(--line) !important; }
+.dark .hover\\:bg-slate-50:hover { background-color: #26322c !important; }
+.dark .input { background: #111714; color: #f0f5f0; border-color: #415048; }
+.dark .skeleton { background: linear-gradient(90deg, #26322c 25%, #354139 40%, #26322c 60%); background-size: 200% 100%; }
+
+/* Correct/incorrect/marked-for-review badges (answer review, question
+ * palette): the light-50/100 Tailwind backgrounds stay near-white in dark
+ * mode while text-slate-900 above turns near-white too, making the text
+ * unreadable. Re-tint the backgrounds dark and lift the text to a lighter
+ * shade of the same hue instead of relying on the slate overrides. */
+.dark .bg-green-50,
+.dark .bg-green-100 { background-color: rgb(34 197 94 / 0.16) !important; }
+.dark .bg-red-50,
+.dark .bg-red-100 { background-color: rgb(239 68 68 / 0.16) !important; }
+.dark .bg-purple-100 { background-color: rgb(168 85 247 / 0.2) !important; }
+.dark .text-green-700,
+.dark .text-green-800 { color: #86efac !important; }
+.dark .text-red-600,
+.dark .text-red-700 { color: #fca5a5 !important; }
+.dark .text-purple-700,
+.dark .text-purple-800 { color: #d8b4fe !important; }
+.dark .border-green-400,
+.dark .border-green-500 { border-color: #4ade80 !important; }
+.dark .border-red-300,
+.dark .border-red-400,
+.dark .border-red-500 { border-color: #f87171 !important; }
+.dark .border-purple-400 { border-color: #c084fc !important; }

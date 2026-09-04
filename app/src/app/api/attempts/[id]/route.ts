@@ -41,6 +41,7 @@ export async function GET(
       submitted: !!attempt.submitted,
       score: attempt.score,
       total: attempt.total,
+      createdAt: attempt.created_at,
       answers: attempt.answers
         ? (typeof attempt.answers === "string" ? JSON.parse(attempt.answers) : attempt.answers)
         : {},

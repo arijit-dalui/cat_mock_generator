@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ThemeToggle from "../components/ThemeToggle";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -85,14 +86,15 @@ export default function DashboardClient({ username }: { username: string }) {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <span className="font-bold text-slate-900">CAT Mock Generator</span>
+    <div className="app-shell min-h-screen">
+      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
           <div className="flex items-center gap-4 text-sm">
             <Link href="/profile" className="font-medium text-brand">
               {username}
             </Link>
+            <ThemeToggle />
             <button onClick={logout} className="btn-ghost">
               Log out
             </button>
@@ -100,8 +102,13 @@ export default function DashboardClient({ username }: { username: string }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-6 py-8">
-        <div className="flex flex-wrap gap-2">
+      <main className="mx-auto max-w-5xl px-6 py-10">
+        <div className="max-w-2xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">Practice desk</p>
+          <h1 className="display-type mt-3 text-4xl font-bold text-slate-900 sm:text-5xl">Choose a focus for today.</h1>
+          <p className="mt-3 text-slate-600">Build a practice habit one section at a time. Your completed sets remain here for review.</p>
+        </div>
+        <div className="mt-8 flex flex-wrap gap-2">
           {SECTIONS.map((s) => (
             <button
               key={s}
@@ -138,7 +145,10 @@ export default function DashboardClient({ username }: { username: string }) {
             Previously generated {tab} sets
           </h3>
           {loading ? (
-            <p className="mt-3 text-sm text-slate-400">Loading...</p>
+            <div className="mt-4 space-y-2" aria-label="Loading previous sets">
+              <div className="skeleton h-16 rounded-2xl" />
+              <div className="skeleton h-16 rounded-2xl" />
+            </div>
           ) : attempts.length === 0 ? (
             <p className="mt-3 text-sm text-slate-400">
               No sets yet. Generate your first one above.

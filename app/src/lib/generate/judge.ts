@@ -38,7 +38,7 @@ function summariseForJudge(set: GeneratedSet): string {
       q.options.forEach((o, k) =>
         lines.push(`  ${"ABCD"[k]}. ${String(o).slice(0, 120)}`),
       );
-      lines.push(`  ANSWER: ${"ABCD"[q.answer]}`);
+      lines.push(`  ANSWER: ${q.format === "tita" ? String(q.answer) : "ABCD"[Number(q.answer)]}`);
       lines.push(`  SOLUTION: ${String(q.solution).slice(0, 240)}`);
       lines.push(
         `  EXPL: ` +
@@ -54,7 +54,7 @@ function summariseForJudge(set: GeneratedSet): string {
         q.options.forEach((o, k) =>
           lines.push(`    ${"ABCD"[k]}. ${String(o).slice(0, 100)}`),
         );
-        lines.push(`    ANSWER: ${"ABCD"[q.answer]}`);
+        lines.push(`    ANSWER: ${q.format === "tita" ? String(q.answer) : "ABCD"[Number(q.answer)]}`);
         lines.push(`    SOLUTION: ${String(q.solution).slice(0, 200)}`);
       }
     }

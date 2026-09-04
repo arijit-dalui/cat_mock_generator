@@ -30,7 +30,7 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  const answers = (body.answers ?? {}) as Record<string, number>;
+  const answers = (body.answers ?? {}) as Record<string, unknown>;
 
   const setRow = await sets.byId(attempt.set_id);
   if (!setRow) {
@@ -48,7 +48,8 @@ export async function POST(
     }
   }
   const set = parsed as GeneratedSet;
-  const { correct, total } = scoreSet(set, answers);
+  const result = scoreSet(set, answers);
+  const { correct, total } = result;
 
   // Diagnostic: log mismatches so we can spot key-shift bugs in production.
   // Cheap — runs only on submit, payload is small.
@@ -65,7 +66,19 @@ export async function POST(
   }
 
   await attempts.submit(attempt.id, answers, correct, total);
-  await events.log("solve", user.id, attempt.section, { score: correct, total });
+  await events.log("solve", user.id, attempt.section, {
+    score: correct,
+    total,
+    rawScore: result.rawScore,
+    incorrect: result.incorrect,
+    unanswered: result.unanswered,
+  });
 
-  return NextResponse.json({ score: correct, total });
+  return NextResponse.json({
+    score: correct,
+    total,
+    rawScore: result.rawScore,
+    incorrect: result.incorrect,
+    unanswered: result.unanswered,
+  });
 }

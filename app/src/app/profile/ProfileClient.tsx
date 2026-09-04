@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ThemeToggle from "../components/ThemeToggle";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -180,15 +181,13 @@ export default function ProfileClient({
   const grandSolved = overall.solved + overall.extSolved;
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="app-shell min-h-screen">
+      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
           <Link href="/dashboard" className="text-sm font-medium text-brand">
             &larr; Dashboard
           </Link>
-          <button onClick={logout} className="btn-ghost">
-            Log out
-          </button>
+          <div className="flex items-center gap-3"><ThemeToggle /><button onClick={logout} className="btn-ghost">Log out</button></div>
         </div>
       </header>
 
@@ -226,9 +225,8 @@ export default function ProfileClient({
 
         {/* Per-section tracker */}
         <section className="card p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            By section (in-app practice)
-          </h2>
+          <h2 className="display-type text-2xl font-bold text-slate-900">Your practice, by section</h2>
+          <p className="mt-1 text-sm text-slate-500">Look for a steady direction, not a perfect day.</p>
           <div className="mt-4 space-y-4">
             {SECTIONS.map((s) => {
               const a = stats.app[s];
@@ -259,9 +257,7 @@ export default function ProfileClient({
 
         {/* Other sources */}
         <section className="card p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Other sources
-          </h2>
+          <h2 className="display-type text-2xl font-bold text-slate-900">Practice beyond this desk</h2>
           <p className="mt-1 text-sm text-slate-500">
             Practiced elsewhere (books, other mocks)? Log it here to track your
             full effort. Accuracy is a percentage.

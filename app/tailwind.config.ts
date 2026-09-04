@@ -1,14 +1,15 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#1d4ed8",
-          dark: "#1e3a8a",
-          light: "#3b82f6",
+          DEFAULT: "#a8472c",
+          dark: "#84351f",
+          light: "#c45a3c",
         },
       },
     },
