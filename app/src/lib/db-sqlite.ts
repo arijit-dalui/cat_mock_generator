@@ -33,6 +33,11 @@ function open(): Database.Database {
   } catch {
     /* column already exists */
   }
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN social_links TEXT");
+  } catch {
+    /* column already exists */
+  }
   return db;
 }
 

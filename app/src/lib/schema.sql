@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user',          -- 'user' | 'admin'
+  social_links  TEXT,                                  -- JSON {reddit?, instagram?, twitter?, linkedin?} - self-entered URLs, shown on public profile
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

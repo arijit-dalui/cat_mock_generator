@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { SECTION_DURATION_MIN } from "@/lib/exam";
 import { scoreSet, type ScoreResult } from "@/lib/practice";
@@ -246,6 +246,113 @@ function Instructions({ section }: { section: string }) {
   );
 }
 
+/** Sections that get the on-screen calculator, matching the real CAT exam
+ * (VA/RC have none - there's nothing to compute). */
+const CALC_SECTIONS = new Set(["DI", "LR", "QA"]);
+
+/** A basic four-function calculator, like the one real CAT test-takers get
+ * for DILR and QA. Keyboard-free by design (matches the real exam, which
+ * only accepts on-screen clicks) - the point is practicing without a phone
+ * or a better calculator at hand. */
+function Calculator({ onClose }: { onClose: () => void }) {
+  const [display, setDisplay] = useState("0");
+  const [pending, setPending] = useState<{ op: string; value: number } | null>(null);
+  const [overwrite, setOverwrite] = useState(true);
+
+  function inputDigit(d: string) {
+    setDisplay((cur) => (overwrite || cur === "0" ? d : cur + d));
+    setOverwrite(false);
+  }
+  function inputDot() {
+    setDisplay((cur) => (overwrite ? "0." : cur.includes(".") ? cur : cur + "."));
+    setOverwrite(false);
+  }
+  function clearAll() {
+    setDisplay("0");
+    setPending(null);
+    setOverwrite(true);
+  }
+  function backspace() {
+    setDisplay((cur) => (cur.length > 1 ? cur.slice(0, -1) : "0"));
+  }
+  function apply(op: string, a: number, b: number): number {
+    switch (op) {
+      case "+": return a + b;
+      case "-": return a - b;
+      case "*": return a * b;
+      case "/": return b === 0 ? NaN : a / b;
+      default: return b;
+    }
+  }
+  function chooseOp(op: string) {
+    const value = parseFloat(display);
+    if (pending) {
+      const result = apply(pending.op, pending.value, value);
+      setDisplay(String(result));
+      setPending({ op, value: result });
+    } else {
+      setPending({ op, value });
+    }
+    setOverwrite(true);
+  }
+  function equals() {
+    if (!pending) return;
+    const result = apply(pending.op, pending.value, parseFloat(display));
+    setDisplay(String(result));
+    setPending(null);
+    setOverwrite(true);
+  }
+
+  const btnStyle: CSSProperties = {
+    border: `1px solid ${EXAM_COLORS.border}`,
+    background: "#fff",
+    borderRadius: 4,
+    padding: "10px 0",
+    fontSize: 15,
+    cursor: "pointer",
+  };
+  const opStyle: CSSProperties = { ...btnStyle, background: EXAM_COLORS.paletteBg, fontWeight: 600 };
+
+  return (
+    <div style={{ position: "fixed", bottom: 70, right: 20, width: 220, background: "#fff", border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.2)", zIndex: 25, padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: EXAM_COLORS.textMuted }}>Calculator</span>
+        <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 14, color: EXAM_COLORS.textMuted }}>
+          ✕
+        </button>
+      </div>
+      <div style={{ textAlign: "right", fontFamily: "monospace", fontSize: 20, padding: "8px 6px", background: EXAM_COLORS.tabBarBg, borderRadius: 4, marginBottom: 8, overflowX: "auto", whiteSpace: "nowrap" }}>
+        {display}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+        <button style={{ ...btnStyle, color: EXAM_COLORS.notAnswered }} onClick={clearAll}>C</button>
+        <button style={btnStyle} onClick={backspace}>⌫</button>
+        <button style={btnStyle} onClick={() => setDisplay((d) => String(parseFloat(d) * -1))}>±</button>
+        <button style={opStyle} onClick={() => chooseOp("/")}>÷</button>
+
+        {["7", "8", "9"].map((d) => (
+          <button key={d} style={btnStyle} onClick={() => inputDigit(d)}>{d}</button>
+        ))}
+        <button style={opStyle} onClick={() => chooseOp("*")}>×</button>
+
+        {["4", "5", "6"].map((d) => (
+          <button key={d} style={btnStyle} onClick={() => inputDigit(d)}>{d}</button>
+        ))}
+        <button style={opStyle} onClick={() => chooseOp("-")}>−</button>
+
+        {["1", "2", "3"].map((d) => (
+          <button key={d} style={btnStyle} onClick={() => inputDigit(d)}>{d}</button>
+        ))}
+        <button style={opStyle} onClick={() => chooseOp("+")}>+</button>
+
+        <button style={btnStyle} onClick={() => inputDigit("0")}>0</button>
+        <button style={btnStyle} onClick={inputDot}>.</button>
+        <button style={{ ...opStyle, gridColumn: "span 2" }} onClick={equals}>=</button>
+      </div>
+    </div>
+  );
+}
+
 export default function SolveClient({ attemptId }: { attemptId: string }) {
   const [data, setData] = useState<AttemptData | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
@@ -263,6 +370,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [showQuestionPaper, setShowQuestionPaper] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   // Strict mode (chosen on the instructions screen, before Start Test):
   // strict = real exam conditions - fullscreen lock, tab-switch detection,
@@ -826,6 +934,11 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
           <button onClick={() => setShowQuestionPaper(true)} style={{ background: "none", border: "none", color: EXAM_COLORS.headerText, cursor: "pointer", fontSize: 13 }}>
             Question Paper
           </button>
+          {CALC_SECTIONS.has(data.set.section) && (
+            <button onClick={() => setShowCalc((v) => !v)} style={{ background: "none", border: "none", color: EXAM_COLORS.headerText, cursor: "pointer", fontSize: 13 }}>
+              Calculator
+            </button>
+          )}
           <button onClick={() => setShowInstructions(true)} style={{ background: "none", border: "none", color: EXAM_COLORS.headerText, cursor: "pointer", fontSize: 13 }}>
             View Instructions
           </button>
@@ -1198,6 +1311,8 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
           </div>
         </div>
       )}
+
+      {showCalc && CALC_SECTIONS.has(data.set.section) && <Calculator onClose={() => setShowCalc(false)} />}
 
       {/* View Instructions overlay */}
       {showInstructions && (

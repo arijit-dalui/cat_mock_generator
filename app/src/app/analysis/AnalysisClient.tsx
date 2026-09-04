@@ -60,7 +60,8 @@ const TOPIC_NAMES: Record<string, string> = {
 
 /** A small hand-rolled line chart - no charting library needed for one
  * polyline. Honest empty state when there's nothing to plot yet. */
-function TrendChart({ points }: { points: { label: string; value: number }[] }) {
+function TrendChart({ points }: { points: { label: string; value: number; date: string }[] }) {
+  const [hover, setHover] = useState<number | null>(null);
   if (points.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-slate-400">
@@ -69,26 +70,152 @@ function TrendChart({ points }: { points: { label: string; value: number }[] }) 
     );
   }
   const w = 560;
-  const h = 160;
-  const padX = 28;
-  const padY = 16;
+  const h = 190;
+  const padLeft = 40;
+  const padRight = 16;
+  const padTop = 16;
+  const padBottom = 28;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
   const values = points.map((p) => p.value);
   const max = Math.max(...values, 3);
   const min = Math.min(...values, 0);
   const range = max - min || 1;
-  const step = points.length > 1 ? (w - padX * 2) / (points.length - 1) : 0;
+  const step = points.length > 1 ? plotW / (points.length - 1) : 0;
   const coords = points.map((p, i) => {
-    const x = padX + i * step;
-    const y = padY + (1 - (p.value - min) / range) * (h - padY * 2);
+    const x = padLeft + i * step;
+    const y = padTop + (1 - (p.value - min) / range) * plotH;
     return { x, y, ...p };
   });
   const path = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x},${c.y}`).join(" ");
+  // Thin out x-axis labels so they don't overlap when there are many points.
+  const labelEvery = Math.max(1, Math.ceil(points.length / 8));
+  const zeroY = padTop + (1 - (0 - min) / range) * plotH;
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="Score trend over time">
+      {/* Axes */}
+      <line x1={padLeft} y1={padTop} x2={padLeft} y2={padTop + plotH} className="stroke-slate-300" strokeWidth={1} />
+      <line x1={padLeft} y1={padTop + plotH} x2={padLeft + plotW} y2={padTop + plotH} className="stroke-slate-300" strokeWidth={1} />
+      {/* Zero line, when it's inside the plotted range and not the axis itself */}
+      {min < 0 && max > 0 && (
+        <line x1={padLeft} y1={zeroY} x2={padLeft + plotW} y2={zeroY} className="stroke-slate-200" strokeWidth={1} strokeDasharray="3 3" />
+      )}
+      {/* Y-axis labels: max, zero-or-min, min */}
+      <text x={padLeft - 6} y={padTop + 4} textAnchor="end" fontSize="10" className="fill-slate-400">{max.toFixed(0)}</text>
+      <text x={padLeft - 6} y={padTop + plotH + 4} textAnchor="end" fontSize="10" className="fill-slate-400">{min.toFixed(0)}</text>
+      <text x={padLeft - 26} y={padTop + plotH / 2} textAnchor="middle" fontSize="9" className="fill-slate-400" transform={`rotate(-90 ${padLeft - 26} ${padTop + plotH / 2})`}>Marks</text>
+      {/* X-axis labels */}
+      {coords.map((c, i) =>
+        i % labelEvery === 0 || i === coords.length - 1 ? (
+          <text key={`lbl-${i}`} x={c.x} y={h - 8} textAnchor="middle" fontSize="10" className="fill-slate-400">{c.label}</text>
+        ) : null,
+      )}
       <path d={path} fill="none" stroke="currentColor" strokeWidth={2} className="text-brand" />
       {coords.map((c, i) => (
-        <circle key={i} cx={c.x} cy={c.y} r={3.5} className="fill-brand" />
+        <g key={i}>
+          {/* Fat invisible hit-target so hovering near a point is easy, not just the 3.5px dot */}
+          <circle
+            cx={c.x}
+            cy={c.y}
+            r={10}
+            fill="transparent"
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+            style={{ cursor: "pointer" }}
+          />
+          <circle cx={c.x} cy={c.y} r={hover === i ? 5 : 3.5} className="fill-brand" style={{ pointerEvents: "none" }} />
+        </g>
       ))}
+      {hover !== null && (
+        <g style={{ pointerEvents: "none" }}>
+          <line x1={coords[hover].x} y1={padTop} x2={coords[hover].x} y2={padTop + plotH} className="stroke-slate-300" strokeWidth={1} strokeDasharray="2 2" />
+          {(() => {
+            const c = coords[hover];
+            const boxW = 92;
+            const boxX = Math.min(Math.max(c.x - boxW / 2, 2), w - boxW - 2);
+            const boxY = c.y > padTop + 30 ? c.y - 40 : c.y + 10;
+            return (
+              <g transform={`translate(${boxX},${boxY})`}>
+                <rect width={boxW} height={32} rx={4} className="fill-slate-900" opacity={0.9} />
+                <text x={boxW / 2} y={13} textAnchor="middle" fontSize="10" fill="#fff" fontWeight={700}>
+                  {c.value} marks
+                </text>
+                <text x={boxW / 2} y={25} textAnchor="middle" fontSize="9" fill="#cbd5e1">
+                  {c.date}
+                </text>
+              </g>
+            );
+          })()}
+        </g>
+      )}
+    </svg>
+  );
+}
+
+/** Stacked correct/incorrect/unanswered bar per test, most recent last -
+ * the per-test companion to the score-trend line above. Hover a bar for
+ * the exact breakdown. */
+function ResultsBarChart({ attempts }: { attempts: AttemptSummary[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (attempts.length === 0) {
+    return (
+      <div className="flex h-40 items-center justify-center text-sm text-slate-400">
+        Take your first mock to see this.
+      </div>
+    );
+  }
+  const w = 560;
+  const h = 190;
+  const padLeft = 32;
+  const padRight = 16;
+  const padTop = 16;
+  const padBottom = 28;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+  const maxTotal = Math.max(...attempts.map((a) => a.total), 1);
+  const gap = 6;
+  const barW = Math.min(36, (plotW - gap * (attempts.length - 1)) / attempts.length);
+  const rowsW = barW * attempts.length + gap * (attempts.length - 1);
+  const startX = padLeft + (plotW - rowsW) / 2;
+  const labelEvery = Math.max(1, Math.ceil(attempts.length / 8));
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="Correct vs incorrect per test">
+      <line x1={padLeft} y1={padTop} x2={padLeft} y2={padTop + plotH} className="stroke-slate-300" strokeWidth={1} />
+      <line x1={padLeft} y1={padTop + plotH} x2={padLeft + plotW} y2={padTop + plotH} className="stroke-slate-300" strokeWidth={1} />
+      {attempts.map((a, i) => {
+        const x = startX + i * (barW + gap);
+        const correctH = (a.correct / maxTotal) * plotH;
+        const incorrectH = (a.incorrect / maxTotal) * plotH;
+        const unansweredH = (a.unanswered / maxTotal) * plotH;
+        let y = padTop + plotH;
+        const segs: { h: number; color: string }[] = [
+          { h: correctH, color: "#3fa84a" },
+          { h: incorrectH, color: "#d9534f" },
+          { h: unansweredH, color: "#cbd5e1" },
+        ];
+        return (
+          <g key={a.id} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover((v) => (v === i ? null : v))} style={{ cursor: "pointer" }}>
+            <rect x={x} y={padTop} width={barW} height={plotH} fill="transparent" />
+            {segs.map((s, si) => {
+              y -= s.h;
+              return s.h > 0 ? <rect key={si} x={x} y={y} width={barW} height={s.h} fill={s.color} opacity={hover === i ? 1 : 0.85} /> : null;
+            })}
+            {(i % labelEvery === 0 || i === attempts.length - 1) && (
+              <text x={x + barW / 2} y={h - 8} textAnchor="middle" fontSize="10" className="fill-slate-400">#{i + 1}</text>
+            )}
+          </g>
+        );
+      })}
+      {hover !== null && (
+        <g style={{ pointerEvents: "none" }} transform={`translate(${Math.min(Math.max(startX + hover * (barW + gap) - 30, 2), w - 122)}, ${padTop})`}>
+          <rect width={120} height={44} rx={4} className="fill-slate-900" opacity={0.9} />
+          <text x={60} y={13} textAnchor="middle" fontSize="10" fill="#4ade80">{attempts[hover].correct} correct</text>
+          <text x={60} y={25} textAnchor="middle" fontSize="10" fill="#f87171">{attempts[hover].incorrect} incorrect</text>
+          <text x={60} y={37} textAnchor="middle" fontSize="10" fill="#cbd5e1">{attempts[hover].unanswered} unanswered</text>
+        </g>
+      )}
     </svg>
   );
 }
@@ -117,7 +244,7 @@ export default function AnalysisClient({ username }: { username: string }) {
 
   const sectionHistory = (history?.history ?? []).filter((h) => h.section === tab);
   const sectionTopics = history?.topics[tab] ?? [];
-  const trendPoints = sectionHistory.map((h, i) => ({ label: `#${i + 1}`, value: h.rawScore }));
+  const trendPoints = sectionHistory.map((h, i) => ({ label: `#${i + 1}`, value: h.rawScore, date: fmtDate(h.createdAt) }));
 
   return (
     <div className="app-shell min-h-screen">
@@ -187,6 +314,18 @@ export default function AnalysisClient({ username }: { username: string }) {
               <p className="text-sm font-semibold text-slate-700">Score trend - {SECTION_NAMES[tab]}</p>
               <div className="mt-2 text-brand">
                 <TrendChart points={trendPoints} />
+              </div>
+            </section>
+
+            <section className="card mt-6 p-6">
+              <p className="text-sm font-semibold text-slate-700">Correct vs incorrect, per test - {SECTION_NAMES[tab]}</p>
+              <div className="mt-2">
+                <ResultsBarChart attempts={sectionHistory} />
+              </div>
+              <div className="mt-2 flex gap-4 text-xs text-slate-500">
+                <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "#3fa84a" }} />Correct</span>
+                <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "#d9534f" }} />Incorrect</span>
+                <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "#cbd5e1" }} />Unanswered</span>
               </div>
             </section>
 

@@ -53,6 +53,10 @@ function barColor(p: number): string {
   return "bg-red-500";
 }
 
+/** Hidden per request - kept in code (not deleted) in case logging practice
+ * from outside this app turns out to be worth surfacing again later. */
+const SHOW_EXTERNAL_STATS = false;
+
 export default function ProfileClient({
   username,
   role,
@@ -256,6 +260,7 @@ export default function ProfileClient({
         </section>
 
         {/* Other sources */}
+        {SHOW_EXTERNAL_STATS && (
         <section className="card p-6">
           <h2 className="display-type text-2xl font-bold text-slate-900">Practice beyond this desk</h2>
           <p className="mt-1 text-sm text-slate-500">
@@ -321,6 +326,7 @@ export default function ProfileClient({
             <Stat label="Total solved (all)" value={grandSolved} highlight />
           </div>
         </section>
+        )}
       </main>
     </div>
   );
