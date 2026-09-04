@@ -856,7 +856,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
       <div style={{ display: "flex", alignItems: "stretch" }}>
         {/* Passage pane (RC/DI/LR only) */}
         {item.context && (
-          <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, maxHeight: "calc(100vh - 156px)", overflowY: "auto" }}>
+          <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, height: "calc(100vh - 156px)", overflowY: "auto" }}>
             <p style={{ fontWeight: 700, marginBottom: 8, fontSize: 14 }}>{item.contextLabel}</p>
             <div
               style={{ fontSize: 14, lineHeight: 1.6 }}
@@ -867,7 +867,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
         )}
 
         {/* Question pane */}
-        <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, maxHeight: "calc(100vh - 156px)", overflowY: "auto" }}>
+        <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, height: "calc(100vh - 156px)", overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
             <p style={{ fontWeight: 700, fontSize: 14 }}>Question No. {current + 1}</p>
             <button
@@ -939,7 +939,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
             flexShrink: 0,
             background: EXAM_COLORS.paletteBg,
             padding: paletteCollapsed ? 0 : 16,
-            maxHeight: "calc(100vh - 156px)",
+            height: "calc(100vh - 156px)",
             overflowY: "auto",
             overflowX: "hidden",
             transition: "width 0.15s ease, padding 0.15s ease",

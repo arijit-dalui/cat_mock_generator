@@ -1,0 +1,113 @@
+import { NextResponse } from "next/server";
+import { currentUser } from "@/lib/auth";
+import { attempts, sets } from "@/lib/db";
+import type { GeneratedSet } from "@/lib/generate/types";
+import { allQuestions } from "@/lib/practice";
+
+export const dynamic = "force-dynamic";
+
+interface AttemptSummary {
+  id: number;
+  section: string;
+  createdAt: string;
+  correct: number;
+  incorrect: number;
+  unanswered: number;
+  total: number;
+  rawScore: number;
+}
+
+interface TopicRow {
+  topic: string;
+  attempts: number;
+  correct: number;
+  wrong: number;
+}
+
+/** Deep-parse a set payload: normally one JSON object, but a few legacy/
+ * heal-rewritten rows are double-encoded (a JSON string scalar). */
+function parseSet(payload: unknown): GeneratedSet {
+  let parsed: unknown = payload;
+  for (let i = 0; i < 3 && typeof parsed === "string"; i++) {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      break;
+    }
+  }
+  return parsed as GeneratedSet;
+}
+
+/** Real history and per-topic accuracy computed from the user's own
+ * submitted attempts - no modeled or fabricated numbers. Empty until they
+ * have actually submitted something. */
+export async function GET() {
+  const user = await currentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  const rows = await attempts.listForUser(user.id);
+  const submitted = rows.filter((r) => r.submitted);
+
+  const history: AttemptSummary[] = [];
+  const topicsBySection: Record<string, Map<string, TopicRow>> = {};
+
+  for (const row of submitted) {
+    const setRow = await sets.byId(row.set_id);
+    if (!setRow) continue;
+    const set = parseSet(setRow.payload);
+    const answers = (typeof row.answers === "string" ? JSON.parse(row.answers) : row.answers) || {};
+    const qs = allQuestions(set);
+
+    let correct = 0;
+    let incorrect = 0;
+    let unanswered = 0;
+    let rawScore = 0;
+    const topics = (topicsBySection[row.section] ??= new Map());
+
+    for (const q of qs) {
+      const picked = answers[q.id];
+      const isTita = q.format === "tita";
+      if (picked === undefined || picked === null || String(picked).trim() === "") {
+        unanswered += 1;
+        continue;
+      }
+      const isCorrect = isTita
+        ? String(picked).trim() === String(q.answer).trim()
+        : Number(picked) === Number(q.answer);
+      const topicRow = topics.get(q.type) ?? { topic: q.type, attempts: 0, correct: 0, wrong: 0 };
+      topicRow.attempts += 1;
+      if (isCorrect) {
+        correct += 1;
+        rawScore += 3;
+        topicRow.correct += 1;
+      } else {
+        incorrect += 1;
+        if (!isTita) rawScore -= 1;
+        topicRow.wrong += 1;
+      }
+      topics.set(q.type, topicRow);
+    }
+
+    history.push({
+      id: row.id,
+      section: row.section,
+      createdAt: row.created_at,
+      correct,
+      incorrect,
+      unanswered,
+      total: qs.length,
+      rawScore,
+    });
+  }
+
+  history.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  const topics: Record<string, TopicRow[]> = {};
+  for (const [section, map] of Object.entries(topicsBySection)) {
+    topics[section] = Array.from(map.values()).sort((a, b) => b.attempts - a.attempts);
+  }
+
+  return NextResponse.json({ history, topics });
+}
