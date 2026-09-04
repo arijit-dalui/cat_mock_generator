@@ -38,6 +38,7 @@ export default function DashboardClient({ username }: { username: string }) {
   const [attempts, setAttempts] = useState<AttemptRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [retaking, setRetaking] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const loadAttempts = useCallback(async (section: Section) => {
@@ -76,6 +77,24 @@ export default function DashboardClient({ username }: { username: string }) {
       setError("Network error during generation.");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function retake(attemptId: number) {
+    setError("");
+    setRetaking(attemptId);
+    try {
+      const res = await fetch(`/api/attempts/${attemptId}/retake`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not start a retake.");
+        return;
+      }
+      router.push(`/practice/${data.attemptId}`);
+    } catch {
+      setError("Network error starting the retake.");
+    } finally {
+      setRetaking(null);
     }
   }
 
@@ -155,27 +174,40 @@ export default function DashboardClient({ username }: { username: string }) {
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {attempts.map((a) => (
-                <li key={a.id}>
-                  <Link
-                    href={`/practice/${a.id}`}
-                    className="card flex items-center justify-between p-4 hover:bg-slate-50"
-                  >
-                    <span className="text-sm text-slate-600">
-                      Set #{a.id} - {new Date(a.createdAt + "Z").toLocaleString()}
-                    </span>
-                    <span className="text-sm font-medium">
-                      {a.submitted ? (
-                        <span className="text-brand">
-                          Score {a.score}/{a.total}
-                        </span>
-                      ) : (
-                        <span className="text-amber-600">Not attempted</span>
-                      )}
-                    </span>
-                  </Link>
-                </li>
-              ))}
+              {attempts.map((a) =>
+                a.submitted ? (
+                  <li key={a.id} className="card flex items-center justify-between p-4">
+                    <div>
+                      <p className="text-sm text-slate-600">
+                        Set #{a.id} - {new Date(a.createdAt + "Z").toLocaleString()}
+                      </p>
+                      <p className="text-sm font-medium text-brand">
+                        Score {a.score}/{a.total}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Link href={`/practice/${a.id}`} className="btn-ghost">
+                        View breakdown
+                      </Link>
+                      <button onClick={() => retake(a.id)} className="btn-primary" disabled={retaking === a.id}>
+                        {retaking === a.id ? "Starting..." : "Retake test"}
+                      </button>
+                    </div>
+                  </li>
+                ) : (
+                  <li key={a.id}>
+                    <Link
+                      href={`/practice/${a.id}`}
+                      className="card flex items-center justify-between p-4 hover:bg-slate-50"
+                    >
+                      <span className="text-sm text-slate-600">
+                        Set #{a.id} - {new Date(a.createdAt + "Z").toLocaleString()}
+                      </span>
+                      <span className="text-sm font-medium text-amber-600">Not attempted</span>
+                    </Link>
+                  </li>
+                ),
+              )}
             </ul>
           )}
         </section>

@@ -594,28 +594,47 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
         </div>
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "24px 20px 60px" }}>
           {score && (
-            <div style={{ marginBottom: 24, borderRadius: 8, padding: 20, background: EXAM_COLORS.tabActiveBg, color: "#fff" }}>
-              <p style={{ fontSize: 18, fontWeight: 700 }}>
-                Your score: {score.rawScore} marks
+            <div
+              style={{
+                marginBottom: 24,
+                borderRadius: 8,
+                padding: 24,
+                background: EXAM_COLORS.tabActiveBg,
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 24,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <p style={{ fontSize: 24, fontWeight: 700 }}>{score.rawScore} marks</p>
                 {score.total > 0 && (
-                  <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 400, opacity: 0.85 }}>
-                    ({Math.round((score.correct / score.total) * 100)}% correct)
-                  </span>
+                  <p style={{ fontSize: 15, opacity: 0.85 }}>{Math.round((score.correct / score.total) * 100)}% correct</p>
                 )}
-              </p>
-              <p style={{ fontSize: 13, opacity: 0.85 }}>Review the explanations for every option below.</p>
-              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, borderTop: "1px solid rgba(255,255,255,0.25)", paddingTop: 12, maxWidth: 320, textAlign: "center" }}>
+                <p style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Review the explanations for every option below.</p>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 32,
+                  borderLeft: "1px solid rgba(255,255,255,0.3)",
+                  paddingLeft: 24,
+                  textAlign: "center",
+                }}
+              >
                 <div>
-                  <p style={{ fontSize: 20, fontWeight: 700 }}>{score.correct}</p>
-                  <p style={{ fontSize: 11, opacity: 0.8 }}>Correct</p>
+                  <p style={{ fontSize: 26, fontWeight: 700 }}>{score.correct}</p>
+                  <p style={{ fontSize: 12, opacity: 0.8 }}>Correct</p>
                 </div>
                 <div>
-                  <p style={{ fontSize: 20, fontWeight: 700 }}>{score.incorrect}</p>
-                  <p style={{ fontSize: 11, opacity: 0.8 }}>Incorrect</p>
+                  <p style={{ fontSize: 26, fontWeight: 700 }}>{score.incorrect}</p>
+                  <p style={{ fontSize: 12, opacity: 0.8 }}>Incorrect</p>
                 </div>
                 <div>
-                  <p style={{ fontSize: 20, fontWeight: 700 }}>{score.unanswered}</p>
-                  <p style={{ fontSize: 11, opacity: 0.8 }}>Unanswered</p>
+                  <p style={{ fontSize: 26, fontWeight: 700 }}>{score.unanswered}</p>
+                  <p style={{ fontSize: 12, opacity: 0.8 }}>Unanswered</p>
                 </div>
               </div>
             </div>
