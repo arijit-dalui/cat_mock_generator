@@ -95,7 +95,12 @@ export default function Calculator({ onClose }: { onClose: () => void }) {
         <div style={{ border: "1px solid #ccc", borderRadius: 3, padding: "5px 8px", fontFamily: "monospace", fontSize: 12, color: "#555", minHeight: 18, marginBottom: 5, overflowX: "auto", whiteSpace: "nowrap" }}>
           {expr || " "}
         </div>
-        <div style={{ textAlign: "right", fontFamily: "monospace", fontSize: 20, padding: "6px 8px", background: "#f4f4f4", border: "1px solid #ddd", borderRadius: 3, marginBottom: 8, overflowX: "auto", whiteSpace: "nowrap" }}>
+        <div style={{ position: "relative", textAlign: "right", fontFamily: "monospace", fontSize: 20, padding: "6px 8px", background: "#f4f4f4", border: "1px solid #ddd", borderRadius: 3, marginBottom: 8, overflowX: "auto", whiteSpace: "nowrap" }}>
+          {memory !== 0 && (
+            <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, fontWeight: 700, color: "#3f6db0" }} title={`Memory: ${memory}`}>
+              M
+            </span>
+          )}
           {display}
         </div>
 
