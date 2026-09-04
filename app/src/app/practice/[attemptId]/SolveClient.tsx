@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SECTION_DURATION_MIN } from "@/lib/exam";
+import { scoreSet, type ScoreResult } from "@/lib/practice";
 
 interface GenQuestion {
   id: string;
@@ -54,6 +55,14 @@ interface NavItem {
  * question id collides with these. */
 const MARKED_KEY = "__marked";
 const DEADLINE_KEY = "__deadline";
+const STRICT_KEY = "__strict";
+
+// Anti-cheat (fullscreen lock, tab-switch detection, forced time-up) is
+// only ever a nuisance in local dev, where switching to a terminal or these
+// devtools is normal workflow, not cheating. Next.js inlines NODE_ENV at
+// build time, so this is a real dead-code branch in production, not a
+// runtime toggle a candidate could flip.
+const DEV_MODE = process.env.NODE_ENV !== "production";
 
 const SECTION_FULL_NAMES: Record<string, string> = {
   VA: "Verbal Ability",
@@ -244,7 +253,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   const [visited, setVisited] = useState<Set<string>>(new Set());
   const [current, setCurrent] = useState(0);
   const [reviewed, setReviewed] = useState(false);
-  const [score, setScore] = useState<{ correct: number; total: number; rawScore?: number } | null>(
+  const [score, setScore] = useState<ScoreResult | null>(
     null,
   );
   const [error, setError] = useState("");
@@ -255,6 +264,12 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showQuestionPaper, setShowQuestionPaper] = useState(false);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  // Strict mode (chosen on the instructions screen, before Start Test):
+  // strict = real exam conditions - fullscreen lock, tab-switch detection,
+  // no extra time. Flexible = practice-friendly - no window lockdown, and
+  // a choice at time-up instead of a forced submit. Persisted alongside
+  // the deadline so resuming an attempt keeps the mode you started with.
+  const [strict, setStrict] = useState(false);
   // Sectional-only grace: when the clock hits zero, ask whether to submit as
   // timed or keep practicing untimed, instead of force-submitting outright.
   // Full mocks (once they exist) should skip this and always force-submit -
@@ -279,7 +294,11 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
         if (d.attempt.submitted) {
           setAnswers(d.attempt.answers || {});
           setReviewed(true);
-          setScore({ correct: d.attempt.score, total: d.attempt.total });
+          // Recompute from the raw answers rather than trusting the stored
+          // score/total columns - older attempts predate the incorrect/
+          // unanswered/rawScore breakdown, so recomputing gives every
+          // attempt, old or new, the same consistent result shape.
+          setScore(scoreSet(d.set, d.attempt.answers || {}));
         } else {
           // Restore a resumed attempt's saved answers, marked-for-review
           // state, and the clock's deadline. These ride inside the same
@@ -287,10 +306,13 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
           const draft = { ...(d.attempt.answers || {}) } as Record<string, unknown>;
           const markedIds = Array.isArray(draft[MARKED_KEY]) ? (draft[MARKED_KEY] as string[]) : [];
           const savedDeadline = typeof draft[DEADLINE_KEY] === "number" ? (draft[DEADLINE_KEY] as number) : null;
+          const savedStrict = draft[STRICT_KEY] === true;
           delete draft[MARKED_KEY];
           delete draft[DEADLINE_KEY];
+          delete draft[STRICT_KEY];
           setAnswers(draft);
           setMarked(new Set(markedIds));
+          setStrict(savedStrict);
           if (savedDeadline) setDeadline(savedDeadline);
         }
       } catch {
@@ -336,7 +358,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
         setError(d.error || "Could not submit.");
         return;
       }
-      setScore({ correct: d.score, total: d.total, rawScore: d.rawScore });
+      setScore({ correct: d.score, incorrect: d.incorrect, unanswered: d.unanswered, total: d.total, rawScore: d.rawScore });
       setReviewed(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
@@ -348,8 +370,9 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
 
   // Sectional countdown - only runs once the candidate has clicked "Start
   // Test" (deadline is set). Persisted so a refresh can't reset the clock.
-  // At zero, sectional practice offers a choice (see timeUp state above)
-  // instead of force-submitting - full mocks should force-submit instead.
+  // At zero: strict mode force-submits immediately (real exam conditions -
+  // full mocks should always behave this way once that mode exists);
+  // flexible mode offers a choice instead (see timeUp state above).
   useEffect(() => {
     if (reviewed || deadline === null) return;
     const tick = () => {
@@ -357,17 +380,23 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
       setRemainingMs(left);
       if (left <= 0 && !timeUpHandled.current) {
         timeUpHandled.current = true;
-        setTimeUp(true);
+        if (strict) submit();
+        else setTimeUp(true);
       }
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [deadline, reviewed]);
+  }, [deadline, reviewed, strict, submit]);
 
   const saveDraft = useCallback(
-    (nextAnswers: Record<string, unknown>, nextMarked: Set<string>, nextDeadline: number | null) => {
-      const draft = { ...nextAnswers, [MARKED_KEY]: Array.from(nextMarked), [DEADLINE_KEY]: nextDeadline };
+    (nextAnswers: Record<string, unknown>, nextMarked: Set<string>, nextDeadline: number | null, nextStrict: boolean) => {
+      const draft = {
+        ...nextAnswers,
+        [MARKED_KEY]: Array.from(nextMarked),
+        [DEADLINE_KEY]: nextDeadline,
+        [STRICT_KEY]: nextStrict,
+      };
       fetch(`/api/attempts/${attemptId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -382,17 +411,20 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   // Autosave: debounce a PATCH after answers/marked settle.
   useEffect(() => {
     if (reviewed || deadline === null) return;
-    const id = setTimeout(() => saveDraft(answers, marked, deadline), 1200);
+    const id = setTimeout(() => saveDraft(answers, marked, deadline, strict), 1200);
     return () => clearTimeout(id);
-  }, [answers, marked, deadline, reviewed, saveDraft]);
+  }, [answers, marked, deadline, strict, reviewed, saveDraft]);
 
   function startTest() {
     const d = Date.now() + SECTION_DURATION_MIN * 60_000;
     setDeadline(d);
-    saveDraft(answers, marked, d);
-    // Best-effort fullscreen - some browsers/embeds refuse it silently even
-    // from a click handler, so a failure here should never block the test.
-    document.documentElement.requestFullscreen?.().catch(() => {});
+    saveDraft(answers, marked, d, strict);
+    if (strict && !DEV_MODE) {
+      // Best-effort fullscreen - some browsers/embeds refuse it silently
+      // even from a click handler, so a failure here should never block
+      // the test. Flexible mode and local dev skip the lockdown entirely.
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
   }
 
   const reportViolation = useCallback(() => {
@@ -405,12 +437,14 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   }, [submit]);
 
   // Anti-cheat: flag leaving the tab/window or exiting fullscreen while a
-  // timed section is in progress. This can't physically stop someone from
-  // switching apps, but it detects it, warns, and auto-submits after
+  // timed section is in progress. Strict mode only, and never in local dev
+  // (alt-tabbing to a terminal/devtools while testing is normal there, not
+  // cheating). This can't physically stop someone from switching apps, but
+  // it detects it, warns, and auto-submits after
   // repeated violations - the same trade-off real proctored exam software
   // makes. Not a substitute for identity/proctoring controls.
   useEffect(() => {
-    if (reviewed || deadline === null) return;
+    if (reviewed || deadline === null || !strict || DEV_MODE) return;
     const onVisibility = () => {
       if (document.hidden) reportViolation();
     };
@@ -441,7 +475,7 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
       document.removeEventListener("cut", onCopy);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [reviewed, deadline, reportViolation]);
+  }, [reviewed, deadline, strict, reportViolation]);
 
   const pick = useCallback((qid: string, idx: number) => {
     setAnswers((a) => ({ ...a, [qid]: idx }));
@@ -556,11 +590,28 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
           {score && (
             <div className="mb-6 rounded-xl bg-brand p-5 text-white shadow-sm">
               <p className="text-lg font-semibold">
-                Your score: {score.rawScore ?? score.correct} marks
+                Your score: {score.rawScore} marks
+                {score.total > 0 && (
+                  <span className="ml-2 text-base font-normal text-white/80">
+                    ({Math.round((score.correct / score.total) * 100)}% correct)
+                  </span>
+                )}
               </p>
-              <p className="text-sm text-white/80">
-                {score.correct} correct out of {score.total}. Review the explanations for every option below.
-              </p>
+              <p className="text-sm text-white/80">Review the explanations for every option below.</p>
+              <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/20 pt-3 text-center sm:w-80">
+                <div>
+                  <p className="text-xl font-bold">{score.correct}</p>
+                  <p className="text-xs text-white/70">Correct</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold">{score.incorrect}</p>
+                  <p className="text-xs text-white/70">Incorrect</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold">{score.unanswered}</p>
+                  <p className="text-xs text-white/70">Unanswered</p>
+                </div>
+              </div>
             </div>
           )}
           {isEmpty && (
@@ -632,6 +683,25 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
           <p style={{ marginTop: 8, fontSize: 20, fontWeight: 700 }}>{formatClock(SECTION_DURATION_MIN * 60_000)}</p>
           <p style={{ fontSize: 12, color: EXAM_COLORS.textMuted, marginBottom: 20 }}>Section duration</p>
           <Instructions section={data.set.section} />
+
+          <div style={{ marginTop: 20, padding: 16, border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 6, maxWidth: 520 }}>
+            <p style={{ fontWeight: 700, marginBottom: 10, fontSize: 14 }}>Choose test conditions</p>
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0", cursor: "pointer" }}>
+              <input type="radio" checked={strict} onChange={() => setStrict(true)} style={{ marginTop: 3 }} />
+              <span style={{ fontSize: 13 }}>
+                <strong>Strict</strong> - real exam conditions. Fullscreen is enforced, switching tabs or windows is
+                flagged and auto-submits after 3 warnings, and time&apos;s up ends the section immediately. No extra
+                time.
+              </span>
+            </label>
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0", cursor: "pointer" }}>
+              <input type="radio" checked={!strict} onChange={() => setStrict(false)} style={{ marginTop: 3 }} />
+              <span style={{ fontSize: 13 }}>
+                <strong>Flexible</strong> - practice-friendly. No fullscreen lock or tab-switch detection, and
+                when time&apos;s up you can choose to submit or keep practicing untimed.
+              </span>
+            </label>
+          </div>
         </div>
         <div
           style={{
