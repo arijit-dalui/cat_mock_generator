@@ -529,124 +529,129 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
     const correctIdx = Number(q.answer);
     const prompt = withInstructionFallback(q);
     return (
-      <div key={q.id} className="card p-5">
-        <p className="font-medium text-slate-900">
-          <span className="text-slate-400">Q{n}.</span>{" "}
-          <span className="whitespace-pre-wrap">{prompt}</span>
+      <div key={q.id} style={{ border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 6, padding: 16, marginBottom: 16, background: "#fff" }}>
+        <p style={{ fontWeight: 600, fontSize: 14 }}>
+          <span style={{ color: EXAM_COLORS.textMuted }}>Q{n}.</span>{" "}
+          <span style={{ whiteSpace: "pre-wrap" }}>{prompt}</span>
         </p>
         {isTita ? (
-          <div className="mt-4 max-w-xs">
-            <p className="text-sm text-slate-600">
-              Your answer: <span className="font-mono font-semibold text-slate-900">{typedAnswer || "—"}</span>
+          <div style={{ marginTop: 12, maxWidth: 280, fontSize: 13 }}>
+            <p>
+              Your answer:{" "}
+              <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{typedAnswer || "—"}</span>
             </p>
-            <p className="mt-1 text-sm text-slate-600">
-              Correct answer: <span className="font-semibold text-slate-900">{String(q.answer)}</span>
+            <p style={{ marginTop: 4 }}>
+              Correct answer: <span style={{ fontWeight: 700 }}>{String(q.answer)}</span>
             </p>
           </div>
         ) : (
-          <div className="mt-3 space-y-2">
+          <div style={{ marginTop: 10 }}>
             {q.options.map((opt, i) => {
               const isChosen = chosen === i;
               const isCorrect = correctIdx === i;
-              let cls = "border-slate-300";
-              if (isCorrect) cls = "border-green-500 bg-green-50";
-              else if (isChosen && !isCorrect) cls = "border-red-500 bg-red-50";
+              let bg = "#fff";
+              let border = EXAM_COLORS.border;
+              if (isCorrect) {
+                bg = EXAM_COLORS.answeredBg;
+                border = EXAM_COLORS.answered;
+              } else if (isChosen && !isCorrect) {
+                bg = EXAM_COLORS.notAnsweredBg;
+                border = EXAM_COLORS.notAnswered;
+              }
               return (
-                <div key={i}>
-                  <div className={"w-full rounded-lg border px-3 py-2 text-left text-sm " + cls}>
-                    <span className="font-semibold text-slate-500">{String.fromCharCode(65 + i)}.</span> {opt}
+                <div key={i} style={{ marginBottom: 6 }}>
+                  <div style={{ border: `1px solid ${border}`, background: bg, borderRadius: 4, padding: "6px 10px", fontSize: 13 }}>
+                    <span style={{ fontWeight: 600 }}>{String.fromCharCode(65 + i)}.</span> {opt}
                   </div>
-                  <p className="mt-1 px-3 text-xs text-slate-500">{q.explanations[i]}</p>
+                  <p style={{ marginTop: 3, paddingLeft: 10, fontSize: 12, color: EXAM_COLORS.textMuted }}>
+                    {q.explanations[i]}
+                  </p>
                 </div>
               );
             })}
           </div>
         )}
         {q.solution && (
-          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-            <span className="font-semibold text-slate-700">Solution: </span>
-            <span className="whitespace-pre-wrap">{q.solution}</span>
+          <div style={{ marginTop: 10, background: EXAM_COLORS.tabBarBg, borderRadius: 4, padding: 10, fontSize: 13 }}>
+            <span style={{ fontWeight: 600 }}>Solution: </span>
+            <span style={{ whiteSpace: "pre-wrap" }}>{q.solution}</span>
           </div>
         )}
       </div>
     );
   }
 
-  // ---- Post-submit review: full list, app theme (dark-mode aware) -------
+  // ---- Post-submit review: same light exam styling as the live test,
+  // so a submitted attempt never looks like a different piece of software. --
   if (reviewed) {
     return (
-      <div className="min-h-screen">
-        <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-            <Link href="/dashboard" className="text-sm font-medium text-brand">
-              &larr; Dashboard
-            </Link>
-            <span className="text-sm text-slate-500">
-              {data.set.section} - Set #{data.attempt.id}
-            </span>
-          </div>
-        </header>
-        <main className="mx-auto max-w-3xl px-6 py-8">
+      <div style={{ minHeight: "100vh", background: EXAM_COLORS.panelBg, color: EXAM_COLORS.text, colorScheme: "light" }}>
+        <div style={{ background: EXAM_COLORS.headerBg, color: EXAM_COLORS.headerText, padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+          <span style={{ fontWeight: 600 }}>{SECTION_FULL_NAMES[data.set.section] || data.set.section} Sectional - Result</span>
+          <Link href="/dashboard" style={{ color: EXAM_COLORS.headerText, textDecoration: "none" }}>
+            &larr; Dashboard
+          </Link>
+        </div>
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "24px 20px 60px" }}>
           {score && (
-            <div className="mb-6 rounded-xl bg-brand p-5 text-white shadow-sm">
-              <p className="text-lg font-semibold">
+            <div style={{ marginBottom: 24, borderRadius: 8, padding: 20, background: EXAM_COLORS.tabActiveBg, color: "#fff" }}>
+              <p style={{ fontSize: 18, fontWeight: 700 }}>
                 Your score: {score.rawScore} marks
                 {score.total > 0 && (
-                  <span className="ml-2 text-base font-normal text-white/80">
+                  <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 400, opacity: 0.85 }}>
                     ({Math.round((score.correct / score.total) * 100)}% correct)
                   </span>
                 )}
               </p>
-              <p className="text-sm text-white/80">Review the explanations for every option below.</p>
-              <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/20 pt-3 text-center sm:w-80">
+              <p style={{ fontSize: 13, opacity: 0.85 }}>Review the explanations for every option below.</p>
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, borderTop: "1px solid rgba(255,255,255,0.25)", paddingTop: 12, maxWidth: 320, textAlign: "center" }}>
                 <div>
-                  <p className="text-xl font-bold">{score.correct}</p>
-                  <p className="text-xs text-white/70">Correct</p>
+                  <p style={{ fontSize: 20, fontWeight: 700 }}>{score.correct}</p>
+                  <p style={{ fontSize: 11, opacity: 0.8 }}>Correct</p>
                 </div>
                 <div>
-                  <p className="text-xl font-bold">{score.incorrect}</p>
-                  <p className="text-xs text-white/70">Incorrect</p>
+                  <p style={{ fontSize: 20, fontWeight: 700 }}>{score.incorrect}</p>
+                  <p style={{ fontSize: 11, opacity: 0.8 }}>Incorrect</p>
                 </div>
                 <div>
-                  <p className="text-xl font-bold">{score.unanswered}</p>
-                  <p className="text-xs text-white/70">Unanswered</p>
+                  <p style={{ fontSize: 20, fontWeight: 700 }}>{score.unanswered}</p>
+                  <p style={{ fontSize: 11, opacity: 0.8 }}>Unanswered</p>
                 </div>
               </div>
             </div>
           )}
           {isEmpty && (
-            <div className="card p-5">
-              <p className="font-medium text-slate-900">This set could not be generated.</p>
-              <p className="mt-2 text-sm text-slate-600">
+            <div style={{ border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 6, padding: 16 }}>
+              <p style={{ fontWeight: 600 }}>This set could not be generated.</p>
+              <p style={{ marginTop: 8, fontSize: 13, color: EXAM_COLORS.textMuted }}>
                 The model was unable to produce a valid {data.set.section} set this time. Please go
-                back to the dashboard and click <span className="font-semibold">Generate a new set</span> again -
-                a fresh attempt usually succeeds.
+                back to the dashboard and click <strong>Generate a new set</strong> again - a fresh attempt
+                usually succeeds.
               </p>
             </div>
           )}
-          {data.set.kind === "questions" && questions.length > 0 && (
-            <div className="space-y-4">{questions.map(renderReviewQuestion)}</div>
-          )}
+          {data.set.kind === "questions" && questions.length > 0 && questions.map(renderReviewQuestion)}
           {data.set.kind === "sets" &&
             subsets.map((ss) => (
-              <div key={ss.id} className="mb-8">
-                <div className="card mb-4 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-brand">
-                    {ss.contextLabel}
-                  </p>
+              <div key={ss.id} style={{ marginBottom: 28 }}>
+                <div style={{ border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 6, padding: 16, marginBottom: 14, background: EXAM_COLORS.paletteBg }}>
+                  <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{ss.contextLabel}</p>
                   <div
-                    className="prose-cat mt-2 text-sm leading-relaxed text-slate-700"
+                    style={{ fontSize: 13, lineHeight: 1.6 }}
                     dangerouslySetInnerHTML={{ __html: renderContext(ss.context) }}
                   />
-                  {ss.source && <p className="mt-2 text-xs text-slate-400">Source: {ss.source}</p>}
+                  {ss.source && <p style={{ marginTop: 8, fontSize: 11, color: EXAM_COLORS.textMuted }}>Source: {ss.source}</p>}
                 </div>
-                <div className="space-y-4">{ss.questions.map(renderReviewQuestion)}</div>
+                {ss.questions.map(renderReviewQuestion)}
               </div>
             ))}
-          <Link href="/dashboard" className="btn-ghost mt-6">
+          <Link
+            href="/dashboard"
+            style={{ display: "inline-block", marginTop: 8, border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 4, padding: "8px 20px", fontSize: 13, textDecoration: "none", color: EXAM_COLORS.text }}
+          >
             Back to dashboard
           </Link>
-        </main>
+        </div>
       </div>
     );
   }
