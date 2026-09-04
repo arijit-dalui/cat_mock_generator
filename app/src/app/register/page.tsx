@@ -79,6 +79,12 @@ export default function RegisterPage() {
             Log in
           </Link>
         </p>
+        <p className="mt-2 text-xs text-slate-400">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="text-brand hover:underline">Terms</Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="text-brand hover:underline">Privacy Policy</Link>.
+        </p>
       </div>
       </div>
     </main>

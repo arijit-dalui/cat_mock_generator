@@ -164,6 +164,15 @@ export const users = {
   async count(): Promise<number> {
     return (db.prepare("SELECT COUNT(*) c FROM users").get() as { c: number }).c;
   },
+  async listAll(): Promise<User[]> {
+    return db.prepare("SELECT * FROM users ORDER BY created_at DESC").all() as User[];
+  },
+  /** Admin-mediated password reset - there's no email/SMTP in this app, so
+   * self-service "forgot password" isn't securely possible; an admin sets
+   * a new password for the user directly instead. */
+  async updatePassword(id: number, passwordHash: string): Promise<void> {
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, id);
+  },
   /** Self-entered profile links (Reddit, Instagram, ...) - never an OAuth
    * connection, just a URL the user typed in, shown on their public
    * profile. */

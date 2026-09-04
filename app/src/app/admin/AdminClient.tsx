@@ -80,8 +80,14 @@ export default function AdminClient({ username }: { username: string }) {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
           <span className="font-bold text-slate-900">CAT Mock Generator - Admin</span>
           <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin/questions" className="font-medium text-brand">
-              View question sets
+            <Link href="/admin/questions" className="font-medium text-slate-500 hover:text-brand">
+              Question sets
+            </Link>
+            <Link href="/admin/pool" className="font-medium text-slate-500 hover:text-brand">
+              Pool health
+            </Link>
+            <Link href="/admin/users" className="font-medium text-slate-500 hover:text-brand">
+              Users
             </Link>
             <span className="text-slate-500">{username}</span>
             <button onClick={logout} className="btn-ghost">
@@ -141,9 +147,14 @@ export default function AdminClient({ username }: { username: string }) {
         </section>
 
         <section className="card p-6 overflow-x-auto">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            By section
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              By section
+            </h2>
+            <a href="/api/admin/stats/export" className="btn-ghost text-xs">
+              Export CSV
+            </a>
+          </div>
           <table className="mt-4 w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase text-slate-400">

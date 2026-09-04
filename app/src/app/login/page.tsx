@@ -79,7 +79,14 @@ export default function LoginPage() {
             Create an account
           </Link>
         </p>
+        <p className="mt-2 text-xs text-slate-400">
+          Forgotten your password? There&apos;s no email-based reset here - ask an admin to reset it for you.
+        </p>
       </div>
+      <p className="mx-auto mt-4 flex max-w-md justify-center gap-4 text-xs text-slate-400">
+        <Link href="/privacy" className="hover:text-brand">Privacy</Link>
+        <Link href="/terms" className="hover:text-brand">Terms</Link>
+      </p>
       </div>
     </main>
   );

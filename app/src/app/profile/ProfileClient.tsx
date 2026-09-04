@@ -116,6 +116,39 @@ export default function ProfileClient({
       setSocialSaving(false);
     }
   }
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwSaved, setPwSaved] = useState(false);
+  const [pwError, setPwError] = useState("");
+
+  async function changePassword() {
+    setPwSaving(true);
+    setPwError("");
+    setPwSaved(false);
+    try {
+      const res = await fetch("/api/profile/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setPwError(d.error || "Could not change password.");
+        return;
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setPwSaved(true);
+      setTimeout(() => setPwSaved(false), 2000);
+    } catch {
+      setPwError("Network error.");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
   const [forms, setForms] = useState<Record<string, ExtForm>>({});
 
   useEffect(() => {
@@ -286,6 +319,46 @@ export default function ProfileClient({
           {socialError && <p className="mt-3 text-sm text-red-600">{socialError}</p>}
           <button onClick={saveSocial} disabled={socialSaving} className="btn-primary mt-4">
             {socialSaving ? "Saving..." : socialSaved ? "Saved ✓" : "Save links"}
+          </button>
+        </section>
+
+        {/* Change password - requires the current one. Forgotten it entirely?
+         * There's no email/SMTP here to verify identity for self-service
+         * reset - an admin can reset it for you instead. */}
+        <section className="card p-6">
+          <h2 className="display-type text-2xl font-bold text-slate-900">Change password</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Forgotten your password entirely? There&apos;s no email-based reset here - ask an admin to reset it for you.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="current-password">Current password</label>
+              <input
+                id="current-password"
+                type="password"
+                className="input"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="new-password">New password</label>
+              <input
+                id="new-password"
+                type="password"
+                className="input"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          {pwError && <p className="mt-3 text-sm text-red-600">{pwError}</p>}
+          <button
+            onClick={changePassword}
+            disabled={pwSaving || !currentPassword || !newPassword}
+            className="btn-primary mt-4"
+          >
+            {pwSaving ? "Saving..." : pwSaved ? "Saved ✓" : "Change password"}
           </button>
         </section>
 
