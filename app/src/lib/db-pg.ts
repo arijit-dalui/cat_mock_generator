@@ -116,7 +116,13 @@ export interface User {
   username: string;
   password_hash: string;
   role: "user" | "admin";
+  social_links: string | null;
   created_at: string;
+}
+
+export interface LeaderboardRow {
+  username: string;
+  best_score: number;
 }
 
 export interface SessionRow {
@@ -206,6 +212,25 @@ export const users = {
     await ready;
     const rows = await sql<{ c: number }[]>`SELECT COUNT(*)::int c FROM users`;
     return rows[0].c;
+  },
+  /** Self-entered profile links (Reddit, Instagram, ...) - never an OAuth
+   * connection, just a URL the user typed in, shown on their public
+   * profile. */
+  async updateSocialLinks(id: number, links: unknown): Promise<void> {
+    await ready;
+    await sql`UPDATE users SET social_links = ${JSON.stringify(links)} WHERE id = ${id}`;
+  },
+  /** Top scorers in a section, by each user's own best raw_score. Real
+   * data only - empty until people have actually submitted attempts. */
+  async leaderboard(section: string, limit = 10): Promise<LeaderboardRow[]> {
+    await ready;
+    return await sql<LeaderboardRow[]>`
+      SELECT u.username AS username, MAX(a.raw_score) AS best_score
+        FROM attempts a JOIN users u ON u.id = a.user_id
+       WHERE a.section = ${section} AND a.submitted = TRUE AND a.raw_score IS NOT NULL
+       GROUP BY u.id, u.username
+       ORDER BY best_score DESC
+       LIMIT ${limit}`;
   },
 };
 
@@ -504,6 +529,14 @@ export const attempts = {
   async submit(id: number, answers: unknown, score: number, total: number, rawScore: number): Promise<void> {
     await ready;
     await sql`UPDATE attempts SET answers = ${sql.json(answers as Parameters<typeof sql.json>[0])}, score = ${score}, total = ${total}, raw_score = ${rawScore}, submitted = TRUE, submitted_at = now() WHERE id = ${id}`;
+  },
+  /** This user's best raw_score per section, for their public profile card. */
+  async bestScoresByUser(userId: number): Promise<{ section: string; best_score: number }[]> {
+    await ready;
+    return await sql<{ section: string; best_score: number }[]>`
+      SELECT section, MAX(raw_score) AS best_score FROM attempts
+       WHERE user_id = ${userId} AND submitted = TRUE AND raw_score IS NOT NULL
+       GROUP BY section`;
   },
   /** Percentile of `rawScore` among every submitted attempt in `section`
    * (all users) - the share of attempts strictly below it. Real population

@@ -122,5 +122,15 @@ export async function GET() {
     percentile[section] = result ? { ...result, rawScore: latest.rawScore } : null;
   }
 
-  return NextResponse.json({ history, topics, percentile });
+  // Overall percentile: the average of this user's per-section percentiles,
+  // over whichever sections actually have one. Not a separate population
+  // query (there's no single cross-section "raw score" to rank) - just an
+  // honest summary of the per-section numbers already computed above.
+  const validPercentiles = Object.values(percentile).filter((p): p is { percentile: number; population: number; rawScore: number } => p !== null);
+  const overallPercentile =
+    validPercentiles.length > 0
+      ? validPercentiles.reduce((sum, p) => sum + p.percentile, 0) / validPercentiles.length
+      : null;
+
+  return NextResponse.json({ history, topics, percentile, overallPercentile });
 }

@@ -46,6 +46,11 @@ interface HistoryResponse {
   history: AttemptSummary[];
   topics: Record<string, TopicRow[]>;
   percentile: Record<string, PercentileInfo | null>;
+  overallPercentile: number | null;
+}
+interface LeaderboardRow {
+  username: string;
+  best_score: number;
 }
 
 /** Friendly labels for the question `type` field, which doubles as a
@@ -224,6 +229,7 @@ export default function AnalysisClient({ username }: { username: string }) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [tab, setTab] = useState<Section>("VA");
   const [view, setView] = useState<"individual" | "comparative">("individual");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -241,6 +247,20 @@ export default function AnalysisClient({ username }: { username: string }) {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (view !== "comparative") return;
+    setLeaderboard(null);
+    (async () => {
+      try {
+        const res = await fetch(`/api/leaderboard?section=${tab}`);
+        const d = await res.json();
+        if (res.ok) setLeaderboard(d.leaderboard);
+      } catch {
+        /* non-fatal - the leaderboard card just shows its empty state */
+      }
+    })();
+  }, [view, tab]);
 
   const sectionHistory = (history?.history ?? []).filter((h) => h.section === tab);
   const sectionTopics = history?.topics[tab] ?? [];
@@ -410,7 +430,26 @@ export default function AnalysisClient({ username }: { username: string }) {
             </section>
           </>
         ) : (
-          <ComparativePanel section={tab} info={history?.percentile[tab] ?? null} />
+          <>
+            <section className="card mt-6 p-6">
+              <p className="text-sm font-semibold text-slate-700">Overall percentile</p>
+              {history?.overallPercentile == null ? (
+                <p className="mt-2 text-sm text-slate-400">
+                  Not enough data across sections yet to compute an overall standing.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-2 text-4xl font-bold text-slate-900">
+                    {history.overallPercentile.toFixed(1)}
+                    <span className="text-lg font-medium text-slate-400">th percentile</span>
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">Average of your per-section percentiles below.</p>
+                </>
+              )}
+            </section>
+            <ComparativePanel section={tab} info={history?.percentile[tab] ?? null} />
+            <Leaderboard section={tab} rows={leaderboard} viewerUsername={username} />
+          </>
         )}
       </main>
     </div>
@@ -444,6 +483,43 @@ function ComparativePanel({ section, info }: { section: Section; info: Percentil
             <div className="h-full rounded-full bg-brand" style={{ width: `${info.percentile}%` }} />
           </div>
         </div>
+      )}
+    </section>
+  );
+}
+
+/** Top 10 by best score in a section, from real submitted attempts. Click a
+ * row to see that person's public profile (best scores + whatever links
+ * they've chosen to share - never anything private). */
+function Leaderboard({ section, rows, viewerUsername }: { section: Section; rows: LeaderboardRow[] | null; viewerUsername: string }) {
+  return (
+    <section className="card mt-6 p-6">
+      <p className="text-sm font-semibold text-slate-700">Leaderboard - {SECTION_NAMES[section]}</p>
+      {rows === null ? (
+        <p className="mt-2 text-sm text-slate-400">Loading...</p>
+      ) : rows.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-400">No submitted {section} attempts yet.</p>
+      ) : (
+        <ol className="mt-3 space-y-1">
+          {rows.map((r, i) => (
+            <li key={r.username}>
+              <Link
+                href={`/u/${encodeURIComponent(r.username)}`}
+                className={
+                  "flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-50 " +
+                  (r.username === viewerUsername ? "bg-brand/5 font-semibold text-brand" : "text-slate-700")
+                }
+              >
+                <span>
+                  <span className="mr-3 inline-block w-5 text-right text-slate-400">{i + 1}</span>
+                  {r.username}
+                  {r.username === viewerUsername && " (you)"}
+                </span>
+                <span className="font-semibold">{r.best_score} marks</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
       )}
     </section>
   );

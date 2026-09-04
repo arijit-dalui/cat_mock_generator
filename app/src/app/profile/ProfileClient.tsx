@@ -57,6 +57,13 @@ function barColor(p: number): string {
  * from outside this app turns out to be worth surfacing again later. */
 const SHOW_EXTERNAL_STATS = false;
 
+const SOCIAL_FIELDS = [
+  { key: "reddit", label: "Reddit" },
+  { key: "instagram", label: "Instagram" },
+  { key: "twitter", label: "Twitter / X" },
+  { key: "linkedin", label: "LinkedIn" },
+] as const;
+
 export default function ProfileClient({
   username,
   role,
@@ -68,6 +75,47 @@ export default function ProfileClient({
 }) {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState("");
+  const [social, setSocial] = useState<Record<string, string>>({});
+  const [socialSaving, setSocialSaving] = useState(false);
+  const [socialSaved, setSocialSaved] = useState(false);
+  const [socialError, setSocialError] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/users/${encodeURIComponent(username)}`);
+        const d = await res.json();
+        if (res.ok) setSocial(d.socialLinks || {});
+      } catch {
+        /* non-fatal - the links section just starts blank */
+      }
+    })();
+  }, [username]);
+
+  async function saveSocial() {
+    setSocialSaving(true);
+    setSocialError("");
+    setSocialSaved(false);
+    try {
+      const res = await fetch("/api/profile/social", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(social),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setSocialError(d.error || "Could not save links.");
+        return;
+      }
+      setSocial(d.socialLinks);
+      setSocialSaved(true);
+      setTimeout(() => setSocialSaved(false), 1500);
+    } catch {
+      setSocialError("Network error.");
+    } finally {
+      setSocialSaving(false);
+    }
+  }
   const [forms, setForms] = useState<Record<string, ExtForm>>({});
 
   useEffect(() => {
@@ -210,6 +258,35 @@ export default function ProfileClient({
             </div>
             <p className="mt-1 text-sm text-slate-500">Member since {fmtDate(createdAt)}</p>
           </div>
+        </section>
+
+        {/* Social links - self-entered URLs shown on the public profile at
+         * /u/[username] and clickable from the leaderboard. Not an OAuth
+         * connection - just a link the user provides. */}
+        <section className="card p-6">
+          <h2 className="display-type text-2xl font-bold text-slate-900">Public links</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Shown on your public profile (visible to anyone via the leaderboard). Leave blank to hide.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {SOCIAL_FIELDS.map((f) => (
+              <div key={f.key}>
+                <label className="label" htmlFor={`social-${f.key}`}>{f.label}</label>
+                <input
+                  id={`social-${f.key}`}
+                  type="url"
+                  className="input"
+                  placeholder={`https://${f.key}.com/your-handle`}
+                  value={social[f.key] ?? ""}
+                  onChange={(e) => setSocial((s) => ({ ...s, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          {socialError && <p className="mt-3 text-sm text-red-600">{socialError}</p>}
+          <button onClick={saveSocial} disabled={socialSaving} className="btn-primary mt-4">
+            {socialSaving ? "Saving..." : socialSaved ? "Saved ✓" : "Save links"}
+          </button>
         </section>
 
         {/* Overall tracker */}

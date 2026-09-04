@@ -58,7 +58,13 @@ export interface User {
   username: string;
   password_hash: string;
   role: "user" | "admin";
+  social_links: string | null;
   created_at: string;
+}
+
+export interface LeaderboardRow {
+  username: string;
+  best_score: number;
 }
 
 export interface SessionRow {
@@ -142,6 +148,26 @@ export const users = {
   },
   async count(): Promise<number> {
     return (db.prepare("SELECT COUNT(*) c FROM users").get() as { c: number }).c;
+  },
+  /** Self-entered profile links (Reddit, Instagram, ...) - never an OAuth
+   * connection, just a URL the user typed in, shown on their public
+   * profile. */
+  async updateSocialLinks(id: number, links: unknown): Promise<void> {
+    db.prepare("UPDATE users SET social_links = ? WHERE id = ?").run(JSON.stringify(links), id);
+  },
+  /** Top scorers in a section, by each user's own best raw_score. Real
+   * data only - empty until people have actually submitted attempts. */
+  async leaderboard(section: string, limit = 10): Promise<LeaderboardRow[]> {
+    return db
+      .prepare(
+        `SELECT u.username AS username, MAX(a.raw_score) AS best_score
+           FROM attempts a JOIN users u ON u.id = a.user_id
+          WHERE a.section = ? AND a.submitted = 1 AND a.raw_score IS NOT NULL
+          GROUP BY u.id
+          ORDER BY best_score DESC
+          LIMIT ?`,
+      )
+      .all(section, limit) as LeaderboardRow[];
   },
 };
 
@@ -393,6 +419,16 @@ export const attempts = {
       `UPDATE attempts SET answers = ?, score = ?, total = ?, raw_score = ?, submitted = 1,
        submitted_at = datetime('now') WHERE id = ?`,
     ).run(JSON.stringify(answers), score, total, rawScore, id);
+  },
+  /** This user's best raw_score per section, for their public profile card. */
+  async bestScoresByUser(userId: number): Promise<{ section: string; best_score: number }[]> {
+    return db
+      .prepare(
+        `SELECT section, MAX(raw_score) AS best_score FROM attempts
+          WHERE user_id = ? AND submitted = 1 AND raw_score IS NOT NULL
+          GROUP BY section`,
+      )
+      .all(userId) as { section: string; best_score: number }[];
   },
   /** Percentile of `rawScore` among every submitted attempt in `section`
    * (all users) - the share of attempts strictly below it. Real population

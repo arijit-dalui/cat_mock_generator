@@ -35,4 +35,5 @@ export type {
   PagedSet,
   SectionStat,
   ExternalStat,
+  LeaderboardRow,
 } from "./db-sqlite";
