@@ -255,25 +255,12 @@ export default function PoolClient({ username }: { username: string }) {
                 })}
               </tbody>
             </table>
-            <p className="mt-4 text-xs text-slate-400">
-              &quot;Below bar&quot; sets scored under MIN_QUALITY ({data.minQuality}) but still got pooled anyway
-              (a stale row from before the worker path was judge-gated too - see Generation activity below for
-              the real accept/reject/error split going forward). &quot;Generate now&quot; runs one attempt on
-              demand, on top of whatever the background worker/cron is already doing.
-            </p>
           </div>
         )}
 
         {data && (
           <div className="card mt-6 overflow-x-auto p-6">
             <h2 className="card-title text-lg">Generation activity (last 24h)</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Every generation attempt, whether or not it ended up in the pool - from the worker&apos;s topup
-              route, the hosted cron-topup, and the &quot;Generate now&quot; button above, all judge-gated the
-              same way. &quot;Rejected&quot; is the automated judge scoring a generated set below the quality bar
-              and discarding it before it ever reaches your review queue - nothing you did, and nothing you
-              ever saw.
-            </p>
             <table className="mt-4 w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase text-slate-400">

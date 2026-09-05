@@ -1,9 +1,19 @@
 /**
- * Set-pool worker.
- * Keeps roughly POOL_SIZE pre-generated sets per section in the database, so
- * users get an instant set when they click Generate. Runs alongside the app:
- *   npm run worker
+ * Set-pool worker (STANDALONE / LEGACY).
  *
+ * SUPERSEDED for local dev by the in-app auto-generation loop, controlled
+ * from Admin -> Pool Health (Start/Stop auto-generation button). That toggle
+ * has NO visibility into this script - if you run this alongside it, or
+ * forget it's running in another terminal, it keeps generating regardless
+ * of what the admin panel's button says, which is exactly the confusing
+ * "I hit Stop and it's still generating" bug this refusal exists to prevent.
+ *
+ * Only use this for a real deployment that can't keep the Next.js server
+ * itself running as a persistent process (rare - most hosts that can run
+ * this script at all can also just run the app and use the in-app toggle).
+ * Pass --force to actually run it.
+ *
+ * Keeps roughly POOL_SIZE pre-generated sets per section in the database.
  * Reads the database directly to check pool counts, and calls the app's
  * internal topup endpoint (authenticated with WORKER_TOKEN) to do generation.
  */
@@ -11,6 +21,18 @@ import http from "node:http";
 import path from "path";
 import Database from "better-sqlite3";
 import { loadEnv } from "./_env.mjs";
+
+if (!process.argv.includes("--force")) {
+  console.error(
+    "[worker] Refusing to run: this standalone script is superseded by the\n" +
+      "in-app auto-generation loop (Admin -> Pool Health -> Start auto-generation),\n" +
+      "which the admin panel's Stop button actually controls. Running this script\n" +
+      "too just means Stop in the UI silently does nothing.\n" +
+      "If you really need the standalone worker (e.g. a deployment that can't run\n" +
+      "the Next.js server as a persistent process), pass --force.",
+  );
+  process.exit(1);
+}
 
 loadEnv();
 
