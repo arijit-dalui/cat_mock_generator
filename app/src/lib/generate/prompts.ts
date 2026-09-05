@@ -146,8 +146,11 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
       ? `\nFormat each "prompt" exactly like:\n` +
         `"Arrange the following sentences in the correct logical order.\\n` +
         `1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n4. <sentence>\\n5. <sentence>"\n` +
-        `Each option must be a 5-character ordering string drawn from "12345" ` +
-        `(every digit 1-5 used exactly once), e.g. "31245". The resolution must ` +
+        `There are 5 SENTENCES but exactly 4 OPTIONS (A-D) — do not confuse the ` +
+        `two counts. Each option must be a 5-character ordering string drawn ` +
+        `from "12345" (every digit 1-5 used exactly once), e.g. "31245". ` +
+        `"options" must be an array of exactly 4 such strings, no more, no ` +
+        `fewer, and no two options may be identical. The resolution must ` +
         `depend on the LOGICAL flow of the argument (claim -> elaboration -> ` +
         `example/qualification -> conclusion), NOT on calendar dates, numeric ` +
         `labels, or obvious word-glue. Do NOT make the order trivially obvious ` +
@@ -164,8 +167,9 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
         `reconstructs the coherent paragraph. The sentence placed first in the ` +
         `correct order MUST be the standalone opener; a sentence beginning with ` +
         `a back-reference or connective ("However", "Moreover", "Therefore", ` +
-        `"This", "Such") can NEVER be first. Confirm every option is a ` +
-        `permutation of 1-5 and that exactly one option is correct.`
+        `"This", "Such") can NEVER be first. Before output, COUNT your ` +
+        `"options" array — it must have length 4, not 5. Confirm every ` +
+        `option is a permutation of 1-5 and that exactly one option is correct.`
       : subtype === "para_completion"
       ? `\nIn the "prompt", show the paragraph with the final sentence ` +
         `replaced by "_____". The blank should fall in a place where the ` +
