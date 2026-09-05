@@ -15,9 +15,7 @@
 import { NextResponse } from "next/server";
 import { config, SECTIONS, type Section } from "@/lib/config";
 import { sets } from "@/lib/db";
-import { generateSet } from "@/lib/generate";
-import { judgeSet } from "@/lib/generate/judge";
-import { recordGeneration } from "@/lib/metrics";
+import { generateOneForPool } from "@/lib/generate/pool";
 
 export const maxDuration = 300;
 
@@ -25,19 +23,6 @@ function checkAuth(req: Request): boolean {
   const auth = req.headers.get("authorization") || "";
   const expected = process.env.CRON_SECRET || config.workerToken;
   return auth === `Bearer ${expected}`;
-}
-
-/** Resolve `p`, but reject if it takes longer than `ms`. The underlying work
- * isn't cancelled (Vercel freezes the function after maxDuration anyway), but
- * this lets the handler RETURN a response well under the 300s platform cap
- * instead of letting one slow generation hang the whole request until the
- * scheduler's curl times out — which is what was failing the warm workflow. */
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  let t: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<T>((_, reject) => {
-    t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(t)) as Promise<T>;
 }
 
 interface SectionStatus {
@@ -136,37 +121,22 @@ async function topupOnce(req: Request) {
     if (!target) break;
     const sec = target.s;
 
-    const setStart = Date.now();
-    try {
-      const generated = await withTimeout(generateSet(sec), PER_SET_MS, `${sec} generateSet`);
-      if (url.searchParams.get("debug")) {
-        (status[sec] as unknown as { warnings?: string[] }).warnings =
-          generated.meta.warnings;
-      }
-      const verdict = await withTimeout(judgeSet(generated), JUDGE_MS, `${sec} judge`);
-      const ms = Date.now() - setStart;
-      if (verdict.accept) {
-        await sets.insertWithQuality(
-          sec,
-          generated,
-          "cron",
-          verdict.overall,
-          verdict.notes,
-        );
-        status[sec].generated += 1;
-        status[sec].pool += 1;
-        status[sec].lastNote = `accepted (score ${verdict.overall})`;
-        await recordGeneration(sec, "accept", { score: verdict.overall, ms, source: "cron" });
-      } else {
-        status[sec].rejected += 1;
-        status[sec].lastNote = `rejected (score ${verdict.overall}): ${verdict.notes}`;
-        await recordGeneration(sec, "reject", { score: verdict.overall, notes: verdict.notes, ms, source: "cron" });
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+    const result = await generateOneForPool(sec, "cron", {
+      generateMs: PER_SET_MS,
+      judgeMs: JUDGE_MS,
+      debug: !!url.searchParams.get("debug"),
+    });
+    if (result.warnings) (status[sec] as unknown as { warnings?: string[] }).warnings = result.warnings;
+    if (result.accepted) {
+      status[sec].generated += 1;
+      status[sec].pool += 1;
+      status[sec].lastNote = `accepted (score ${result.score})`;
+    } else if (result.score > 0) {
+      status[sec].rejected += 1;
+      status[sec].lastNote = `rejected (score ${result.score}): ${result.notes}`;
+    } else {
       status[sec].errored += 1;
-      status[sec].lastNote = `error: ${message}`;
-      await recordGeneration(sec, "error", { notes: message, ms: Date.now() - setStart, source: "cron" });
+      status[sec].lastNote = `error: ${result.notes}`;
     }
     toGenerate -= 1;
   }

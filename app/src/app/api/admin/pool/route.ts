@@ -26,6 +26,18 @@ interface GenRow {
   n: number;
 }
 
+interface LatestEventRow {
+  section: string;
+  type: string;
+  created_at: string;
+}
+
+/** SQLite gives naive UTC ("2026-09-05 10:00:00"), Postgres gives ISO
+ * already - normalise both before diffing against now(). */
+function parseDbDate(s: string): number {
+  return new Date(/T/.test(s) ? s : s.replace(" ", "T") + "Z").getTime();
+}
+
 /** Real pool-health numbers from generated_sets, plus real accept/reject/
  * error counts from the events table (gen_accept/gen_reject/gen_error,
  * logged by both the worker's topup route and cron-topup - see
@@ -92,9 +104,36 @@ export async function GET() {
     else if (r.type === "gen_error") activity[r.section].errored = n;
   }
 
+  // "Generating right now": the most recent gen_* event per section, when
+  // it's a gen_start with nothing newer - a start with no accept/reject/
+  // error after it yet. A 10-minute cutoff protects against a crashed
+  // process leaving a stale "in progress" forever.
+  const latestRows = (await query(
+    `SELECT section, type, created_at
+       FROM events e
+      WHERE type IN ('gen_start', 'gen_accept', 'gen_reject', 'gen_error')
+        AND id = (
+          SELECT MAX(id) FROM events e2
+           WHERE e2.section = e.section
+             AND e2.type IN ('gen_start', 'gen_accept', 'gen_reject', 'gen_error')
+        )`,
+  )) as LatestEventRow[];
+  const inProgress: Record<string, { since: string; elapsedSec: number } | null> = {};
+  for (const s of SECTIONS) inProgress[s] = null;
+  const now = Date.now();
+  for (const r of latestRows) {
+    if (r.type !== "gen_start" || !inProgress.hasOwnProperty(r.section)) continue;
+    const startedMs = parseDbDate(r.created_at);
+    const elapsedSec = Math.max(0, Math.round((now - startedMs) / 1000));
+    if (elapsedSec < 600) {
+      inProgress[r.section] = { since: r.created_at, elapsedSec };
+    }
+  }
+
   return NextResponse.json({
     sections: bySection,
     activity,
+    inProgress,
     poolTarget: config.poolTarget,
     minQuality: config.minQuality,
   });
