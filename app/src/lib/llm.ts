@@ -176,7 +176,7 @@ async function zaiChat(prompt: string, opts: ChatOptions): Promise<string> {
     model: opts.model ?? config.llm.zaiModel,
     messages,
     temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 4096,
+    max_tokens: opts.maxTokens ?? 8000,
     response_format: { type: "json_object" },
   });
   const url = "https://api.z.ai/api/paas/v4/chat/completions";
@@ -210,7 +210,11 @@ async function deepseekChat(prompt: string, opts: ChatOptions): Promise<string> 
     model: opts.model ?? config.llm.deepseekModel,
     messages,
     temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 4096,
+    // 4096 (copied from the Groq default) was truncating full VA/DI/RC sets
+    // mid-JSON - "explanations are truncated", "set is empty" (unparseable
+    // half-written JSON) were both this, not a content-quality problem.
+    // DeepSeek's actual output ceiling is far higher than Groq's free tier.
+    max_tokens: opts.maxTokens ?? 8000,
     response_format: { type: "json_object" },
   });
   const url = "https://api.deepseek.com/chat/completions";
@@ -244,7 +248,7 @@ async function openrouterChat(prompt: string, opts: ChatOptions): Promise<string
     model: opts.model ?? config.llm.openrouterModel,
     messages,
     temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 4096,
+    max_tokens: opts.maxTokens ?? 8000,
     response_format: { type: "json_object" },
   });
   const url = "https://openrouter.ai/api/v1/chat/completions";
