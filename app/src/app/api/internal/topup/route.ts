@@ -25,6 +25,7 @@ export async function POST(req: Request) {
       section,
       score: result.score,
       notes: result.notes,
+      warnings: result.warnings,
     });
   }
   return NextResponse.json({

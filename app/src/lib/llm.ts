@@ -210,11 +210,12 @@ async function deepseekChat(prompt: string, opts: ChatOptions): Promise<string> 
     model: opts.model ?? config.llm.deepseekModel,
     messages,
     temperature: opts.temperature ?? 0.7,
-    // 4096 (copied from the Groq default) was truncating full VA/DI/RC sets
-    // mid-JSON - "explanations are truncated", "set is empty" (unparseable
-    // half-written JSON) were both this, not a content-quality problem.
-    // DeepSeek's actual output ceiling is far higher than Groq's free tier.
-    max_tokens: opts.maxTokens ?? 8000,
+    // 4096, then 8000, both still truncated DI/RC mid-JSON ("Unbalanced JSON
+    // in LLM response"). DeepSeek V4 Flash supports up to 384K output tokens
+    // - our max_tokens was still the bottleneck, not the model. A full
+    // 4-question set with 4 options + 4 explanations + solution each can
+    // genuinely run several thousand tokens; give it real headroom.
+    max_tokens: opts.maxTokens ?? 16000,
     response_format: { type: "json_object" },
   });
   const url = "https://api.deepseek.com/chat/completions";
@@ -308,9 +309,27 @@ export async function chatJSON<T = unknown>(
 ): Promise<T> {
   const system =
     (opts.system ? opts.system + "\n" : "") +
-    "Respond with valid JSON only. No markdown, no commentary.";
+    "Respond with valid JSON only. No markdown, no commentary. " +
+    "Every string value in the JSON must contain ONLY the final, polished " +
+    "content - never your reasoning process, hesitation, or self-correction " +
+    "('wait', 'let me recalculate', 'actually', 'I made a mistake', 'hmm'). " +
+    "Work out the answer silently; the JSON you output is the finished " +
+    "result, not a transcript of how you got there.";
   const raw = await chat(prompt, { ...opts, system });
-  return extractJSON(raw) as T;
+  try {
+    return extractJSON(raw) as T;
+  } catch (e) {
+    // TEMPORARY diagnostic: dump the raw, untruncated response so we can see
+    // exactly where the JSON actually breaks, instead of guessing at
+    // max_tokens numbers. Remove once the real cause is found.
+    if (process.env.LLM_DEBUG_DUMP) {
+      const fs = await import("node:fs/promises");
+      const file = `E:/Geetesh/cat_mock_generator/app/llm-debug-${Date.now()}.txt`;
+      await fs.writeFile(file, raw, "utf8").catch(() => {});
+      console.error(`[chatJSON] extractJSON failed, raw response dumped to ${file} (length ${raw.length})`);
+    }
+    throw e;
+  }
 }
 
 /** Embed text via Ollama. Returns null if embeddings are unavailable. */
