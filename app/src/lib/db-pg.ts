@@ -338,6 +338,20 @@ export const events = {
     await ready;
     await sql`INSERT INTO events (user_id, type, section, meta) VALUES (${userId}, ${type}, ${section ?? null}, ${meta ? sql.json(meta as Parameters<typeof sql.json>[0]) : null})`;
   },
+  /** The judge's own rejection notes from the last few attempts in this
+   * section, most recent first - fed back into the next generation prompt
+   * as "don't repeat these mistakes" instead of starting from zero every
+   * time. */
+  async recentRejectionNotes(section: string, limit = 3): Promise<string[]> {
+    await ready;
+    const rows = await sql<{ meta: { notes?: string } | null }[]>`
+      SELECT meta FROM events
+       WHERE type = 'gen_reject' AND section = ${section}
+       ORDER BY id DESC LIMIT ${limit}`;
+    return rows
+      .map((r) => r.meta?.notes ?? null)
+      .filter((n): n is string => !!n && n.trim().length > 0);
+  },
 };
 
 // ---- generated sets ------------------------------------------------------

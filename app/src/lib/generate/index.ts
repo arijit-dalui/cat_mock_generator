@@ -9,6 +9,7 @@
 import { config, type Section } from "../config";
 import { chatJSON } from "../llm";
 import { sampleExemplars, maxSimilarityToKb, LEAK_THRESHOLD } from "../kb";
+import { events } from "../db";
 import { fetchAeonArticle } from "./aeon";
 import {
   vaPrompt,
@@ -223,6 +224,21 @@ interface Plan {
   titaCount?: number;
 }
 
+/** The judge's own rejection reasons from this section's last few attempts,
+ * formatted as an explicit "do not repeat these" block prepended to the next
+ * generation prompt. Without this, every attempt starts from zero and the
+ * writer keeps making the exact same mistakes the judge already flagged. */
+async function avoidPastMistakesBlock(section: Section): Promise<string> {
+  const notes = await events.recentRejectionNotes(section, 3).catch(() => []);
+  if (notes.length === 0) return "";
+  return (
+    `\n\nA PREVIOUS ATTEMPT FOR THIS SECTION WAS REJECTED FOR THESE EXACT ` +
+    `REASONS - fix all of them, they must not repeat:\n` +
+    notes.map((n) => `- ${n}`).join("\n") +
+    `\n`
+  );
+}
+
 /** Sleep between Groq calls to stay under free-tier RPM/TPM limits.
  * Groq's free tier on llama-3.3-70b: ~12K TPM, 30 RPM.
  * Our prompts are ~1500-2000 tokens; pacing 6s between calls = 10/min,
@@ -246,8 +262,9 @@ async function genQuestionStep(
       subtype: step.subtype,
       limit: 3,
     });
+    const avoid = await avoidPastMistakesBlock(section);
     const data = await chatJSON<{ questions?: any[] }>(
-      promptFn(step.subtype, step.count, exemplars, step.titaCount),
+      promptFn(step.subtype, step.count, exemplars, step.titaCount) + avoid,
       { temperature: 0.85, model },
     );
     const raw = Array.isArray(data?.questions) ? data.questions : [];
@@ -585,7 +602,8 @@ async function genRCUnit(
   }
   try {
     const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
-    const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex), {
+    const avoid = await avoidPastMistakesBlock("RC");
+    const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex) + avoid, {
       temperature: 0.7,
       model,
     });
@@ -630,7 +648,8 @@ async function genContextUnit(
 ): Promise<GenSubSet | null> {
   try {
     const ex = await sampleExemplars(section, { limit: 2 });
-    const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8, model });
+    const avoid = await avoidPastMistakesBlock(section);
+    const data = await chatJSON<any>(promptFn(ex) + avoid, { temperature: 0.8, model });
     const set = normalizeSet(data, section.toLowerCase(), label, "", "mock-derived", warnings);
     if (set.questions.length) return set;
     warnings.push(`${section} set had no valid questions`);

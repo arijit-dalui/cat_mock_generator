@@ -258,6 +258,28 @@ export const events = {
       "INSERT INTO events (user_id, type, section, meta) VALUES (?, ?, ?, ?)",
     ).run(userId, type, section ?? null, meta ? JSON.stringify(meta) : null);
   },
+  /** The judge's own rejection notes from the last few attempts in this
+   * section, most recent first - fed back into the next generation prompt
+   * as "don't repeat these mistakes" instead of starting from zero every
+   * time. */
+  async recentRejectionNotes(section: string, limit = 3): Promise<string[]> {
+    const rows = db
+      .prepare(
+        `SELECT meta FROM events
+           WHERE type = 'gen_reject' AND section = ?
+           ORDER BY id DESC LIMIT ?`,
+      )
+      .all(section, limit) as { meta: string | null }[];
+    return rows
+      .map((r) => {
+        try {
+          return r.meta ? (JSON.parse(r.meta).notes as string) : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((n): n is string => !!n && n.trim().length > 0);
+  },
 };
 
 export const sets = {
