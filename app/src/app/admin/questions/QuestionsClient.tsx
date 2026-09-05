@@ -18,9 +18,10 @@ const OPT = ["A", "B", "C", "D"];
 interface GenQuestion {
   id: string;
   type: string;
+  format?: "mcq" | "tita";
   prompt: string;
   options: string[];
-  answer: number;
+  answer: number | string;
   explanations: string[];
   solution: string;
 }
@@ -509,6 +510,8 @@ function QuestionBlock({
     onChange({ ...q, explanations });
   }
 
+  const isTita = q.format === "tita";
+
   if (!editing) {
     return (
       <div className="rounded-lg bg-slate-50 p-4">
@@ -516,22 +519,30 @@ function QuestionBlock({
           <span className="text-slate-400">Q{n}.</span>{" "}
           <span className="whitespace-pre-wrap">{q.prompt}</span>
         </p>
-        <ul className="mt-2 space-y-1 text-sm">
-          {q.options.map((opt, i) => (
-            <li
-              key={i}
-              className={
-                "rounded px-2 py-1 " +
-                (i === q.answer ? "bg-green-100 font-medium text-green-800" : "text-slate-600")
-              }
-            >
-              <span className="font-semibold">{OPT[i]}.</span> {opt}
-              {q.explanations?.[i] && (
-                <span className="ml-1 text-xs text-slate-500">— {q.explanations[i]}</span>
-              )}
-            </li>
-          ))}
-        </ul>
+        {isTita ? (
+          <p className="mt-2 text-sm">
+            <span className="rounded bg-green-100 px-2 py-1 font-medium text-green-800">
+              Typed answer: {String(q.answer)}
+            </span>
+          </p>
+        ) : (
+          <ul className="mt-2 space-y-1 text-sm">
+            {q.options.map((opt, i) => (
+              <li
+                key={i}
+                className={
+                  "rounded px-2 py-1 " +
+                  (i === q.answer ? "bg-green-100 font-medium text-green-800" : "text-slate-600")
+                }
+              >
+                <span className="font-semibold">{OPT[i]}.</span> {opt}
+                {q.explanations?.[i] && (
+                  <span className="ml-1 text-xs text-slate-500">— {q.explanations[i]}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
         {q.solution && (
           <p className="mt-2 text-xs text-slate-500">
             <span className="font-semibold">Solution:</span>{" "}
@@ -551,44 +562,58 @@ function QuestionBlock({
         value={q.prompt}
         onChange={(e) => set("prompt", e.target.value)}
       />
-      <div className="mt-3 space-y-2">
-        {q.options.map((opt, i) => (
-          <div key={i} className="flex items-start gap-2">
-            <button
-              type="button"
-              onClick={() => set("answer", i)}
-              title="Mark as correct answer"
-              className={
-                "mt-1 h-6 w-6 shrink-0 rounded-full border text-xs font-semibold " +
-                (q.answer === i
-                  ? "border-green-500 bg-green-500 text-white"
-                  : "border-slate-300 bg-white text-slate-500 hover:border-green-400")
-              }
-            >
-              {OPT[i]}
-            </button>
-            <div className="flex-1">
-              <input
-                className="input"
-                value={opt}
-                onChange={(e) => setOption(i, e.target.value)}
-                placeholder={`Option ${OPT[i]}`}
-              />
-              <textarea
-                className="input mt-1 text-xs"
-                rows={2}
-                value={q.explanations?.[i] ?? ""}
-                onChange={(e) => setExplanation(i, e.target.value)}
-                placeholder={`Why ${OPT[i]} is right/wrong`}
-              />
-            </div>
+      {isTita ? (
+        <div className="mt-3">
+          <label className="label">Typed answer (TITA - no options)</label>
+          <input
+            className="input"
+            value={String(q.answer)}
+            onChange={(e) => set("answer", e.target.value)}
+            placeholder="e.g. 3142, or a number"
+          />
+        </div>
+      ) : (
+        <>
+          <div className="mt-3 space-y-2">
+            {q.options.map((opt, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => set("answer", i)}
+                  title="Mark as correct answer"
+                  className={
+                    "mt-1 h-6 w-6 shrink-0 rounded-full border text-xs font-semibold " +
+                    (q.answer === i
+                      ? "border-green-500 bg-green-500 text-white"
+                      : "border-slate-300 bg-white text-slate-500 hover:border-green-400")
+                  }
+                >
+                  {OPT[i]}
+                </button>
+                <div className="flex-1">
+                  <input
+                    className="input"
+                    value={opt}
+                    onChange={(e) => setOption(i, e.target.value)}
+                    placeholder={`Option ${OPT[i]}`}
+                  />
+                  <textarea
+                    className="input mt-1 text-xs"
+                    rows={2}
+                    value={q.explanations?.[i] ?? ""}
+                    onChange={(e) => setExplanation(i, e.target.value)}
+                    placeholder={`Why ${OPT[i]} is right/wrong`}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <p className="mt-1 text-xs text-slate-400">
-        Correct answer: <span className="font-semibold">{OPT[q.answer] ?? "?"}</span> (click a
-        letter to change)
-      </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Correct answer: <span className="font-semibold">{OPT[q.answer as number] ?? "?"}</span> (click a
+            letter to change)
+          </p>
+        </>
+      )}
       <label className="label mt-3">Solution</label>
       <textarea
         className="input"

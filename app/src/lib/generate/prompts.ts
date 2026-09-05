@@ -128,9 +128,9 @@ function formatExemplars(items: KbItem[], max = 1): string {
 
 const VA_BRIEF: Record<string, string> = {
   para_jumble:
-    "para-jumble: 5 sentences (labelled 1-5 in scrambled order) that must be reordered into one coherent paragraph. EXACTLY ONE sentence must be a self-contained OPENER — a topic/thesis statement that introduces the subject with NO back-reference and NO transition-word start — and it must be the intended first sentence. Do NOT write sentences that nearly all begin with a connective: at most one or two sentences may start with 'however / moreover / therefore / by contrast / furthermore'; every other sentence must begin with its own subject (a noun phrase), not a discourse marker. CRUCIAL: the correct order must be driven by the LOGICAL / CONCEPTUAL progression of the argument (a claim, then its elaboration, an example, a qualification, a conclusion) — NOT by obvious surface cues. Do NOT lean on explicit conjunctions or pronouns ('this', 'such a view', 'the latter', 'however', 'therefore') as glue that makes the sequence trivially obvious; a solver should have to follow the MEANING and the flow of ideas, not just chain pronouns and connectives. Avoid chronology and digit labels as ordering signals.",
+    "para-jumble (real CAT format: TITA, no answer options): 4 sentences (labelled 1-4 in scrambled order) that must be reordered into one coherent paragraph. EXACTLY ONE sentence must be a self-contained OPENER — a topic/thesis statement that introduces the subject with NO back-reference and NO transition-word start — and it must be the intended first sentence. Do NOT write sentences that nearly all begin with a connective: at most one sentence may start with 'however / moreover / therefore / by contrast / furthermore'; every other sentence must begin with its own subject (a noun phrase), not a discourse marker. CRUCIAL: the correct order must be driven by the LOGICAL / CONCEPTUAL progression of the argument (a claim, then its elaboration, an example, a conclusion) — NOT by obvious surface cues. Do NOT lean on explicit conjunctions or pronouns ('this', 'such a view', 'the latter', 'however', 'therefore') as glue that makes the sequence trivially obvious; a solver should have to follow the MEANING and the flow of ideas, not just chain pronouns and connectives. Avoid chronology and digit labels as ordering signals.",
   para_completion:
-    "para-completion: a 4-6 sentence paragraph with the FINAL sentence blanked out (_____). The right completion must follow logically from the SPECIFIC argument the paragraph develops — not from generic topical relevance. Two distractors should be topically related but logically off (broaden the scope, contradict the implied premise, or echo a counter-argument).",
+    "paragraph-completion (missing sentence insertion, NOT 'finish the final sentence'): a short 4-6 sentence passage with ONE sentence removed and replaced by a numbered blank [_____] - the blank can sit ANYWHERE in the passage (start, middle, or end), not only at the end. Four candidate sentences are offered as options; exactly one slots into that specific position and restores the passage's logical/grammatical flow (matching what comes immediately before AND after the blank, not just the general topic). Distractors should: (a) fit the topic but break the local transition, (b) duplicate information already stated elsewhere in the passage, (c) introduce a claim the rest of the passage doesn't support.",
   odd_one_out:
     "odd-one-out: 5 sentences on a single theme, one of which does not fit. The odd one usually breaks the THEMATIC LINE (advocacy vs description, cause vs effect, historical vs contemporary). Surface keyword overlap with the rest is a red herring — the misfit should share vocabulary but diverge in argumentative role.",
   summary:
@@ -143,39 +143,33 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
   const brief = VA_BRIEF[subtype] ?? VA_BRIEF.va_other;
   const formatRules =
     subtype === "para_jumble"
-      ? `\nFormat each "prompt" exactly like:\n` +
-        `"Arrange the following sentences in the correct logical order.\\n` +
-        `1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n4. <sentence>\\n5. <sentence>"\n` +
-        `There are 5 SENTENCES but exactly 4 OPTIONS (A-D) — do not confuse the ` +
-        `two counts. Each option must be a 5-character ordering string drawn ` +
-        `from "12345" (every digit 1-5 used exactly once), e.g. "31245". ` +
-        `"options" must be an array of exactly 4 such strings, no more, no ` +
-        `fewer, and no two options may be identical. The resolution must ` +
-        `depend on the LOGICAL flow of the argument (claim -> elaboration -> ` +
-        `example/qualification -> conclusion), NOT on calendar dates, numeric ` +
-        `labels, or obvious word-glue. Do NOT make the order trivially obvious ` +
-        `by chaining explicit connectives or pronouns ("this", "such a view", ` +
-        `"the latter", "however", "therefore"); the solver should have to ` +
-        `reason about MEANING, not just spot a pronoun pointing back at the ` +
+      ? `\nThis is a TITA question - it has NO answer options at all. Output ` +
+        `shape per question:\n` +
+        `{"prompt": "Arrange the following sentences in the correct logical ` +
+        `order.\\n1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n4. <sentence>", ` +
+        `"options": [], "answer": "3142", "explanations": [], "solution": ` +
+        `"<why this order is correct>"}\n` +
+        `"options" MUST be an empty array - do not invent multiple-choice ` +
+        `options for this question type. "answer" is a 4-character string, a ` +
+        `permutation of "1234" (every digit used exactly once, e.g. "3142"), ` +
+        `naming the correct reading order of the 4 sentences.\n` +
+        `The resolution must depend on the LOGICAL flow of the argument (claim ` +
+        `-> elaboration -> example -> conclusion), NOT on calendar dates, ` +
+        `numeric labels, or obvious word-glue. Do NOT make the order trivially ` +
+        `obvious by chaining explicit connectives or pronouns ("this", "such a ` +
+        `view", "the latter", "however", "therefore"); the solver should have ` +
+        `to reason about MEANING, not just spot a pronoun pointing back at the ` +
         `previous sentence.\n` +
         `STYLE: do NOT have most sentences open with "However"/"Moreover"/` +
         `"Therefore"/"Furthermore" — that pattern destroys the puzzle. Keep the ` +
         `independent OPENER sentence (subject-first, no back-reference) so a ` +
         `unique start exists.\n` +
-        `CRITICAL — verify the key: actually SOLVE the jumble yourself and make ` +
-        `the "answer" letter point to the option whose ordering string ` +
-        `reconstructs the coherent paragraph. The sentence placed first in the ` +
-        `correct order MUST be the standalone opener; a sentence beginning with ` +
-        `a back-reference or connective ("However", "Moreover", "Therefore", ` +
-        `"This", "Such") can NEVER be first. Before output, COUNT your ` +
-        `"options" array — it must have length 4, not 5. Confirm every ` +
-        `option is a permutation of 1-5 and that exactly one option is correct.`
-      : subtype === "para_completion"
-      ? `\nIn the "prompt", show the paragraph with the final sentence ` +
-        `replaced by "_____". The blank should fall in a place where the ` +
-        `paragraph has built an EXPECTATION (a contrast, a corollary, a ` +
-        `qualification) — and the right option must satisfy that expectation. ` +
-        `Each option is a candidate sentence (full sentence, not a fragment).`
+        `CRITICAL — verify the key: actually SOLVE the jumble yourself before ` +
+        `writing "answer". The sentence placed first in the correct order MUST ` +
+        `be the standalone opener; a sentence beginning with a back-reference ` +
+        `or connective ("However", "Moreover", "Therefore", "This", "Such") ` +
+        `can NEVER be first. Before output, COUNT the sentences in your prompt ` +
+        `- exactly 4, not 5 - and confirm "answer" is a permutation of 1-4.`
       : subtype === "odd_one_out"
       ? `\nFormat each "prompt" exactly like:\n` +
         `"The five sentences below relate to the same theme. ` +
@@ -189,6 +183,21 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
       ? `\nFormat each "prompt" exactly as: the paragraph, then a NEWLINE, ` +
         `then the literal question "Which of the following best summarises ` +
         `the paragraph above?". Each option is a one- or two-sentence summary.`
+      : subtype === "para_completion"
+      ? `\nThis is sentence-INSERTION, not "finish the paragraph" - the blank ` +
+        `is NOT necessarily the last sentence. Write a 4-6 sentence passage, ` +
+        `remove ONE sentence from ANY position (beginning, middle, or end - ` +
+        `vary this across questions), and mark exactly where it was removed ` +
+        `with "[_____]" left in place of that sentence. Format the "prompt" ` +
+        `as the passage (with the numbered blank inline) followed by a ` +
+        `NEWLINE and the literal question "Which sentence best fits the ` +
+        `blank above?". Each option is a candidate sentence for that ONE ` +
+        `blank - judge each option against BOTH the sentence immediately ` +
+        `before AND the sentence immediately after the blank, not just the ` +
+        `passage's general topic. Do NOT write a numeric/word-problem, a list ` +
+        `of MCQ-style derivations, or anything resembling a quant question - ` +
+        `this is a prose paragraph on a humanities/social-science/policy ` +
+        `topic, same register as the other VA question types.`
       : "";
   return (
     `You are a CAT (Common Admission Test) verbal-ability paper-setter, ` +
@@ -221,12 +230,23 @@ const QA_DEPTH: Record<string, string> = {
     "Use combinatorics with restriction (derangements, inclusion-exclusion, with-repetition vs without), probability with conditional / Bayes-style reasoning, sequences with a non-obvious closed form, or set-theory Venn questions where the unknown overlap is the key.",
 };
 
-export function qaPrompt(topic: string, count: number, exemplars: KbItem[]): string {
+const QA_TITA_ADDENDUM = (titaCount: number, count: number) =>
+  `\n\nTITA MIX (real CAT QA is roughly a third TITA, not all MCQ): the LAST ` +
+  `${titaCount} of these ${count} questions must be TITA (type-in-the-answer, ` +
+  `no options), matching real CAT - the answer is typed, not chosen. For each ` +
+  `of those, use this shape instead of the usual one: {"prompt": "...", ` +
+  `"options": [], "format": "tita", "answer": "<the exact numeric/short ` +
+  `answer, e.g. \\"42\\" or \\"3/7\\">", "explanations": [], "solution": ` +
+  `"..."}. "options" MUST be empty for these; do not invent 4 choices for a ` +
+  `TITA question. The first ${count - titaCount} questions stay the normal ` +
+  `4-option MCQ shape.`;
+
+export function qaPrompt(topic: string, count: number, exemplars: KbItem[], titaCount = 0): string {
   const depth = QA_DEPTH[topic] ?? "";
   return (
     `You are a CAT quantitative-ability paper-setter, writing for the ` +
     `99-percentile aspirant. Create ${count} original, exam-quality ` +
-    `multiple-choice questions on the topic: ${topic}.\n\n` +
+    `questions on the topic: ${topic}.\n\n` +
     DIFFICULTY_RUBRIC +
     `\n\nTopic-specific depth requirement:\n${depth}\n\n` +
     `CRITICAL: solve every question yourself step by step and double-check ` +
@@ -235,8 +255,9 @@ export function qaPrompt(topic: string, count: number, exemplars: KbItem[]): str
     `Each option must be a CONCRETE numeric or algebraic value (e.g. "24", ` +
     `"3/5", "x = 2"), never a placeholder like "o1". Numbers in the question ` +
     `should NOT be round (avoid 100, 1000) unless the question is about ` +
-    `roundness itself. Use straight ASCII quotes only.\n\n` +
-    EXPLANATION_RUBRIC +
+    `roundness itself. Use straight ASCII quotes only.` +
+    (titaCount > 0 ? QA_TITA_ADDENDUM(titaCount, count) : "") +
+    `\n\n` + EXPLANATION_RUBRIC +
     formatExemplars(exemplars) +
     `\n${SCHEMA_QUESTIONS}`
   );

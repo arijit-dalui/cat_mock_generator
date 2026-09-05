@@ -4,12 +4,17 @@ import { sets } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** Validate a question object enough to keep the practice/review pages safe. */
+/** Validate a question object enough to keep the practice/review pages safe.
+ * TITA questions (format: "tita" - para_jumble, some QA questions) have a
+ * different valid shape: no options, a typed string answer. */
 function badQuestion(q: unknown): boolean {
   if (!q || typeof q !== "object") return true;
   const o = q as Record<string, unknown>;
+  if (typeof o.prompt !== "string") return true;
+  if (o.format === "tita") {
+    return typeof o.answer !== "string" || o.answer.trim().length === 0;
+  }
   return (
-    typeof o.prompt !== "string" ||
     !Array.isArray(o.options) ||
     o.options.length !== 4 ||
     !Number.isInteger(o.answer) ||

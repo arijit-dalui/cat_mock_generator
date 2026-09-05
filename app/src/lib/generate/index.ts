@@ -116,7 +116,43 @@ function cleanQuestionText(s: string): string {
   return r;
 }
 
+/** para_jumble is ALWAYS TITA (real CAT format: 4 sentences, no options, a
+ * typed ordering like "3142"). Other subtypes (QA topics) are mixed - a
+ * question is TITA there when the writer itself flags it with
+ * "format": "tita" in the JSON (see QA_TITA_ADDENDUM in prompts.ts), not by
+ * subtype alone. */
+const ALWAYS_TITA_SUBTYPES = new Set(["para_jumble"]);
+
+function normalizeTitaQuestion(raw: any, type: string): GenQuestion | null {
+  if (!raw || typeof raw !== "object") return null;
+  const prompt = cleanQuestionText(
+    String(raw.prompt ?? raw.question ?? raw.text ?? "").trim(),
+  );
+  if (prompt.length < 5) return null;
+  const answer = String(raw.answer ?? raw.correct ?? "").trim();
+  if (!answer || answer.length > 50) return null;
+  if (type === "para_jumble") {
+    // Must be a permutation of 1234 (every digit used exactly once).
+    if (!/^[1-4]{4}$/.test(answer) || new Set(answer).size !== 4) return null;
+  }
+  const solution = cleanQuestionText(
+    String(raw.solution ?? raw.working ?? raw.reasoning ?? "").trim(),
+  );
+  return {
+    id: nextId("q"),
+    type,
+    format: "tita",
+    prompt,
+    options: [],
+    answer,
+    explanations: [],
+    solution,
+  };
+}
+
 function normalizeQuestion(raw: any, type: string): GenQuestion | null {
+  const wantsTita = ALWAYS_TITA_SUBTYPES.has(type) || (raw && typeof raw === "object" && raw.format === "tita");
+  if (wantsTita) return normalizeTitaQuestion(raw, type);
   if (!raw || typeof raw !== "object") return null;
   const prompt = cleanQuestionText(
     String(raw.prompt ?? raw.question ?? raw.text ?? "").trim(),
@@ -181,6 +217,10 @@ function normalizeQuestion(raw: any, type: string): GenQuestion | null {
 interface Plan {
   subtype: string;
   count: number;
+  /** Of `count` questions, this many should be TITA (real CAT QA is a mix of
+   * MCQ and TITA within the same section - about 8 of 22, ~36%). 0/undefined
+   * for a step that's entirely MCQ (the VA default). */
+  titaCount?: number;
 }
 
 /** Sleep between Groq calls to stay under free-tier RPM/TPM limits.
@@ -196,7 +236,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function genQuestionStep(
   section: Section,
   step: Plan,
-  promptFn: (subtype: string, count: number, ex: any[]) => string,
+  promptFn: (subtype: string, count: number, ex: any[], titaCount?: number) => string,
   warnings: string[],
   model?: string,
 ): Promise<GenQuestion[]> {
@@ -207,7 +247,7 @@ async function genQuestionStep(
       limit: 3,
     });
     const data = await chatJSON<{ questions?: any[] }>(
-      promptFn(step.subtype, step.count, exemplars),
+      promptFn(step.subtype, step.count, exemplars, step.titaCount),
       { temperature: 0.85, model },
     );
     const raw = Array.isArray(data?.questions) ? data.questions : [];
@@ -239,7 +279,7 @@ async function genQuestionStep(
 async function genQuestions(
   section: Section,
   plan: Plan[],
-  promptFn: (subtype: string, count: number, ex: any[]) => string,
+  promptFn: (subtype: string, count: number, ex: any[], titaCount?: number) => string,
   warnings: string[],
 ): Promise<GenQuestion[]> {
   const items: GenQuestion[] = [];
@@ -258,6 +298,10 @@ async function verifyAnswer(
   context?: string,
   model?: string,
 ): Promise<boolean> {
+  // This re-solve path assumes a 4-option MCQ (picks a 0-3 index) - it
+  // doesn't apply to a TITA question's typed answer, so skip and trust the
+  // writer's own answer key instead of miscomparing against garbage.
+  if (q.format === "tita") return true;
   try {
     const prompt =
       context && context.trim() ? `${context.trim()}\n\n${q.prompt}` : q.prompt;
@@ -636,16 +680,22 @@ async function verifyDiSet(
 }
 
 // ---- public entry point ---------------------------------------------------
+// The 4 real CAT VA genres: para_jumble (TITA), summary, odd_one_out,
+// para_completion (insert a missing sentence into a blank WITHIN the
+// passage - not "finish the final sentence", which is a different, wrong
+// task the writer kept confusing this with).
 const VA_PLAN: Plan[] = [
   { subtype: "para_jumble", count: 3 },
-  { subtype: "para_completion", count: 3 },
+  { subtype: "summary", count: 3 },
   { subtype: "odd_one_out", count: 2 },
-  { subtype: "summary", count: 2 },
+  { subtype: "para_completion", count: 2 },
 ];
+// Real CAT QA is ~36% TITA (8 of 22), not all MCQ - mix one TITA question
+// into arithmetic and algebra, the two highest-weighted topics.
 const QA_PLAN: Plan[] = [
   { subtype: "geometry", count: 2 },
-  { subtype: "algebra", count: 2 },
-  { subtype: "arithmetic", count: 3 },
+  { subtype: "algebra", count: 2, titaCount: 1 },
+  { subtype: "arithmetic", count: 3, titaCount: 1 },
   { subtype: "number_system", count: 2 },
   { subtype: "modern_math", count: 1 },
 ];
