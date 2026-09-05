@@ -153,6 +153,8 @@ export interface User {
 export interface LeaderboardRow {
   username: string;
   best_score: number;
+  created_at: string | null;
+  submitted_at: string | null;
 }
 
 export interface SessionRow {
@@ -268,30 +270,37 @@ export const users = {
    * data only - empty until people have actually submitted attempts. */
   async leaderboard(section: string, limit = 10): Promise<LeaderboardRow[]> {
     await ready;
-    return await sql<LeaderboardRow[]>`
-      SELECT u.username AS username, MAX(a.raw_score) AS best_score
+    const rows = await sql<LeaderboardRow[]>`
+      SELECT DISTINCT ON (u.id)
+             u.username AS username, a.raw_score AS best_score,
+             a.created_at::text AS created_at, a.submitted_at::text AS submitted_at
         FROM attempts a JOIN users u ON u.id = a.user_id
        WHERE a.section = ${section} AND a.submitted = TRUE AND a.raw_score IS NOT NULL
-       GROUP BY u.id, u.username
-       ORDER BY best_score DESC
-       LIMIT ${limit}`;
+       ORDER BY u.id, a.raw_score DESC`;
+    return rows.sort((a, b) => b.best_score - a.best_score).slice(0, limit);
   },
   /** Top N by best full-mock total (summed raw_score across a mock's five
-   * section attempts) - real submitted mocks only. */
+   * section attempts) - real submitted mocks only. `created_at`/
+   * `submitted_at` are the mock's own timestamps, so the UI can show how
+   * long that sitting took. */
   async mockLeaderboard(limit = 10): Promise<LeaderboardRow[]> {
     await ready;
-    return await sql<LeaderboardRow[]>`
+    const rows = await sql<{ user_id: number; username: string; total_score: number; created_at: string; submitted_at: string }[]>`
       WITH mock_totals AS (
-        SELECT m.id AS mock_id, m.user_id, SUM(a.raw_score) AS total
+        SELECT m.id AS mock_id, m.user_id, m.created_at, m.submitted_at, SUM(a.raw_score) AS total_score
           FROM mocks m JOIN attempts a ON a.mock_id = m.id
          WHERE m.submitted = TRUE
          GROUP BY m.id
       )
-      SELECT u.username AS username, MAX(mt.total) AS best_score
+      SELECT DISTINCT ON (mt.user_id)
+             mt.user_id AS user_id, u.username AS username, mt.total_score AS total_score,
+             mt.created_at::text AS created_at, mt.submitted_at::text AS submitted_at
         FROM mock_totals mt JOIN users u ON u.id = mt.user_id
-       GROUP BY u.id, u.username
-       ORDER BY best_score DESC
-       LIMIT ${limit}`;
+       ORDER BY mt.user_id, mt.total_score DESC`;
+    return rows
+      .sort((a, b) => b.total_score - a.total_score)
+      .slice(0, limit)
+      .map((r) => ({ username: r.username, best_score: r.total_score, created_at: r.created_at, submitted_at: r.submitted_at }));
   },
 };
 

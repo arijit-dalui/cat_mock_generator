@@ -78,8 +78,8 @@ export interface User {
 export interface LeaderboardRow {
   username: string;
   best_score: number;
-  total: number | null;
   created_at: string | null;
+  submitted_at: string | null;
 }
 
 export interface SessionRow {
@@ -186,8 +186,9 @@ export const users = {
   async leaderboard(section: string, limit = 10): Promise<LeaderboardRow[]> {
     return db
       .prepare(
-        `SELECT username, best_score, total, created_at FROM (
-           SELECT u.username AS username, a.raw_score AS best_score, a.total AS total, a.created_at AS created_at,
+        `SELECT username, best_score, created_at, submitted_at FROM (
+           SELECT u.username AS username, a.raw_score AS best_score,
+                  a.created_at AS created_at, a.submitted_at AS submitted_at,
                   ROW_NUMBER() OVER (PARTITION BY u.id ORDER BY a.raw_score DESC) AS rn
              FROM attempts a JOIN users u ON u.id = a.user_id
             WHERE a.section = ? AND a.submitted = 1 AND a.raw_score IS NOT NULL
@@ -199,24 +200,25 @@ export const users = {
       .all(section, limit) as LeaderboardRow[];
   },
   /** Top N by best full-mock total (summed raw_score across a mock's five
-   * section attempts) - real submitted mocks only. `total` is the summed
-   * question count and `created_at` the date of that best mock. */
+   * section attempts) - real submitted mocks only. `created_at`/
+   * `submitted_at` are the mock's own timestamps, so the UI can show how
+   * long that sitting took. */
   async mockLeaderboard(limit = 10): Promise<LeaderboardRow[]> {
     return db
       .prepare(
         `WITH mock_totals AS (
-           SELECT m.id AS mock_id, m.user_id, m.created_at AS created_at,
-                  SUM(a.raw_score) AS total_score, SUM(a.total) AS total_questions
+           SELECT m.id AS mock_id, m.user_id, m.created_at AS created_at, m.submitted_at AS submitted_at,
+                  SUM(a.raw_score) AS total_score
              FROM mocks m JOIN attempts a ON a.mock_id = m.id
             WHERE m.submitted = 1
             GROUP BY m.id
          ),
          ranked AS (
-           SELECT user_id, total_score, total_questions, created_at,
+           SELECT user_id, total_score, created_at, submitted_at,
                   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY total_score DESC) AS rn
              FROM mock_totals
          )
-         SELECT u.username AS username, r.total_score AS best_score, r.total_questions AS total, r.created_at AS created_at
+         SELECT u.username AS username, r.total_score AS best_score, r.created_at AS created_at, r.submitted_at AS submitted_at
            FROM ranked r JOIN users u ON u.id = r.user_id
           WHERE r.rn = 1
           ORDER BY best_score DESC

@@ -61,8 +61,22 @@ interface HistoryResponse {
 interface LeaderboardRow {
   username: string;
   best_score: number;
-  total: number | null;
   created_at: string | null;
+  submitted_at: string | null;
+}
+
+/** "12m 30s" between two timestamps - the real time that attempt/mock took,
+ * not a fabricated number. Handles the naive-UTC SQLite string format the
+ * same way fmtDate does. */
+function fmtDuration(createdAt: string | null, submittedAt: string | null): string | null {
+  if (!createdAt || !submittedAt) return null;
+  const toDate = (s: string) => new Date(/T/.test(s) ? s : s.replace(" ", "T") + "Z");
+  const ms = toDate(submittedAt).getTime() - toDate(createdAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 /** Friendly labels for the question `type` field, which doubles as a
@@ -600,21 +614,21 @@ function Leaderboard({
   }
 
   const top3 = rows.slice(0, 3);
-  const maxScore = Math.max(...top3.map((r) => r.best_score), 1);
-  // Bar heights: 1st tallest, 2nd/3rd scaled relative to it, with a floor so
-  // a lopsided leaderboard (e.g. only one entrant) doesn't collapse a bar.
-  const barHeight = (score: number) => Math.max(40, (score / maxScore) * 120);
+  // Fixed per-rank heights (gold tallest, silver, bronze) - a podium reads
+  // by position, not by how close the actual scores happen to be.
+  const RANK_HEIGHT = [140, 100, 70];
+  const RANK_COLOR = ["#BF4E2B", "#9AA0AC", "#B08D57"]; // gold(brand)/silver/bronze
 
   return (
     <section className="card mt-6 p-6">
       <p className="card-title">{title}</p>
 
-      {/* Podium - top 3 */}
+      {/* Podium - top 3, 2nd/1st/3rd left-to-right, tallest in the middle */}
       <div className="mt-6 flex items-end justify-center gap-4">
         {PODIUM_ORDER.filter((i) => i < top3.length).map((i) => {
           const r = top3[i];
           const rank = i + 1;
-          const barColor = rank === 1 ? "var(--focus)" : rank === 2 ? "var(--muted)" : "var(--amber)";
+          const time = fmtDuration(r.created_at, r.submitted_at);
           return (
             <div key={r.username} className="flex w-28 flex-col items-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
@@ -629,12 +643,13 @@ function Leaderboard({
               </Link>
               <div
                 className="mt-2 flex w-full flex-col items-center justify-start rounded-sm pt-2"
-                style={{ height: barHeight(r.best_score), background: barColor, opacity: rank === 1 ? 1 : 0.75 }}
+                style={{ height: RANK_HEIGHT[i], background: RANK_COLOR[i] }}
               >
                 <span className="font-mono text-xs font-bold text-white">#{rank}</span>
               </div>
               <p className="mt-1 font-mono text-xs text-slate-500">
                 {r.best_score} {unit}
+                {time && ` · ${time}`}
               </p>
             </div>
           );
@@ -643,32 +658,34 @@ function Leaderboard({
 
       {/* Full list */}
       <ol className="mt-6 divide-y divide-slate-100 border-t border-slate-100">
-        {rows.map((r, i) => (
-          <li key={r.username}>
-            <Link
-              href={`/u/${encodeURIComponent(r.username)}`}
-              className={
-                "flex items-center justify-between px-2 py-3 text-sm transition-colors hover:bg-slate-50 " +
-                (r.username === viewerUsername ? "bg-brand/5 font-semibold text-brand" : "text-slate-700")
-              }
-            >
-              <span className="flex items-center gap-3">
-                <span className="w-6 text-right font-mono text-xs text-slate-400">{i + 1}</span>
-                <span>
-                  {r.username}
-                  {r.username === viewerUsername && " (you)"}
+        {rows.map((r, i) => {
+          const time = fmtDuration(r.created_at, r.submitted_at);
+          return (
+            <li key={r.username}>
+              <Link
+                href={`/u/${encodeURIComponent(r.username)}`}
+                className={
+                  "flex items-center justify-between px-2 py-3 text-sm transition-colors hover:bg-slate-50 " +
+                  (r.username === viewerUsername ? "bg-brand/5 font-semibold text-brand" : "text-slate-700")
+                }
+              >
+                <span className="flex items-center gap-3">
+                  <span className="w-6 text-right font-mono text-xs text-slate-400">{i + 1}</span>
+                  <span>
+                    {r.username}
+                    {r.username === viewerUsername && " (you)"}
+                  </span>
                 </span>
-              </span>
-              <span className="flex items-center gap-4 font-mono text-xs text-slate-400">
-                {r.created_at && <span>{fmtDate(r.created_at)}</span>}
-                {r.total != null && <span>/{r.total} questions</span>}
-                <span className="text-sm font-semibold">
-                  {r.best_score} {unit}
+                <span className="flex items-center gap-4 font-mono text-xs text-slate-400">
+                  {time && <span>{time}</span>}
+                  <span className="text-sm font-semibold">
+                    {r.best_score} {unit}
+                  </span>
                 </span>
-              </span>
-            </Link>
-          </li>
-        ))}
+              </Link>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );
