@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { mocks, events } from "@/lib/db";
 import { serveSectionAttempt } from "@/lib/generate/serveAttempt";
 import type { Section } from "@/lib/config";
+import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 // Five sequential generations (some of which may hit the LLM) - generous
 // but bounded, matching /api/generate's own ceiling per section.
@@ -36,6 +37,8 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
+  const rl = checkRateLimit(`mocks:${user.id}`, 3, 5 * 60_000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
 
   const mockId = await mocks.create(user.id);
   try {

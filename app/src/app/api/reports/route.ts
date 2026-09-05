@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { attempts, sets, questionReports } from "@/lib/db";
 import type { GeneratedSet } from "@/lib/generate/types";
 import { allQuestions } from "@/lib/practice";
+import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 function parseSet(payload: unknown): GeneratedSet {
   let parsed: unknown = payload;
@@ -24,6 +25,9 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
+  const rl = checkRateLimit(`reports:${user.id}`, 10, 60_000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
+
   let body: { attemptId?: unknown; questionId?: unknown; reason?: unknown };
   try {
     body = await req.json();
