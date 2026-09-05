@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { mocks, events } from "@/lib/db";
-import { serveSectionAttempt } from "@/lib/generate/serveAttempt";
+import { serveSectionAttempt, NoSetsAvailableError } from "@/lib/generate/serveAttempt";
 import type { Section } from "@/lib/config";
 import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
-
-// Five sequential generations (some of which may hit the LLM) - generous
-// but bounded, matching /api/generate's own ceiling per section.
-export const maxDuration = 300;
 
 /** VARC and DILR bundle two sections into one timed phase, matching the
  * real CAT structure; QA is solo. Order matters - it's the sitting order. */
@@ -51,6 +47,12 @@ export async function POST() {
     // Partial mocks are useless - remove() cascades to whatever attempts
     // did generate successfully before the failure.
     await mocks.remove(mockId);
+    if (e instanceof NoSetsAvailableError) {
+      return NextResponse.json(
+        { error: "This service is not available right now - not enough sets pooled for a full mock yet. Please try a sectional set instead." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "Could not build the mock. " + (e instanceof Error ? e.message : "") },
       { status: 502 },

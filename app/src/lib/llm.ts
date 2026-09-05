@@ -148,7 +148,7 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
       }
       all429 = false;
       if (status < 200 || status >= 300)
-        throw new Error(`Groq chat failed: ${status}`);
+        throw new Error(`Groq chat failed: ${status} - ${body.slice(0, 300)}`);
       const data = JSON.parse(body);
       return data?.choices?.[0]?.message?.content ?? "";
     }

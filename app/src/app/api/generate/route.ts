@@ -2,11 +2,8 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { events } from "@/lib/db";
 import { SECTIONS, type Section } from "@/lib/config";
-import { serveSectionAttempt } from "@/lib/generate/serveAttempt";
+import { serveSectionAttempt, NoSetsAvailableError } from "@/lib/generate/serveAttempt";
 import { checkRateLimit, tooManyRequests } from "@/lib/rateLimit";
-
-// On-demand generation can take a while; Vercel Hobby max is 300s.
-export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -33,8 +30,14 @@ export async function POST(req: Request) {
     await events.log("generate", user.id, section);
     return NextResponse.json({ attemptId });
   } catch (e) {
+    if (e instanceof NoSetsAvailableError) {
+      return NextResponse.json(
+        { error: "This service is not available right now - please attempt one of your existing sets instead." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
-      { error: "Could not generate a set. " + (e instanceof Error ? e.message : "") },
+      { error: "Something went wrong. " + (e instanceof Error ? e.message : "") },
       { status: 502 },
     );
   }
