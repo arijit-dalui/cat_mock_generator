@@ -49,19 +49,23 @@ function fmtElapsed(sec: number): string {
 export default function PoolClient({ username }: { username: string }) {
   const [data, setData] = useState<PoolResponse | null>(null);
   const [error, setError] = useState("");
-  const [generating, setGenerating] = useState<Section | null>(null);
+  const [generating, setGenerating] = useState<Section | "batch" | null>(null);
   const [genMsg, setGenMsg] = useState("");
+  const [autoRunning, setAutoRunning] = useState<boolean | null>(null);
+  const [autoBusy, setAutoBusy] = useState(false);
 
   async function load() {
     try {
-      const res = await fetch("/api/admin/pool");
-      const d = await res.json();
-      if (!res.ok) {
+      const [poolRes, autoRes] = await Promise.all([fetch("/api/admin/pool"), fetch("/api/admin/pool/auto")]);
+      const d = await poolRes.json();
+      if (!poolRes.ok) {
         setError(d.error || "Failed to load pool health.");
         return;
       }
       setError("");
       setData(d);
+      const a = await autoRes.json();
+      if (autoRes.ok) setAutoRunning(a.running);
     } catch {
       setError("Network error.");
     }
@@ -74,6 +78,26 @@ export default function PoolClient({ username }: { username: string }) {
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, []);
+
+  async function toggleAuto() {
+    setAutoBusy(true);
+    try {
+      const res = await fetch("/api/admin/pool/auto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: autoRunning ? "stop" : "start" }),
+      });
+      const d = await res.json();
+      if (res.ok) setAutoRunning(d.running);
+    } finally {
+      setAutoBusy(false);
+    }
+  }
+
+  function summarise(results: { section: Section; accepted: boolean; score: number; notes: string }[]) {
+    const accepted = results.filter((r) => r.accepted).length;
+    return `${accepted}/${results.length} accepted - ` + results.map((r) => `${r.section}: ${r.accepted ? "accepted" : r.notes}`).join(" · ");
+  }
 
   async function generateNow(section: Section) {
     setGenerating(section);
@@ -103,15 +127,68 @@ export default function PoolClient({ username }: { username: string }) {
     }
   }
 
+  /** "Generate multiple together": one attempt per section that's still
+   * below target, fired concurrently in a single request. */
+  async function generateBatch() {
+    if (!data) return;
+    const needed = SECTIONS.filter((s) => data.sections[s].pooled < data.poolTarget);
+    if (needed.length === 0) {
+      setGenMsg("Every section is already at its pool target.");
+      return;
+    }
+    setGenerating("batch");
+    setGenMsg("");
+    try {
+      const res = await fetch("/api/admin/pool/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sections: needed }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setGenMsg(d.error || "Generation failed.");
+        return;
+      }
+      setGenMsg(summarise(d.results));
+      await load();
+    } catch {
+      setGenMsg("Network error.");
+    } finally {
+      setGenerating(null);
+    }
+  }
+
   return (
     <div className="app-shell min-h-screen">
       <AdminNavHeader active="/admin/pool" username={username} />
 
       <main className="mx-auto max-w-4xl px-6 py-8">
-        <h1 className="card-title text-2xl">Pool health</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          How many ready-to-serve sets are sitting in the pool per section, and how healthy they are.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="card-title text-2xl">Pool health</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              How many ready-to-serve sets are sitting in the pool per section, and how healthy they are.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button onClick={generateBatch} disabled={!!generating || autoRunning === true} className="btn-ghost text-sm">
+              {generating === "batch" ? "Generating..." : "Generate all needed now"}
+            </button>
+            <button
+              onClick={toggleAuto}
+              disabled={autoBusy || autoRunning === null}
+              className={"btn text-sm " + (autoRunning ? "bg-red-600 text-white hover:bg-red-700" : "btn-primary")}
+            >
+              {autoRunning === null ? "..." : autoRunning ? "Stop auto-generation" : "Start auto-generation"}
+            </button>
+          </div>
+        </div>
+        {autoRunning && (
+          <p className="mt-3 flex items-center gap-1.5 font-mono text-xs text-brand">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+            Auto-generation is running - it keeps every section topped up to target until you stop it.
+          </p>
+        )}
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         {genMsg && <p className="mt-3 text-sm text-slate-600">{genMsg}</p>}
 
@@ -167,7 +244,7 @@ export default function PoolClient({ username }: { username: string }) {
                       <td>
                         <button
                           onClick={() => generateNow(s)}
-                          disabled={!!generating || !!prog}
+                          disabled={!!generating || !!prog || autoRunning === true}
                           className="btn-ghost px-3 py-1 text-xs"
                         >
                           {generating === s ? "Generating..." : "Generate now"}
