@@ -193,15 +193,17 @@ export default function PoolClient({ username }: { username: string }) {
             <p className="mt-1 text-sm text-slate-500">
               Every generation attempt, whether or not it ended up in the pool - from the worker&apos;s topup
               route, the hosted cron-topup, and the &quot;Generate now&quot; button above, all judge-gated the
-              same way.
+              same way. &quot;Rejected&quot; is the automated judge scoring a generated set below the quality bar
+              and discarding it before it ever reaches your review queue - nothing you did, and nothing you
+              ever saw.
             </p>
             <table className="mt-4 w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase text-slate-400">
                   <th className="py-2">Section</th>
-                  <th>Accepted</th>
-                  <th>Rejected</th>
-                  <th>Errored</th>
+                  <th title="Passed the judge - sitting in Pending review or already approved">Accepted</th>
+                  <th title="The automated judge scored it below the quality bar and discarded it - not a human action">Rejected by judge</th>
+                  <th title="Generation crashed or timed out (LLM error, rate limit, etc.)">Errored</th>
                   <th>Accept rate</th>
                 </tr>
               </thead>
