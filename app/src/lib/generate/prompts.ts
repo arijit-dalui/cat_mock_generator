@@ -301,7 +301,40 @@ export function rcPrompt(passage: string, sourceLabel: string, exemplars: KbItem
   );
 }
 
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Real CAT DILR is ~50% TITA - mix it into the 4-question set instead of
+ * generating all-MCQ sets. Shared shape with QA_TITA_ADDENDUM. */
+const SET_TITA_ADDENDUM = (titaCount: number) =>
+  `\n\nTITA MIX (real CAT DILR is close to half TITA, not all MCQ): exactly ` +
+  `${titaCount} of the 4 questions must be TITA (type-in-the-answer, no ` +
+  `options) - pick whichever question(s) have a single unambiguous typed ` +
+  `answer (a number, a name, a short value). For those, use this shape ` +
+  `instead of the usual one: {"prompt": "...", "options": [], "format": ` +
+  `"tita", "answer": "<the exact value>", "explanations": [], "solution": ` +
+  `"..."}. "options" MUST be empty for a TITA question. The remaining ` +
+  `questions stay the normal 4-option MCQ shape.`;
+
 export function diPrompt(exemplars: KbItem[]): string {
+  const style = pick(["table", "caselet"] as const);
+  const datasetRules =
+    style === "table"
+      ? `Put the full dataset in "context" as a GitHub-Flavoured Markdown ` +
+        `table with concrete numeric cells. Example shape:\n\n` +
+        `| Year | Region A | Region B | Region C |\n|---|---|---|---|\n` +
+        `| 2018 | 124 | 87 | 156 |\n| 2019 | 138 | 93 | * |\n\n` +
+        `Then in the prose below: state the hidden relationship (e.g. ` +
+        `"Region C in 2019 grew by 12.5% over 2018").`
+      : `This is a CASELET set (real CAT format, no table at all - the data ` +
+        `is embedded in prose paragraphs, common in about half of CAT's DI ` +
+        `sets). Put 2-4 short paragraphs of interlocking numeric facts in ` +
+        `"context" (e.g. "Five companies P, Q, R, S, T reported a combined ` +
+        `revenue of 450 crore in 2023. P's revenue was 20% more than Q's, ` +
+        `which..."). No markdown table anywhere - every number must be ` +
+        `stated in a sentence, and the test-taker has to hold several facts ` +
+        `in mind at once to answer any single question.`;
   return (
     `You are a CAT data-interpretation paper-setter, writing for the ` +
     `99-percentile aspirant. Invent an original DI set: a compact dataset ` +
@@ -309,40 +342,47 @@ export function diPrompt(exemplars: KbItem[]): string {
     DIFFICULTY_RUBRIC +
     `\n\nDI-specific rules:\n` +
     `- The dataset must contain a HIDDEN constraint that has to be discovered ` +
-    `before the questions can be answered (e.g. one row's value is given ` +
-    `only via a relationship to others; a column total must be inferred; a ` +
-    `cell is "*" or "X" meaning "deducible from the rest"). State this ` +
-    `constraint in the prose below the table.\n` +
-    `- Questions must require COMBINING at least 2 cells with at least 1 ` +
-    `derived quantity (percentage change, ratio, growth rate, weighted ` +
-    `average). One-cell-lookup questions ("What is February sales of Beta?") ` +
+    `before the questions can be answered (e.g. one value is given only via ` +
+    `a relationship to others, or a total must be inferred). State this ` +
+    `constraint in the prose.\n` +
+    `- Questions must require COMBINING at least 2 facts/cells with at least ` +
+    `1 derived quantity (percentage change, ratio, growth rate, weighted ` +
+    `average). One-fact-lookup questions ("What is February sales of Beta?") ` +
     `are BANNED.\n` +
-    `- Use multi-period or multi-segment data (4-6 rows × 3-4 columns) so ` +
-    `the test-taker has to track which subset applies.\n` +
+    `- Use multi-period or multi-entity data (at least 4-5 distinct data ` +
+    `points) so the test-taker has to track which subset applies.\n` +
     `- At least one question should be a "smart-shortcut" question where ` +
     `the elegant path is much faster than brute computation.\n\n` +
-    `Put the full dataset in "context" as a GitHub-Flavoured Markdown table ` +
-    `with concrete numeric cells. Example shape:\n\n` +
-    `| Year | Region A | Region B | Region C |\n|---|---|---|---|\n` +
-    `| 2018 | 124 | 87 | 156 |\n| 2019 | 138 | 93 | * |\n\n` +
-    `Then in the prose below: state the hidden relationship (e.g. ` +
-    `"Region C in 2019 grew by 12.5% over 2018"). Each question option must ` +
-    `be a CONCRETE value (number, percentage, name, short phrase) — never ` +
-    `a placeholder like "o1".\n\n` +
-    `Solve each question yourself; the "answer" index must be numerically ` +
+    datasetRules +
+    ` Each question option must be a CONCRETE value (number, percentage, ` +
+    `name, short phrase) — never a placeholder like "o1".\n\n` +
+    `Solve each question yourself; the "answer" must be numerically ` +
     `correct.\n\n` + EXPLANATION_RUBRIC +
+    SET_TITA_ADDENDUM(1) +
     `\n\nUse straight ASCII quotes only; escape newlines as \\n inside JSON strings.` +
     formatExemplars(exemplars, 2) +
     `\n${SCHEMA_SET}`
   );
 }
 
+const LR_STYLE: Record<string, string> = {
+  arrangement:
+    "an ARRANGEMENT/ordering puzzle: entities placed in a line, circle, or grid (seating, ranking, scheduling slots).",
+  games_tournament:
+    "a GAMES & TOURNAMENTS puzzle: a knockout/round-robin/league scenario where entities (players/teams) earn scores, win/lose matches, or advance rounds, and the questions ask about final standings, who played whom, or scores under partial information.",
+  distribution:
+    "a DISTRIBUTION/SELECTION puzzle: items, roles, or resources allocated among entities under quota/preference constraints (e.g. who gets which prize, how many units each person receives).",
+  routes_network:
+    "a ROUTES/NETWORK puzzle: entities (cities, people, computers) connected by routes/relationships with costs, distances, or directions, and questions about shortest/valid paths or connectivity under the given constraints.",
+};
+
 export function lrPrompt(exemplars: KbItem[]): string {
+  const styleKey = pick(Object.keys(LR_STYLE));
+  const styleBrief = LR_STYLE[styleKey];
   return (
     `You are a CAT logical-reasoning paper-setter, writing for the ` +
-    `99-percentile aspirant. Invent an original LR set: a self-contained ` +
-    `scenario with a clear set of conditions (arrangement, distribution, ` +
-    `ordering, grouping, matching) plus exactly 4 questions.\n\n` +
+    `99-percentile aspirant. Invent an original LR set: ${styleBrief} plus ` +
+    `exactly 4 questions.\n\n` +
     DIFFICULTY_RUBRIC +
     `\n\nLR-specific rules:\n` +
     `- The set must be a "partial-info" puzzle: the conditions narrow the ` +
@@ -358,7 +398,8 @@ export function lrPrompt(exemplars: KbItem[]): string {
     `analysis.\n` +
     `- Avoid trivial puzzles like "5 people in a row, A is left of B, who ` +
     `sits at position 3?".\n\n` +
-    `In "context": first state the scenario in 1-3 sentences, then list the ` +
+    SET_TITA_ADDENDUM(1) +
+    `\n\nIn "context": first state the scenario in 1-3 sentences, then list the ` +
     `conditions as a numbered list (1., 2., 3., ...). Then briefly outline ` +
     `the solution space (e.g. "there are 3 valid arrangements; in all of ` +
     `them, X sits at position 1"). Solve the scenario yourself first; if no ` +
