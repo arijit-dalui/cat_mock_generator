@@ -32,7 +32,7 @@ export const config = {
   },
 
   llm: {
-    provider: env("LLM_PROVIDER", "ollama") as "ollama" | "groq" | "zai",
+    provider: env("LLM_PROVIDER", "ollama") as "ollama" | "groq" | "zai" | "deepseek" | "openrouter",
     ollamaUrl: env("OLLAMA_URL", "http://localhost:11434"),
     ollamaModel: env("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
     ollamaEmbedModel: env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
@@ -81,6 +81,18 @@ export const config = {
     zaiApiKey: process.env.ZAI_API_KEY || "",
     zaiModel: env("ZAI_MODEL", "glm-5.3-flash"),
     zaiJudgeModel: env("ZAI_JUDGE_MODEL", "glm-5.3-flash"),
+
+    // DeepSeek - OpenAI-compatible, strong at math/reasoning specifically
+    // (relevant to QA/DI answer-key correctness). Set LLM_PROVIDER=deepseek.
+    deepseekApiKey: process.env.DEEPSEEK_API_KEY || "",
+    deepseekModel: env("DEEPSEEK_MODEL", "deepseek-chat"),
+    deepseekJudgeModel: env("DEEPSEEK_JUDGE_MODEL", "deepseek-chat"),
+
+    // OpenRouter - aggregator, OpenAI-compatible. Genuinely free models (no
+    // coding-plan-style scoping) live here, e.g. "z-ai/glm-5.2:free".
+    openrouterApiKey: process.env.OPENROUTER_API_KEY || "",
+    openrouterModel: env("OPENROUTER_MODEL", "z-ai/glm-5.2:free"),
+    openrouterJudgeModel: env("OPENROUTER_JUDGE_MODEL", "z-ai/glm-5.2:free"),
   },
 
   extractionDocs: path.resolve(appRoot, env("EXTRACTION_DOCS", "../extraction/docs")),

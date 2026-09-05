@@ -728,6 +728,10 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
         ? config.llm.groqModel
         : config.llm.provider === "zai"
         ? config.llm.zaiModel
+        : config.llm.provider === "deepseek"
+        ? config.llm.deepseekModel
+        : config.llm.provider === "openrouter"
+        ? config.llm.openrouterModel
         : config.llm.ollamaModel,
     warnings,
   };

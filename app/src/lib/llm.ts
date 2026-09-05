@@ -201,10 +201,86 @@ async function zaiChat(prompt: string, opts: ChatOptions): Promise<string> {
   throw new Error("Z.ai chat failed: 429 after retries");
 }
 
+// ---- DeepSeek (hosted, OpenAI-compatible) ----------------------------------
+async function deepseekChat(prompt: string, opts: ChatOptions): Promise<string> {
+  const messages = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: prompt });
+  const payload = JSON.stringify({
+    model: opts.model ?? config.llm.deepseekModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 4096,
+    response_format: { type: "json_object" },
+  });
+  const url = "https://api.deepseek.com/chat/completions";
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { status, body, headers } = await rawPost(url, payload, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.llm.deepseekApiKey}`,
+    });
+    if (status === 429) {
+      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 25_000);
+      if (attempt < 3) {
+        await sleepMs(wait);
+        continue;
+      }
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`DeepSeek chat failed: ${status} - ${body.slice(0, 300)}`);
+    const data = JSON.parse(body);
+    return data?.choices?.[0]?.message?.content ?? "";
+  }
+  throw new Error("DeepSeek chat failed: 429 after retries");
+}
+
+// ---- OpenRouter (hosted, OpenAI-compatible aggregator) ---------------------
+async function openrouterChat(prompt: string, opts: ChatOptions): Promise<string> {
+  const messages = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: prompt });
+  const payload = JSON.stringify({
+    model: opts.model ?? config.llm.openrouterModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 4096,
+    response_format: { type: "json_object" },
+  });
+  const url = "https://openrouter.ai/api/v1/chat/completions";
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { status, body, headers } = await rawPost(url, payload, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.llm.openrouterApiKey}`,
+    });
+    if (status === 429) {
+      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 25_000);
+      if (attempt < 3) {
+        await sleepMs(wait);
+        continue;
+      }
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`OpenRouter chat failed: ${status} - ${body.slice(0, 300)}`);
+    const data = JSON.parse(body);
+    return data?.choices?.[0]?.message?.content ?? "";
+  }
+  throw new Error("OpenRouter chat failed: 429 after retries");
+}
+
 /** Send a prompt to the active provider, with one retry. */
 export async function chat(prompt: string, opts: ChatOptions = {}): Promise<string> {
   const fn =
-    config.llm.provider === "groq" ? groqChat : config.llm.provider === "zai" ? zaiChat : ollamaChat;
+    config.llm.provider === "groq"
+      ? groqChat
+      : config.llm.provider === "zai"
+      ? zaiChat
+      : config.llm.provider === "deepseek"
+      ? deepseekChat
+      : config.llm.provider === "openrouter"
+      ? openrouterChat
+      : ollamaChat;
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
