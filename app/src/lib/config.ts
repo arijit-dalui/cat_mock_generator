@@ -32,7 +32,7 @@ export const config = {
   },
 
   llm: {
-    provider: env("LLM_PROVIDER", "ollama") as "ollama" | "groq",
+    provider: env("LLM_PROVIDER", "ollama") as "ollama" | "groq" | "zai",
     ollamaUrl: env("OLLAMA_URL", "http://localhost:11434"),
     ollamaModel: env("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
     ollamaEmbedModel: env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
@@ -75,6 +75,12 @@ export const config = {
     // reasoning model (qwen3-32b), which keeps judging from dominating the
     // generation budget. Override with JUDGE_MODEL if you want a stronger judge.
     judgeModel: env("JUDGE_MODEL", "llama-3.1-8b-instant"),
+
+    // Z.ai (maker of GLM) - OpenAI-compatible endpoint, real free tier on
+    // the Flash models. Set LLM_PROVIDER=zai to use it instead of Groq.
+    zaiApiKey: process.env.ZAI_API_KEY || "",
+    zaiModel: env("ZAI_MODEL", "glm-5.3-flash"),
+    zaiJudgeModel: env("ZAI_JUDGE_MODEL", "glm-5.3-flash"),
   },
 
   extractionDocs: path.resolve(appRoot, env("EXTRACTION_DOCS", "../extraction/docs")),

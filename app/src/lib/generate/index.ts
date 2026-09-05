@@ -726,6 +726,8 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
     model:
       config.llm.provider === "groq"
         ? config.llm.groqModel
+        : config.llm.provider === "zai"
+        ? config.llm.zaiModel
         : config.llm.ollamaModel,
     warnings,
   };

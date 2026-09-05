@@ -124,7 +124,7 @@ export async function judgeSet(set: GeneratedSet): Promise<JudgeVerdict> {
       accept?: boolean;
     }>(JUDGE_PROMPT + "\n\nSET TO JUDGE:\n" + summariseForJudge(set), {
       temperature: 0.1,
-      model: config.llm.judgeModel,
+      model: config.llm.provider === "zai" ? config.llm.zaiJudgeModel : config.llm.judgeModel,
       // qwen3-32b on Groq has a smaller max_tokens than llama-3.3-70b.
       // The judge only needs ~200 tokens to output its small JSON.
       maxTokens: 1024,
