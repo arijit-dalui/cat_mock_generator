@@ -7,6 +7,7 @@ const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 
 interface SectionPool {
   section: string;
+  pending: number;
   pooled: number;
   served: number;
   avg_quality: number | null;
@@ -82,6 +83,7 @@ export default function PoolClient() {
               <thead>
                 <tr className="text-left text-xs uppercase text-slate-400">
                   <th className="py-2">Section</th>
+                  <th title="Judge-accepted, awaiting admin approval - not servable yet">Pending review</th>
                   <th>Pooled</th>
                   <th>Served</th>
                   <th>Avg quality</th>
@@ -96,6 +98,15 @@ export default function PoolClient() {
                   return (
                     <tr key={s} className="border-t border-slate-100">
                       <td className="py-2 font-medium text-slate-700">{s}</td>
+                      <td className={row.pending > 0 ? "font-semibold text-amber-600" : ""}>
+                        {row.pending > 0 ? (
+                          <Link href="/admin/questions" className="hover:underline">
+                            {row.pending}
+                          </Link>
+                        ) : (
+                          0
+                        )}
+                      </td>
                       <td className={"font-semibold " + healthColor(row.pooled, data.poolTarget)}>
                         {row.pooled} / {data.poolTarget}
                       </td>

@@ -11,6 +11,7 @@ const sinceDays = (col: string, n: number) =>
 
 interface Row {
   section: string;
+  pending: number;
   pooled: number;
   served: number;
   avg_quality: number | null;
@@ -42,6 +43,7 @@ export async function GET() {
 
   const rows = (await query(
     `SELECT section,
+            SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
             SUM(CASE WHEN status = 'pooled' THEN 1 ELSE 0 END) AS pooled,
             SUM(CASE WHEN status = 'served' THEN 1 ELSE 0 END) AS served,
             AVG(quality_score) AS avg_quality,
@@ -54,12 +56,13 @@ export async function GET() {
 
   const bySection: Record<string, Row> = {};
   for (const s of SECTIONS) {
-    bySection[s] = { section: s, pooled: 0, served: 0, avg_quality: null, low_quality: 0, generated_24h: 0, generated_7d: 0 };
+    bySection[s] = { section: s, pending: 0, pooled: 0, served: 0, avg_quality: null, low_quality: 0, generated_24h: 0, generated_7d: 0 };
   }
   for (const r of rows) {
     if (bySection[r.section]) {
       bySection[r.section] = {
         section: r.section,
+        pending: Number(r.pending),
         pooled: Number(r.pooled),
         served: Number(r.served),
         avg_quality: r.avg_quality == null ? null : Number(r.avg_quality),

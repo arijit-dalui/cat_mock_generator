@@ -305,6 +305,10 @@ export const sets = {
       id,
     );
   },
+  /** Inserts as 'pending' - judge-accepted, but not yet servable to real
+   * users until an admin approves it on the Question sets review page. Was
+   * previously inserted straight to 'pooled' (live immediately), which is
+   * exactly the "post before I've looked at it" problem this status fixes. */
   async insertWithQuality(
     section: string,
     payload: unknown,
@@ -314,10 +318,14 @@ export const sets = {
   ): Promise<number> {
     const info = db
       .prepare(
-        "INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes, status) VALUES (?, ?, ?, ?, ?, 'pending')",
       )
       .run(section, JSON.stringify(payload), createdBy, qualityScore, judgeNotes);
     return Number(info.lastInsertRowid);
+  },
+  /** Admin approval: moves a reviewed 'pending' set into the live pool. */
+  async approve(id: number): Promise<void> {
+    db.prepare("UPDATE generated_sets SET status = 'pooled' WHERE id = ? AND status = 'pending'").run(id);
   },
   /** Highest-quality pooled set in `section` the user has NOT seen yet, or
    * undefined if they've seen them all. The caller should generate a fresh set
@@ -330,6 +338,7 @@ export const sets = {
       .prepare(
         `SELECT g.* FROM generated_sets g
            WHERE g.section = ?
+             AND g.status = 'pooled'
              AND g.quality_score IS NOT NULL
              AND g.id NOT IN (SELECT set_id FROM user_seen_sets WHERE user_id = ?)
            ORDER BY g.quality_score DESC, g.created_at DESC LIMIT 1`,
@@ -364,22 +373,26 @@ export const sets = {
     section: string | null,
     limit: number,
     offset: number,
+    status?: string | null,
   ): Promise<PagedSet[]> {
+    const clauses: string[] = [];
+    const params: unknown[] = [];
     if (section) {
-      return db
-        .prepare(
-          `SELECT id, section, payload, status, quality_score, judge_notes, created_at
-             FROM generated_sets WHERE section = ?
-             ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-        )
-        .all(section, limit, offset) as PagedSet[];
+      clauses.push("section = ?");
+      params.push(section);
     }
+    if (status) {
+      clauses.push("status = ?");
+      params.push(status);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     return db
       .prepare(
         `SELECT id, section, payload, status, quality_score, judge_notes, created_at
-           FROM generated_sets ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+           FROM generated_sets ${where}
+           ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       )
-      .all(limit, offset) as PagedSet[];
+      .all(...params, limit, offset) as PagedSet[];
   },
   /** Hard-delete a set. Cascades to attempts and user_seen_sets. */
   async delete(id: number): Promise<void> {

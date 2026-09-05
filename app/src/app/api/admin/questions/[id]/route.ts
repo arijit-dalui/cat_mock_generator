@@ -48,6 +48,19 @@ function parseId(raw: string): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
+/** Admin-only: approve a 'pending' set into the live pool, after review. */
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const user = await currentUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Admin only." }, { status: 403 });
+  }
+  const id = parseId(params.id);
+  if (id === null) return NextResponse.json({ error: "Bad id." }, { status: 400 });
+
+  await sets.approve(id);
+  return NextResponse.json({ ok: true });
+}
+
 /** Admin-only: replace a set's payload (structured editor save). */
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const user = await currentUser();

@@ -397,6 +397,8 @@ export const sets = {
     )} WHERE id = ${id}`;
   },
   /** Insert a freshly generated set with judge quality score. */
+  /** Inserts as 'pending' - judge-accepted, but not yet servable to real
+   * users until an admin approves it on the Question sets review page. */
   async insertWithQuality(
     section: string,
     payload: unknown,
@@ -407,10 +409,15 @@ export const sets = {
     await ready;
     const rows = await sql<
       { id: number }[]
-    >`INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes)
-        VALUES (${section}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, ${createdBy}, ${qualityScore}, ${judgeNotes})
+    >`INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes, status)
+        VALUES (${section}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, ${createdBy}, ${qualityScore}, ${judgeNotes}, 'pending')
         RETURNING id`;
     return rows[0].id;
+  },
+  /** Admin approval: moves a reviewed 'pending' set into the live pool. */
+  async approve(id: number): Promise<void> {
+    await ready;
+    await sql`UPDATE generated_sets SET status = 'pooled' WHERE id = ${id} AND status = 'pending'`;
   },
   /** Highest-quality pooled set in `section` that this user has NOT yet seen,
    * or undefined when they've seen them all. The caller should generate a
@@ -430,6 +437,7 @@ export const sets = {
     >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
         FROM generated_sets g
         WHERE g.section = ${section}
+          AND g.status = 'pooled'
           AND g.quality_score IS NOT NULL
           AND g.id NOT IN (
             SELECT set_id FROM user_seen_sets WHERE user_id = ${userId}
@@ -471,12 +479,25 @@ export const sets = {
     section: string | null,
     limit: number,
     offset: number,
+    status?: string | null,
   ): Promise<PagedSet[]> {
     await ready;
+    if (section && status) {
+      return await sql<PagedSet[]>`
+        SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+          FROM generated_sets WHERE section = ${section} AND status = ${status}
+          ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    }
     if (section) {
       return await sql<PagedSet[]>`
         SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
           FROM generated_sets WHERE section = ${section}
+          ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    }
+    if (status) {
+      return await sql<PagedSet[]>`
+        SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+          FROM generated_sets WHERE status = ${status}
           ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
     }
     return await sql<PagedSet[]>`

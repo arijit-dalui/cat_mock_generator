@@ -6,6 +6,14 @@ import Link from "next/link";
 
 const TABS = ["All", "VA", "RC", "DI", "LR", "QA"] as const;
 type Tab = (typeof TABS)[number];
+const STATUS_TABS = ["pending", "pooled", "served", "all"] as const;
+type StatusTab = (typeof STATUS_TABS)[number];
+const STATUS_LABELS: Record<StatusTab, string> = {
+  pending: "Pending review",
+  pooled: "Pooled (live)",
+  served: "Served",
+  all: "All",
+};
 const OPT = ["A", "B", "C", "D"];
 
 interface GenQuestion {
@@ -125,18 +133,20 @@ function fmtDate(s: string): string {
 export default function QuestionsClient({ username }: { username: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("All");
+  const [statusTab, setStatusTab] = useState<StatusTab>("pending");
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<SetRow[]>([]);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(async (t: Tab, p: number) => {
+  const load = useCallback(async (t: Tab, s: StatusTab, p: number) => {
     setLoading(true);
     setError("");
     try {
       const qs = new URLSearchParams({ page: String(p) });
       if (t !== "All") qs.set("section", t);
+      if (s !== "all") qs.set("status", s);
       const res = await fetch(`/api/admin/questions?${qs}`);
       const d = await res.json();
       if (!res.ok) {
@@ -156,11 +166,16 @@ export default function QuestionsClient({ username }: { username: string }) {
   }, []);
 
   useEffect(() => {
-    load(tab, page);
-  }, [tab, page, load]);
+    load(tab, statusTab, page);
+  }, [tab, statusTab, page, load]);
 
   function selectTab(t: Tab) {
     setTab(t);
+    setPage(0);
+  }
+
+  function selectStatusTab(s: StatusTab) {
+    setStatusTab(s);
     setPage(0);
   }
 
@@ -190,16 +205,38 @@ export default function QuestionsClient({ username }: { username: string }) {
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-8">
-        <div className="flex flex-wrap gap-2">
+        <p className="text-sm text-slate-500">
+          Freshly generated sets land here as <strong>pending</strong> - review the questions and answers, then
+          approve to make a set live (servable to real users). Nothing generated reaches a user unreviewed.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {STATUS_TABS.map((s) => (
+            <button
+              key={s}
+              onClick={() => selectStatusTab(s)}
+              className={
+                "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
+                (statusTab === s
+                  ? "bg-brand text-white"
+                  : "bg-white text-slate-600 border border-slate-300 hover:bg-slate-50")
+              }
+            >
+              {STATUS_LABELS[s]}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
           {TABS.map((t) => (
             <button
               key={t}
               onClick={() => selectTab(t)}
               className={
-                "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors " +
                 (tab === t
-                  ? "bg-brand text-white"
-                  : "bg-white text-slate-600 border border-slate-300 hover:bg-slate-50")
+                  ? "bg-slate-800 text-white"
+                  : "bg-white text-slate-500 border border-slate-300 hover:bg-slate-50")
               }
             >
               {t}
@@ -213,10 +250,12 @@ export default function QuestionsClient({ username }: { username: string }) {
           {loading ? (
             <p className="text-sm text-slate-400">Loading...</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-slate-400">No sets in this section yet.</p>
+            <p className="text-sm text-slate-400">
+              {statusTab === "pending" ? "Nothing waiting on review." : "No sets match this filter."}
+            </p>
           ) : (
             rows.map((r) => (
-              <SetCard key={r.id} row={r} onChanged={() => load(tab, page)} />
+              <SetCard key={r.id} row={r} onChanged={() => load(tab, statusTab, page)} />
             ))
           )}
         </div>
@@ -271,6 +310,24 @@ function SetCard({ row, onChanged }: { row: SetRow; onChanged: () => void }) {
         return;
       }
       setMode("view");
+      onChanged();
+    } catch {
+      setMsg("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/admin/questions/${row.id}`, { method: "PATCH" });
+      const d = await res.json();
+      if (!res.ok) {
+        setMsg(d.error || "Approve failed.");
+        return;
+      }
       onChanged();
     } catch {
       setMsg("Network error.");
@@ -346,6 +403,15 @@ function SetCard({ row, onChanged }: { row: SetRow; onChanged: () => void }) {
         <div className="flex items-center gap-2">
           {mode === "view" ? (
             <>
+              {row.status === "pending" && (
+                <button
+                  onClick={approve}
+                  disabled={busy}
+                  className="btn rounded-lg bg-green-600 text-white hover:bg-green-700"
+                >
+                  {busy ? "Approving..." : "Approve"}
+                </button>
+              )}
               <button onClick={startEdit} className="btn-ghost" disabled={!row.payload}>
                 Edit
               </button>
