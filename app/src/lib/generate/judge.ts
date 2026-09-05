@@ -131,6 +131,8 @@ export async function judgeSet(set: GeneratedSet): Promise<JudgeVerdict> {
           ? config.llm.deepseekJudgeModel
           : config.llm.provider === "openrouter"
           ? config.llm.openrouterJudgeModel
+          : config.llm.provider === "gemini"
+          ? config.llm.geminiJudgeModel
           : config.llm.judgeModel,
       // qwen3-32b on Groq has a smaller max_tokens than llama-3.3-70b.
       // The judge only needs ~200 tokens to output its small JSON.

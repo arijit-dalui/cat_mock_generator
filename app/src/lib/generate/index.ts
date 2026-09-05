@@ -732,6 +732,8 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
         ? config.llm.deepseekModel
         : config.llm.provider === "openrouter"
         ? config.llm.openrouterModel
+        : config.llm.provider === "gemini"
+        ? config.llm.geminiModel
         : config.llm.ollamaModel,
     warnings,
   };

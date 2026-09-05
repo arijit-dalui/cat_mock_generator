@@ -32,7 +32,13 @@ export const config = {
   },
 
   llm: {
-    provider: env("LLM_PROVIDER", "ollama") as "ollama" | "groq" | "zai" | "deepseek" | "openrouter",
+    provider: env("LLM_PROVIDER", "ollama") as
+      | "ollama"
+      | "groq"
+      | "zai"
+      | "deepseek"
+      | "openrouter"
+      | "gemini",
     ollamaUrl: env("OLLAMA_URL", "http://localhost:11434"),
     ollamaModel: env("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
     ollamaEmbedModel: env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
@@ -85,14 +91,19 @@ export const config = {
     // DeepSeek - OpenAI-compatible, strong at math/reasoning specifically
     // (relevant to QA/DI answer-key correctness). Set LLM_PROVIDER=deepseek.
     deepseekApiKey: process.env.DEEPSEEK_API_KEY || "",
-    deepseekModel: env("DEEPSEEK_MODEL", "deepseek-chat"),
-    deepseekJudgeModel: env("DEEPSEEK_JUDGE_MODEL", "deepseek-chat"),
+    deepseekModel: env("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+    deepseekJudgeModel: env("DEEPSEEK_JUDGE_MODEL", "deepseek-v4-flash"),
 
     // OpenRouter - aggregator, OpenAI-compatible. Genuinely free models (no
     // coding-plan-style scoping) live here, e.g. "z-ai/glm-5.2:free".
     openrouterApiKey: process.env.OPENROUTER_API_KEY || "",
     openrouterModel: env("OPENROUTER_MODEL", "z-ai/glm-5.2:free"),
     openrouterJudgeModel: env("OPENROUTER_JUDGE_MODEL", "z-ai/glm-5.2:free"),
+
+    // Google Gemini - OpenAI-compatible endpoint, free Flash tier.
+    geminiApiKey: process.env.GEMINI_API_KEY || "",
+    geminiModel: env("GEMINI_MODEL", "gemini-2.5-flash"),
+    geminiJudgeModel: env("GEMINI_JUDGE_MODEL", "gemini-2.5-flash"),
   },
 
   extractionDocs: path.resolve(appRoot, env("EXTRACTION_DOCS", "../extraction/docs")),

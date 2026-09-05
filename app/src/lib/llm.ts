@@ -210,13 +210,18 @@ async function deepseekChat(prompt: string, opts: ChatOptions): Promise<string> 
     model: opts.model ?? config.llm.deepseekModel,
     messages,
     temperature: opts.temperature ?? 0.7,
-    // 4096, then 8000, both still truncated DI/RC mid-JSON ("Unbalanced JSON
-    // in LLM response"). DeepSeek V4 Flash supports up to 384K output tokens
-    // - our max_tokens was still the bottleneck, not the model. A full
-    // 4-question set with 4 options + 4 explanations + solution each can
-    // genuinely run several thousand tokens; give it real headroom.
-    max_tokens: opts.maxTokens ?? 16000,
+    // 4096, then 8000, then 16000 all still truncated DI/RC mid-JSON - turned
+    // out to be thinking mode (see below), not a token-budget problem. Set
+    // very high as a safety ceiling now that thinking is off and shouldn't
+    // actually be needed, rather than something we expect to hit.
+    max_tokens: opts.maxTokens ?? 200_000,
     response_format: { type: "json_object" },
+    // deepseek-v4-flash runs with "thinking" mode ON by default (high
+    // effort) - that's what was leaking full chain-of-thought ("wait, let
+    // me recalculate...") directly into the JSON string fields, no matter
+    // what the system prompt asked for. This is the actual documented
+    // override, not a prompt-engineering problem.
+    thinking: { type: "disabled" },
   });
   const url = "https://api.deepseek.com/chat/completions";
 
@@ -274,6 +279,40 @@ async function openrouterChat(prompt: string, opts: ChatOptions): Promise<string
   throw new Error("OpenRouter chat failed: 429 after retries");
 }
 
+// ---- Google Gemini (hosted, OpenAI-compatible) -----------------------------
+async function geminiChat(prompt: string, opts: ChatOptions): Promise<string> {
+  const messages = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: prompt });
+  const payload = JSON.stringify({
+    model: opts.model ?? config.llm.geminiModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 8000,
+    response_format: { type: "json_object" },
+  });
+  const url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { status, body, headers } = await rawPost(url, payload, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.llm.geminiApiKey}`,
+    });
+    if (status === 429) {
+      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 25_000);
+      if (attempt < 3) {
+        await sleepMs(wait);
+        continue;
+      }
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`Gemini chat failed: ${status} - ${body.slice(0, 300)}`);
+    const data = JSON.parse(body);
+    return data?.choices?.[0]?.message?.content ?? "";
+  }
+  throw new Error("Gemini chat failed: 429 after retries");
+}
+
 /** Send a prompt to the active provider, with one retry. */
 export async function chat(prompt: string, opts: ChatOptions = {}): Promise<string> {
   const fn =
@@ -285,6 +324,8 @@ export async function chat(prompt: string, opts: ChatOptions = {}): Promise<stri
       ? deepseekChat
       : config.llm.provider === "openrouter"
       ? openrouterChat
+      : config.llm.provider === "gemini"
+      ? geminiChat
       : ollamaChat;
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
