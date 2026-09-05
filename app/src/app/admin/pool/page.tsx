@@ -8,5 +8,5 @@ export default async function AdminPoolPage() {
   const user = await currentUser();
   if (!user) redirect("/login");
   if (user.role !== "admin") redirect("/dashboard");
-  return <PoolClient />;
+  return <PoolClient username={user.username} />;
 }

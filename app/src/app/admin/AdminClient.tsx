@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import AdminNavHeader from "../components/AdminNavHeader";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 
@@ -24,7 +23,6 @@ const SECTION_COLORS: Record<string, string> = {
 };
 
 export default function AdminClient({ username }: { username: string }) {
-  const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState("");
 
@@ -41,20 +39,22 @@ export default function AdminClient({ username }: { username: string }) {
     })();
   }, []);
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
-
   if (error)
     return (
-      <main className="mx-auto max-w-4xl px-6 py-10">
-        <p className="text-red-600">{error}</p>
-      </main>
+      <div className="app-shell min-h-screen">
+        <AdminNavHeader active="/admin" username={username} />
+        <main className="mx-auto max-w-4xl px-6 py-10">
+          <p className="text-red-600">{error}</p>
+        </main>
+      </div>
     );
   if (!stats)
-    return <main className="mx-auto max-w-4xl px-6 py-10 text-slate-400">Loading...</main>;
+    return (
+      <div className="app-shell min-h-screen">
+        <AdminNavHeader active="/admin" username={username} />
+        <main className="mx-auto max-w-4xl px-6 py-10 text-slate-400">Loading...</main>
+      </div>
+    );
 
   // Question distribution across sections, as a share of total generated.
   const dist = SECTIONS.map((s) => ({
@@ -75,30 +75,8 @@ export default function AdminClient({ username }: { username: string }) {
     .join(", ");
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <span className="font-bold text-slate-900">CAT Mock Generator - Admin</span>
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin/questions" className="font-medium text-slate-500 hover:text-brand">
-              Question sets
-            </Link>
-            <Link href="/admin/pool" className="font-medium text-slate-500 hover:text-brand">
-              Pool health
-            </Link>
-            <Link href="/admin/users" className="font-medium text-slate-500 hover:text-brand">
-              Users
-            </Link>
-            <Link href="/admin/reports" className="font-medium text-slate-500 hover:text-brand">
-              Reports
-            </Link>
-            <span className="text-slate-500">{username}</span>
-            <button onClick={logout} className="btn-ghost">
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="app-shell min-h-screen">
+      <AdminNavHeader active="/admin" username={username} />
 
       <main className="mx-auto max-w-4xl px-6 py-8 space-y-8">
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">

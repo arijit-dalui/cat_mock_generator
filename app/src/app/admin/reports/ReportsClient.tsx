@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import AdminNavHeader from "../../components/AdminNavHeader";
 
 interface ReportRow {
   id: number;
@@ -19,7 +20,7 @@ function fmtDate(s: string): string {
   return isNaN(d.getTime()) ? s : d.toLocaleString();
 }
 
-export default function ReportsClient() {
+export default function ReportsClient({ username }: { username: string }) {
   const [reports, setReports] = useState<ReportRow[] | null>(null);
   const [error, setError] = useState("");
   const [resolving, setResolving] = useState<number | null>(null);
@@ -53,18 +54,8 @@ export default function ReportsClient() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <span className="font-bold text-slate-900">CAT Mock Generator - Admin</span>
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin" className="font-medium text-slate-500 hover:text-brand">Dashboard</Link>
-            <Link href="/admin/questions" className="font-medium text-slate-500 hover:text-brand">Question sets</Link>
-            <Link href="/admin/pool" className="font-medium text-slate-500 hover:text-brand">Pool health</Link>
-            <Link href="/admin/users" className="font-medium text-slate-500 hover:text-brand">Users</Link>
-          </div>
-        </div>
-      </header>
+    <div className="app-shell min-h-screen">
+      <AdminNavHeader active="/admin/reports" username={username} />
 
       <main className="mx-auto max-w-4xl px-6 py-8">
         <h1 className="text-2xl font-bold text-slate-900">Reported questions</h1>

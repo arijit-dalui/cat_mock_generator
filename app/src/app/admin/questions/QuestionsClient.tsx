@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import AdminNavHeader from "../../components/AdminNavHeader";
 
 const TABS = ["All", "VA", "RC", "DI", "LR", "QA"] as const;
 type Tab = (typeof TABS)[number];
@@ -131,7 +130,6 @@ function fmtDate(s: string): string {
 }
 
 export default function QuestionsClient({ username }: { username: string }) {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("All");
   const [statusTab, setStatusTab] = useState<StatusTab>("pending");
   const [page, setPage] = useState(0);
@@ -179,30 +177,9 @@ export default function QuestionsClient({ username }: { username: string }) {
     setPage(0);
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
-
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Link href="/admin" className="text-sm font-medium text-brand">
-              &larr; Admin
-            </Link>
-            <span className="font-bold text-slate-900">Question sets</span>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-500">{username}</span>
-            <button onClick={logout} className="btn-ghost">
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="app-shell min-h-screen">
+      <AdminNavHeader active="/admin/questions" username={username} />
 
       <main className="mx-auto max-w-4xl px-6 py-8">
         <p className="text-sm text-slate-500">

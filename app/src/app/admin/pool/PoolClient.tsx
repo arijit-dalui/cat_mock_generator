@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import AdminNavHeader from "../../components/AdminNavHeader";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
+type Section = (typeof SECTIONS)[number];
 
 interface SectionPool {
   section: string;
@@ -20,9 +22,14 @@ interface GenActivity {
   rejected: number;
   errored: number;
 }
+interface InProgress {
+  since: string;
+  elapsedSec: number;
+}
 interface PoolResponse {
   sections: Record<string, SectionPool>;
   activity: Record<string, GenActivity>;
+  inProgress: Record<string, InProgress | null>;
   poolTarget: number;
   minQuality: number;
 }
@@ -34,46 +41,79 @@ function healthColor(pooled: number, target: number): string {
   return "text-red-600";
 }
 
-export default function PoolClient() {
+function fmtElapsed(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+}
+
+export default function PoolClient({ username }: { username: string }) {
   const [data, setData] = useState<PoolResponse | null>(null);
   const [error, setError] = useState("");
+  const [generating, setGenerating] = useState<Section | null>(null);
+  const [genMsg, setGenMsg] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/pool");
-        const d = await res.json();
-        if (!res.ok) {
-          setError(d.error || "Failed to load pool health.");
-          return;
-        }
-        setData(d);
-      } catch {
-        setError("Network error.");
+  async function load() {
+    try {
+      const res = await fetch("/api/admin/pool");
+      const d = await res.json();
+      if (!res.ok) {
+        setError(d.error || "Failed to load pool health.");
+        return;
       }
-    })();
+      setError("");
+      setData(d);
+    } catch {
+      setError("Network error.");
+    }
+  }
+
+  // Simple fixed-interval poll so "generating right now" and pool counts
+  // stay live without a page refresh.
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
   }, []);
 
+  async function generateNow(section: Section) {
+    setGenerating(section);
+    setGenMsg("");
+    try {
+      const res = await fetch("/api/admin/pool/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section, count: 1 }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setGenMsg(d.error || "Generation failed.");
+        return;
+      }
+      const r = d.results?.[0];
+      setGenMsg(
+        r?.accepted
+          ? `${section}: accepted (score ${r.score}) - now pending review.`
+          : `${section}: ${r?.notes || "not accepted"} (score ${r?.score ?? 0}).`,
+      );
+      await load();
+    } catch {
+      setGenMsg("Network error.");
+    } finally {
+      setGenerating(null);
+    }
+  }
+
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <span className="font-bold text-slate-900">CAT Mock Generator - Admin</span>
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/admin" className="font-medium text-slate-500 hover:text-brand">Dashboard</Link>
-            <Link href="/admin/questions" className="font-medium text-slate-500 hover:text-brand">Question sets</Link>
-            <Link href="/admin/users" className="font-medium text-slate-500 hover:text-brand">Users</Link>
-            <Link href="/admin/reports" className="font-medium text-slate-500 hover:text-brand">Reports</Link>
-          </div>
-        </div>
-      </header>
+    <div className="app-shell min-h-screen">
+      <AdminNavHeader active="/admin/pool" username={username} />
 
       <main className="mx-auto max-w-4xl px-6 py-8">
-        <h1 className="text-2xl font-bold text-slate-900">Pool health</h1>
+        <h1 className="card-title text-2xl">Pool health</h1>
         <p className="mt-1 text-sm text-slate-500">
           How many ready-to-serve sets are sitting in the pool per section, and how healthy they are.
         </p>
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {genMsg && <p className="mt-3 text-sm text-slate-600">{genMsg}</p>}
 
         {!data ? (
           <p className="mt-6 text-sm text-slate-400">Loading...</p>
@@ -83,21 +123,32 @@ export default function PoolClient() {
               <thead>
                 <tr className="text-left text-xs uppercase text-slate-400">
                   <th className="py-2">Section</th>
+                  <th>Status</th>
                   <th title="Judge-accepted, awaiting admin approval - not servable yet">Pending review</th>
                   <th>Pooled</th>
                   <th>Served</th>
                   <th>Avg quality</th>
                   <th title={`Quality score below MIN_QUALITY (${data.minQuality})`}>Below bar</th>
-                  <th>Generated 24h</th>
-                  <th>Generated 7d</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {SECTIONS.map((s) => {
                   const row = data.sections[s];
+                  const prog = data.inProgress[s];
                   return (
                     <tr key={s} className="border-t border-slate-100">
                       <td className="py-2 font-medium text-slate-700">{s}</td>
+                      <td>
+                        {prog ? (
+                          <span className="inline-flex items-center gap-1.5 font-mono text-xs text-brand">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+                            Generating - {fmtElapsed(prog.elapsedSec)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">idle</span>
+                        )}
+                      </td>
                       <td className={row.pending > 0 ? "font-semibold text-amber-600" : ""}>
                         {row.pending > 0 ? (
                           <Link href="/admin/questions" className="hover:underline">
@@ -113,8 +164,15 @@ export default function PoolClient() {
                       <td>{row.served}</td>
                       <td>{row.avg_quality == null ? "-" : row.avg_quality.toFixed(1)}</td>
                       <td className={row.low_quality > 0 ? "text-amber-600" : ""}>{row.low_quality}</td>
-                      <td>{row.generated_24h}</td>
-                      <td>{row.generated_7d}</td>
+                      <td>
+                        <button
+                          onClick={() => generateNow(s)}
+                          disabled={!!generating || !!prog}
+                          className="btn-ghost px-3 py-1 text-xs"
+                        >
+                          {generating === s ? "Generating..." : "Generate now"}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -123,17 +181,19 @@ export default function PoolClient() {
             <p className="mt-4 text-xs text-slate-400">
               &quot;Below bar&quot; sets scored under MIN_QUALITY ({data.minQuality}) but still got pooled anyway
               (a stale row from before the worker path was judge-gated too - see Generation activity below for
-              the real accept/reject/error split going forward).
+              the real accept/reject/error split going forward). &quot;Generate now&quot; runs one attempt on
+              demand, on top of whatever the background worker/cron is already doing.
             </p>
           </div>
         )}
 
         {data && (
           <div className="card mt-6 overflow-x-auto p-6">
-            <h2 className="text-lg font-semibold text-slate-900">Generation activity (last 24h)</h2>
+            <h2 className="card-title text-lg">Generation activity (last 24h)</h2>
             <p className="mt-1 text-sm text-slate-500">
               Every generation attempt, whether or not it ended up in the pool - from the worker&apos;s topup
-              route and the hosted cron-topup, both judge-gated the same way.
+              route, the hosted cron-topup, and the &quot;Generate now&quot; button above, all judge-gated the
+              same way.
             </p>
             <table className="mt-4 w-full text-sm">
               <thead>
