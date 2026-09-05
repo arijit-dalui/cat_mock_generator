@@ -121,11 +121,16 @@ export async function GET() {
   const inProgress: Record<string, { since: string; elapsedSec: number } | null> = {};
   for (const s of SECTIONS) inProgress[s] = null;
   const now = Date.now();
+  // generateOneForPool's own timeouts cap a real attempt at generateMs +
+  // judgeMs (185s + 30s by default); a gen_start older than that with no
+  // matching accept/reject/error means the process died mid-attempt (crash,
+  // restart) rather than being genuinely still in progress.
+  const STALE_CUTOFF_SEC = 240;
   for (const r of latestRows) {
     if (r.type !== "gen_start" || !inProgress.hasOwnProperty(r.section)) continue;
     const startedMs = parseDbDate(r.created_at);
     const elapsedSec = Math.max(0, Math.round((now - startedMs) / 1000));
-    if (elapsedSec < 600) {
+    if (elapsedSec < STALE_CUTOFF_SEC) {
       inProgress[r.section] = { since: r.created_at, elapsedSec };
     }
   }

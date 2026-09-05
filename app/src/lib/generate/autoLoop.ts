@@ -6,11 +6,18 @@
  * host this state wouldn't survive between invocations, same caveat as the
  * in-memory rate limiter (src/lib/rateLimit.ts).
  *
- * Each tick: find every section below poolTarget, fire one
- * generateOneForPool for EACH of them concurrently (that's the "generate
- * multiple together" part - one call per section in parallel, spread across
- * whatever Groq keys are configured), wait for the tick to finish, then
- * immediately check again. Idles with a short sleep when nothing's needed.
+ * Round-robins one section at a time - VA, then RC, then DI, then LR, then
+ * QA, back to VA - skipping only a section already at poolTarget. This is
+ * deliberately NOT "always generate whichever section is neediest": that
+ * approach starved DI and LR completely, because VA kept failing/rejecting
+ * and never filled up, so a priority-by-neediness loop got stuck retrying
+ * VA forever and never even attempted the other sections. A fixed
+ * round-robin guarantees every section gets a turn regardless of how often
+ * any other section fails. Firing several sections concurrently was also
+ * tried and made rate-limit timeouts worse (all of them competing for the
+ * same small pool of API keys at once) - one at a time is both fairer and
+ * more reliable. Use the "Generate all needed now" button for a genuine
+ * parallel burst instead.
  */
 import { SECTIONS, config, type Section } from "@/lib/config";
 import { sets } from "@/lib/db";
@@ -40,22 +47,30 @@ export function stopAutoLoop(): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+let cursor = 0;
+
 async function loop(): Promise<void> {
   while (running) {
-    const needed: Section[] = [];
-    for (const s of SECTIONS) {
-      const pool = await sets.qualityPoolCount(s);
-      if (pool < config.poolTarget) needed.push(s);
+    // Walk the fixed cycle starting from wherever we left off, generating
+    // for the first section that's still below target. Advancing the
+    // cursor every call (not just on a hit) is what makes this a true
+    // round-robin instead of "always start checking from VA".
+    let firedThisPass = false;
+    for (let i = 0; i < SECTIONS.length; i++) {
+      const section = SECTIONS[cursor % SECTIONS.length];
+      cursor += 1;
+      if (!running) return;
+      const pool = await sets.qualityPoolCount(section);
+      if (pool >= config.poolTarget) continue;
+      ticking = true;
+      lastTickAt = Date.now();
+      await generateOneForPool(section, "worker").catch(() => null);
+      ticking = false;
+      firedThisPass = true;
+      break;
     }
-    if (needed.length === 0) {
+    if (!firedThisPass) {
       await sleep(30_000);
-      continue;
     }
-    ticking = true;
-    lastTickAt = Date.now();
-    await Promise.all(needed.map((s) => generateOneForPool(s, "worker").catch(() => null)));
-    ticking = false;
-    // Loop straight back around - generateOneForPool already takes a while
-    // per section, so there's no need for an extra delay between ticks.
   }
 }
