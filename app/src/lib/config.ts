@@ -102,8 +102,10 @@ export const config = {
 
     // Google Gemini - OpenAI-compatible endpoint, free Flash tier.
     geminiApiKey: process.env.GEMINI_API_KEY || "",
-    geminiModel: env("GEMINI_MODEL", "gemini-2.5-flash"),
-    geminiJudgeModel: env("GEMINI_JUDGE_MODEL", "gemini-2.5-flash"),
+    // gemini-2.5-flash was retired for new users (404s with a "use
+    // gemini-3.6-flash" message) - confirmed via a live 404 response.
+    geminiModel: env("GEMINI_MODEL", "gemini-3.6-flash"),
+    geminiJudgeModel: env("GEMINI_JUDGE_MODEL", "gemini-3.6-flash"),
   },
 
   extractionDocs: path.resolve(appRoot, env("EXTRACTION_DOCS", "../extraction/docs")),

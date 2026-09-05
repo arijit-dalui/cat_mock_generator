@@ -106,7 +106,7 @@ async function topupOnce(req: Request) {
   // slot before starting, so fast sections still pack 2-3 per invocation.
   const BUDGET_MS = 270_000;
   const PER_SET_MS = 185_000;
-  const JUDGE_MS = 30_000;
+  const JUDGE_MS = 60_000; // free-tier judge pool can need 429-retry rounds; 30s was too tight
   let toGenerate = maxPerTick;
   while (toGenerate > 0) {
     // Don't START a set we can't finish within budget: reserve a full per-set

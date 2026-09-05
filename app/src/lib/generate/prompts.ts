@@ -221,7 +221,7 @@ const QA_DEPTH: Record<string, string> = {
   geometry:
     "Mix coordinate geometry with circle/triangle properties, or layer two non-trivial theorems (power-of-a-point, angle bisector, Stewart's, Apollonius, Ptolemy, inscribed-angle). Avoid plug-and-chug Pythagoras unless wrapped in a non-obvious construction.",
   algebra:
-    "Use Vieta's, polynomial-remainder reasoning, functional equations, AM-GM/Cauchy bounds, or non-trivial system-of-equations with a parametric twist. Avoid 'solve 2x+5=11' baby algebra.",
+    "Real CAT algebra, NOT olympiad/JEE algebra: linear/quadratic equations with a word-problem wrapper, simultaneous equations with 3+ unknowns needing elimination insight, arithmetic/geometric progressions, basic inequalities, logs/exponents, or simple functions and maxima-minima (basic AM-GM at most - two terms, never Cauchy-Schwarz). NEVER use functional equations (f(x)+f(g(x))=... type), Vieta's on abstract polynomials, or multi-theorem proof chains - those are JEE/olympiad, not CAT. Avoid 'solve 2x+5=11' baby algebra too; the difficulty comes from a wordy setup and careful reading, not advanced technique.",
   arithmetic:
     "Use multi-stage percentage chains, mixture/alligation with non-uniform proportions, ratio-and-proportion with a hidden invariant, time-speed-distance with relative motion + breaks, or partnership with profit-share twists. Numbers should resist mental arithmetic without insight.",
   number_system:

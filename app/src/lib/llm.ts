@@ -123,6 +123,12 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
     // under Groq's free-tier 6000 TPM per-request limit (8192 always 413'd).
     max_tokens: opts.maxTokens ?? config.llm.groqMaxTokens,
     response_format: { type: "json_object" },
+    // gpt-oss models are reasoning models too (hidden chain-of-thought by
+    // default) - confirmed this was the cause of Groq's own strict
+    // json_object validator rejecting output outright (400
+    // json_validate_failed, empty failed_generation) on harder prompts.
+    // Ignored by non-gpt-oss Groq models.
+    reasoning_effort: "low",
   });
   const keys = config.llm.groqApiKeys.length
     ? config.llm.groqApiKeys
@@ -259,14 +265,20 @@ async function openrouterChat(prompt: string, opts: ChatOptions): Promise<string
   });
   const url = "https://openrouter.ai/api/v1/chat/completions";
 
-  for (let attempt = 0; attempt < 4; attempt++) {
+  // Free-tier GLM on OpenRouter sees sustained multi-minute congestion windows
+  // upstream (confirmed: a manual retry loop needed 5 attempts at 60s
+  // intervals to succeed once), not brief spikes - the old 4-attempt/25s-cap
+  // backoff (~35s total) gave up well before congestion cleared. 7 attempts
+  // with a 30s cap (~130s total) fits inside generateSet's 260s budget.
+  const MAX_ATTEMPTS = 7;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const { status, body, headers } = await rawPost(url, payload, {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.llm.openrouterApiKey}`,
     });
     if (status === 429) {
-      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 25_000);
-      if (attempt < 3) {
+      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 30_000);
+      if (attempt < MAX_ATTEMPTS - 1) {
         await sleepMs(wait);
         continue;
       }
@@ -274,9 +286,18 @@ async function openrouterChat(prompt: string, opts: ChatOptions): Promise<string
     if (status < 200 || status >= 300)
       throw new Error(`OpenRouter chat failed: ${status} - ${body.slice(0, 300)}`);
     const data = JSON.parse(body);
-    return data?.choices?.[0]?.message?.content ?? "";
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    // Confirmed via LLM_DEBUG_DUMP: the free GLM pool sometimes returns
+    // HTTP 200 with an EMPTY content string when it's internally failing
+    // under congestion, instead of a proper 429 - retry that too, or every
+    // such response silently produces "No JSON found" with zero retries.
+    if (!content.trim() && attempt < MAX_ATTEMPTS - 1) {
+      await sleepMs(Math.min(5_000 * Math.pow(2, attempt), 30_000));
+      continue;
+    }
+    return content;
   }
-  throw new Error("OpenRouter chat failed: 429 after retries");
+  throw new Error("OpenRouter chat failed: 429/empty response after retries");
 }
 
 // ---- Google Gemini (hosted, OpenAI-compatible) -----------------------------
@@ -290,17 +311,33 @@ async function geminiChat(prompt: string, opts: ChatOptions): Promise<string> {
     temperature: opts.temperature ?? 0.7,
     max_tokens: opts.maxTokens ?? 8000,
     response_format: { type: "json_object" },
+    // gemini-3.6-flash is a "thinking" model by default: confirmed via
+    // LLM_DEBUG_DUMP that it was burning most of max_tokens on internal
+    // reasoning and getting cut off mid-JSON (same failure shape as
+    // DeepSeek's thinking mode). "none" is rejected outright (400) - "low"
+    // is the minimum accepted value on this endpoint.
+    reasoning_effort: "low",
   });
   const url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
-  for (let attempt = 0; attempt < 4; attempt++) {
+  // Free tier is a tight 5 requests/minute per model - confirmed via a live
+  // 429 body: {"details":[{"retryDelay":"46s"}]}. That delay is NOT an HTTP
+  // header (retryAfterMs can't see it), so on a plain header-based backoff
+  // we were retrying way too soon and never clearing the window. 6 attempts
+  // with a 60s cap gives real 429s room to actually clear.
+  const MAX_ATTEMPTS = 6;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const { status, body, headers } = await rawPost(url, payload, {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.llm.geminiApiKey}`,
     });
     if (status === 429) {
-      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 25_000);
-      if (attempt < 3) {
+      const bodyDelay = (() => {
+        const m = body.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/);
+        return m ? Number(m[1]) * 1000 : 0;
+      })();
+      const wait = Math.min(bodyDelay || retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 60_000);
+      if (attempt < MAX_ATTEMPTS - 1) {
         await sleepMs(wait);
         continue;
       }

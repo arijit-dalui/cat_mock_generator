@@ -29,11 +29,16 @@ export async function generateOneForPool(
   source: "worker" | "cron" | "admin",
   opts: { generateMs?: number; judgeMs?: number; debug?: boolean } = {},
 ): Promise<PoolGenResult> {
-  // 260s, not 185s: DI/LR prompts got meaningfully longer (caselet/games-
-  // tournament variety, TITA mixing, the rejection-feedback block) and were
-  // timing out at 185s on the free-tier model well over half the time.
-  const generateMs = opts.generateMs ?? 260_000;
-  const judgeMs = opts.judgeMs ?? 30_000;
+  // 400s, not 260s: QA runs 5 writer calls + up to ~8 per-question answer-
+  // verification calls, ALL sequential (genQuestions/verifyAnswer await one
+  // at a time, no parallelism) - confirmed via direct testing this legitimately
+  // needs more than 260s end-to-end on Groq's on_demand tier, not a hang.
+  const generateMs = opts.generateMs ?? 400_000;
+  // 90s, not 30s: on OpenRouter's free-tier GLM pool the judge call competes
+  // for the same congested/rate-limited upstream as the writer and can need
+  // its own 429-retry rounds - 30s was too tight and failed real judge calls
+  // that would have succeeded given a realistic budget.
+  const judgeMs = opts.judgeMs ?? 90_000;
   const t0 = Date.now();
   await recordGenerationStart(section, source);
   try {
