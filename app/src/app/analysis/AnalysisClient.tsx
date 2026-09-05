@@ -444,31 +444,29 @@ export default function AnalysisClient({ username }: { username: string }) {
               {sectionTopics.length === 0 ? (
                 <p className="mt-2 text-sm text-slate-400">Submit a {tab} mock to see topic-wise accuracy.</p>
               ) : (
-                <div className="mt-2 overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="-mx-6 mt-2 overflow-x-auto">
+                  <table className="w-full border-separate border-spacing-0 text-sm">
                     <thead>
                       <tr className="text-left text-xs uppercase text-slate-400">
-                        <th className="py-2">Topic</th>
+                        <th className="py-2 pl-6">Topic</th>
                         <th>Attempts</th>
                         <th>Correct</th>
                         <th>Wrong</th>
-                        <th>Accuracy</th>
+                        <th className="pr-6">Accuracy</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sectionTopics.map((t) => {
                         const acc = t.attempts > 0 ? (t.correct / t.attempts) * 100 : 0;
                         const weak = acc < 50;
+                        const niceTopic =
+                          TOPIC_NAMES[t.topic] || t.topic.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
                         return (
-                          <tr
-                            key={t.topic}
-                            className="border-t border-slate-100"
-                            style={weak ? { background: "var(--danger-pale)" } : undefined}
-                          >
-                            <td className="py-2 pr-3 font-medium text-slate-700">
-                              {TOPIC_NAMES[t.topic] || t.topic}
+                          <tr key={t.topic} className="border-t border-slate-100" style={weak ? { background: "var(--danger-pale)" } : undefined}>
+                            <td className={"py-2.5 pl-6 pr-3 font-medium text-slate-700" + (weak ? " rounded-l-lg" : "")}>
+                              {niceTopic}
                               {weak && (
-                                <span className="ml-2 rounded-sm bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white">
+                                <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
                                   Weak
                                 </span>
                               )}
@@ -476,7 +474,7 @@ export default function AnalysisClient({ username }: { username: string }) {
                             <td className="pr-3">{t.attempts}</td>
                             <td className="pr-3 font-medium text-green-600">{t.correct}</td>
                             <td className="pr-3 font-medium text-red-600">{t.wrong}</td>
-                            <td className="pr-3 font-semibold text-slate-900">{acc.toFixed(0)}%</td>
+                            <td className={"pr-6 font-semibold text-slate-900" + (weak ? " rounded-r-lg" : "")}>{acc.toFixed(0)}%</td>
                           </tr>
                         );
                       })}
