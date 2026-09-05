@@ -19,12 +19,18 @@ interface Row {
   generated_7d: number;
 }
 
-/** Real pool-health numbers from generated_sets - no accept/reject rate,
- * since a judge-rejected set is never persisted anywhere in this codebase
- * today (discarded in-memory, retried), so that rate genuinely isn't
- * derivable from stored data yet. "Low quality" (below MIN_QUALITY) is the
- * honest proxy: sets that made it into the pool but wouldn't clear the
- * judge's own bar. */
+interface GenRow {
+  section: string;
+  type: string;
+  n: number;
+}
+
+/** Real pool-health numbers from generated_sets, plus real accept/reject/
+ * error counts from the events table (gen_accept/gen_reject/gen_error,
+ * logged by both the worker's topup route and cron-topup - see
+ * src/lib/metrics.ts). "Low quality" (below MIN_QUALITY) is a separate,
+ * complementary signal: sets that made it into the pool but wouldn't clear
+ * the judge's own bar today. */
 export async function GET() {
   const admin = await currentUser();
   if (!admin) {
@@ -64,5 +70,29 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ sections: bySection, poolTarget: config.poolTarget, minQuality: config.minQuality });
+  // Generation activity over the last 24h, from events (gen_accept/gen_reject/
+  // gen_error) - honest counts of what the pipeline actually did, not just
+  // what survived into the pool.
+  const genRows = (await query(
+    `SELECT section, type, COUNT(*) AS n
+       FROM events
+      WHERE type IN ('gen_accept', 'gen_reject', 'gen_error') AND ${sinceDays("created_at", 1)}
+      GROUP BY section, type`,
+  )) as GenRow[];
+  const activity: Record<string, { accepted: number; rejected: number; errored: number }> = {};
+  for (const s of SECTIONS) activity[s] = { accepted: 0, rejected: 0, errored: 0 };
+  for (const r of genRows) {
+    if (!activity[r.section]) continue;
+    const n = Number(r.n);
+    if (r.type === "gen_accept") activity[r.section].accepted = n;
+    else if (r.type === "gen_reject") activity[r.section].rejected = n;
+    else if (r.type === "gen_error") activity[r.section].errored = n;
+  }
+
+  return NextResponse.json({
+    sections: bySection,
+    activity,
+    poolTarget: config.poolTarget,
+    minQuality: config.minQuality,
+  });
 }

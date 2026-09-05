@@ -17,6 +17,7 @@ import { config, SECTIONS, type Section } from "@/lib/config";
 import { sets } from "@/lib/db";
 import { generateSet } from "@/lib/generate";
 import { judgeSet } from "@/lib/generate/judge";
+import { recordGeneration } from "@/lib/metrics";
 
 export const maxDuration = 300;
 
@@ -135,6 +136,7 @@ async function topupOnce(req: Request) {
     if (!target) break;
     const sec = target.s;
 
+    const setStart = Date.now();
     try {
       const generated = await withTimeout(generateSet(sec), PER_SET_MS, `${sec} generateSet`);
       if (url.searchParams.get("debug")) {
@@ -142,6 +144,7 @@ async function topupOnce(req: Request) {
           generated.meta.warnings;
       }
       const verdict = await withTimeout(judgeSet(generated), JUDGE_MS, `${sec} judge`);
+      const ms = Date.now() - setStart;
       if (verdict.accept) {
         await sets.insertWithQuality(
           sec,
@@ -153,13 +156,17 @@ async function topupOnce(req: Request) {
         status[sec].generated += 1;
         status[sec].pool += 1;
         status[sec].lastNote = `accepted (score ${verdict.overall})`;
+        await recordGeneration(sec, "accept", { score: verdict.overall, ms, source: "cron" });
       } else {
         status[sec].rejected += 1;
         status[sec].lastNote = `rejected (score ${verdict.overall}): ${verdict.notes}`;
+        await recordGeneration(sec, "reject", { score: verdict.overall, notes: verdict.notes, ms, source: "cron" });
       }
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
       status[sec].errored += 1;
-      status[sec].lastNote = `error: ${e instanceof Error ? e.message : String(e)}`;
+      status[sec].lastNote = `error: ${message}`;
+      await recordGeneration(sec, "error", { notes: message, ms: Date.now() - setStart, source: "cron" });
     }
     toGenerate -= 1;
   }

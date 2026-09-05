@@ -96,11 +96,15 @@ while (true) {
       const t0 = Date.now();
       const r = await topup(section);
       const secs = ((Date.now() - t0) / 1000).toFixed(0);
-      console.log(
-        `[worker] ${section}: +1 (set ${r.id}, ${secs}s` +
-          (r.warnings?.length ? `, ${r.warnings.length} warnings` : "") +
-          ")",
-      );
+      if (r.rejected) {
+        console.log(`[worker] ${section}: rejected by judge (score ${r.score}, ${secs}s) - ${r.notes}`);
+      } else {
+        console.log(
+          `[worker] ${section}: +1 (set ${r.id}, score ${r.score}, ${secs}s` +
+            (r.warnings?.length ? `, ${r.warnings.length} warnings` : "") +
+            ")",
+        );
+      }
       didWork = true;
       break; // re-check counts after each generation
     } catch (e) {
