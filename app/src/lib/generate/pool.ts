@@ -29,7 +29,10 @@ export async function generateOneForPool(
   source: "worker" | "cron" | "admin",
   opts: { generateMs?: number; judgeMs?: number; debug?: boolean } = {},
 ): Promise<PoolGenResult> {
-  const generateMs = opts.generateMs ?? 185_000;
+  // 260s, not 185s: DI/LR prompts got meaningfully longer (caselet/games-
+  // tournament variety, TITA mixing, the rejection-feedback block) and were
+  // timing out at 185s on the free-tier model well over half the time.
+  const generateMs = opts.generateMs ?? 260_000;
   const judgeMs = opts.judgeMs ?? 30_000;
   const t0 = Date.now();
   await recordGenerationStart(section, source);
