@@ -9,7 +9,7 @@ export default function HomePage() {
         <ThemeToggle />
       </nav>
       <section className="mx-auto flex min-h-[calc(100dvh-6rem)] max-w-4xl flex-col justify-center py-16">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">Deliberate practice for CAT</p>
+        <p className="pill">Deliberate practice for CAT</p>
         <h1 className="display-type mt-4 max-w-3xl text-5xl font-bold leading-[0.96] text-slate-900 sm:text-7xl">
           Make every practice session count.
         </h1>

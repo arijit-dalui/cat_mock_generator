@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import ThemeToggle from "../components/ThemeToggle";
-import UserMenu from "../components/UserMenu";
+import NavHeader from "../components/NavHeader";
+import PageHeader from "../components/PageHeader";
+import SegmentedTabs from "../components/SegmentedTabs";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -141,72 +142,36 @@ export default function DashboardClient({ username }: { username: string }) {
 
   return (
     <div className="app-shell min-h-screen">
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
-          <div className="flex items-center gap-5 text-sm">
-            <Link href="/dashboard" className="font-medium text-brand">
-              Dashboard
-            </Link>
-            <Link href="/analysis" className="font-medium text-slate-500 hover:text-brand">
-              Analysis
-            </Link>
-            <Link href="/revise" className="font-medium text-slate-500 hover:text-brand">
-              Revise
-            </Link>
-            <ThemeToggle />
-            <UserMenu username={username} />
-          </div>
-        </div>
-      </header>
+      <NavHeader active="/dashboard" username={username} />
 
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="max-w-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">Practice desk</p>
-          <h1 className="display-type mt-3 text-4xl font-bold text-slate-900 sm:text-5xl">Choose a focus for today.</h1>
-          <p className="mt-3 text-slate-600">
-            {mode === "sectional"
+        <PageHeader
+          eyebrow="Practice desk"
+          title="Choose a focus for today."
+          subtitle={
+            mode === "sectional"
               ? "Build a practice habit one section at a time. Your completed sets remain here for review."
-              : "A full 3-hour CAT: VARC, then DILR, then QA, 40 minutes each, back to back."}
-          </p>
-        </div>
+              : "A full 3-hour CAT: VARC, then DILR, then QA, 40 minutes each, back to back."
+          }
+        />
 
-        <div className="mt-6 flex gap-2">
-          {(["sectional", "mock"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={
-                "rounded-lg px-4 py-2 text-sm font-semibold capitalize " +
-                (mode === m ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50")
-              }
-            >
-              {m === "sectional" ? "Sectional" : "Full Mock"}
-            </button>
-          ))}
+        <div className="mt-6">
+          <SegmentedTabs
+            options={["sectional", "mock"] as const}
+            value={mode}
+            onChange={setMode}
+            labels={{ sectional: "Sectional", mock: "Full Mock" }}
+          />
         </div>
 
         {mode === "sectional" ? (
           <>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {SECTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setTab(s)}
-                  className={
-                    "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
-                    (tab === s
-                      ? "bg-brand text-white"
-                      : "bg-white text-slate-600 border border-slate-300 hover:bg-slate-50")
-                  }
-                >
-                  {s}
-                </button>
-              ))}
+            <div className="mt-6">
+              <SegmentedTabs options={SECTIONS} value={tab} onChange={setTab} />
             </div>
 
             <section className="card mt-6 p-6">
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="card-title">
                 {SECTION_NAMES[tab]}
               </h2>
               <p className="mt-1 text-sm text-slate-500">{SET_SHAPE[tab]}</p>
@@ -221,7 +186,7 @@ export default function DashboardClient({ username }: { username: string }) {
             </section>
 
             <section className="mt-8">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              <h3 className="card-eyebrow">
                 Previously generated {tab} sets
               </h3>
               {loading ? (
@@ -276,7 +241,7 @@ export default function DashboardClient({ username }: { username: string }) {
         ) : (
           <>
             <section className="card mt-6 p-6">
-              <h2 className="text-lg font-semibold text-slate-900">Full Mock</h2>
+              <h2 className="card-title">Full Mock</h2>
               <p className="mt-1 text-sm text-slate-500">
                 Three timed sections in one sitting - VARC, DILR, then QA, 40 minutes each (120 total). Once a
                 section&apos;s time is up it auto-submits and the next one starts; there&apos;s no going back.
@@ -288,7 +253,7 @@ export default function DashboardClient({ username }: { username: string }) {
             </section>
 
             <section className="mt-8">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Previous mocks</h3>
+              <h3 className="card-eyebrow">Previous mocks</h3>
               {loading ? (
                 <div className="mt-4 space-y-2" aria-label="Loading previous mocks">
                   <div className="skeleton h-16 rounded-2xl" />

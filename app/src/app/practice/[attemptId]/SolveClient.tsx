@@ -269,6 +269,10 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showQuestionPaper, setShowQuestionPaper] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   // Strict mode (chosen on the instructions screen, before Start Test):
   // strict = real exam conditions - fullscreen lock, tab-switch detection,
@@ -507,6 +511,24 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
       return next;
     });
   }, []);
+
+  async function submitReport(questionId: string) {
+    setReportSubmitting(true);
+    try {
+      await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attemptId: Number(attemptId), questionId, reason: reportReason }),
+      });
+      setReportedIds((s) => new Set(s).add(questionId));
+      setReportOpen(false);
+      setReportReason("");
+    } catch {
+      /* best-effort - reporting isn't part of the graded flow */
+    } finally {
+      setReportSubmitting(false);
+    }
+  }
 
   if (error)
     return (
@@ -879,23 +901,35 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
 
         {/* Question pane */}
         <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, height: "calc(100vh - 156px)", overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 8 }}>
             <p style={{ fontWeight: 700, fontSize: 14 }}>Question No. {current + 1}</p>
-            <button
-              onClick={() => toggleMark(item.q.id)}
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                border: `1px solid ${isMarked ? EXAM_COLORS.marked : EXAM_COLORS.border}`,
-                background: isMarked ? EXAM_COLORS.markedBg : "#fff",
-                color: isMarked ? EXAM_COLORS.marked : EXAM_COLORS.textMuted,
-                borderRadius: 4,
-                padding: "4px 10px",
-                cursor: "pointer",
-              }}
-            >
-              {isMarked ? "Marked" : "Mark for Review"}
-            </button>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              {reportedIds.has(item.q.id) ? (
+                <span style={{ fontSize: 11, color: EXAM_COLORS.textMuted, alignSelf: "center" }}>Reported</span>
+              ) : (
+                <button
+                  onClick={() => setReportOpen(true)}
+                  style={{ fontSize: 11, fontWeight: 600, border: `1px solid ${EXAM_COLORS.border}`, background: "#fff", color: EXAM_COLORS.textMuted, borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}
+                >
+                  Report
+                </button>
+              )}
+              <button
+                onClick={() => toggleMark(item.q.id)}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: `1px solid ${isMarked ? EXAM_COLORS.marked : EXAM_COLORS.border}`,
+                  background: isMarked ? EXAM_COLORS.markedBg : "#fff",
+                  color: isMarked ? EXAM_COLORS.marked : EXAM_COLORS.textMuted,
+                  borderRadius: 4,
+                  padding: "4px 10px",
+                  cursor: "pointer",
+                }}
+              >
+                {isMarked ? "Marked" : "Mark for Review"}
+              </button>
+            </div>
           </div>
           <p style={{ fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{withInstructionFallback(item.q)}</p>
 
@@ -1211,6 +1245,36 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
       )}
 
       {showCalc && CALC_SECTIONS.has(data.set.section) && <Calculator onClose={() => setShowCalc(false)} />}
+
+      {reportOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 30 }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 380, width: "90%" }}>
+            <p style={{ fontWeight: 700, marginBottom: 8 }}>Report this question</p>
+            <p style={{ fontSize: 13, color: EXAM_COLORS.textMuted, marginBottom: 12 }}>
+              Flags it for an admin to review - doesn&apos;t affect your score or answer.
+            </p>
+            <textarea
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="What's wrong with it? (optional)"
+              rows={3}
+              style={{ width: "100%", border: `1px solid ${EXAM_COLORS.border}`, borderRadius: 4, padding: 8, fontSize: 13, fontFamily: "inherit", resize: "vertical" }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={() => setReportOpen(false)} style={{ border: `1px solid ${EXAM_COLORS.border}`, background: "#fff", borderRadius: 4, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => submitReport(item.q.id)}
+                disabled={reportSubmitting}
+                style={{ background: EXAM_COLORS.primary, color: "#fff", border: "none", borderRadius: 4, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                {reportSubmitting ? "Submitting..." : "Submit report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View Instructions overlay */}
       {showInstructions && (

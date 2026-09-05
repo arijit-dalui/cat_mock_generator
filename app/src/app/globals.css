@@ -1,14 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --bg: #f6f2eb;
-  --ink: #17261f;
-  --muted: #64706a;
-  --surface: #fffdf9;
-  --line: #ded9cf;
-  --focus: #a8472c;
+  --bg: #f6f8fc;
+  --ink: #0b0e14;
+  --muted: #5b6472;
+  --surface: #ffffff;
+  --line: #e3e8f0;
+  --focus: #3b82f6;
 }
 
 html,
@@ -25,56 +28,133 @@ body {
   box-sizing: border-box;
 }
 
+/* Everything that lives inside .app-shell (dashboard, analysis, revise,
+ * profile, public profile, auth pages) gets the editorial CAT-prep look:
+ * warm cream/terracotta, Fraunces serif for headings, DM Sans body,
+ * JetBrains Mono for labels and numerals. The live exam screens
+ * (SolveClient/MockClient/Calculator) never wrap in .app-shell, so they
+ * keep their own pixel-faithful exam look untouched. */
+.app-shell {
+  --bg: #f7f3ec;
+  --ink: #1a1714;
+  --muted: #7a7168;
+  --surface: #ede8dc;
+  --surface-2: #e3ddd1;
+  --line: rgba(26, 23, 20, 0.1);
+  --line-strong: rgba(26, 23, 20, 0.22);
+  --focus: #bf4e2b;
+  --success: #2d6a4f;
+  --success-pale: #c8e6d8;
+  --danger: #9b2335;
+  --danger-pale: #f3d0d5;
+  --amber: #a86a00;
+  --amber-pale: #f0e0b8;
+
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+.app-shell .font-serif { font-family: "Fraunces", Georgia, serif; }
+.app-shell .font-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+.app-shell .bg-white,
+.app-shell .bg-slate-50 { background-color: var(--surface) !important; }
+.app-shell [class~="bg-white/90"] { background-color: rgb(247 243 236 / 0.85) !important; }
+.app-shell .bg-slate-100 { background-color: var(--surface-2) !important; }
+.app-shell .text-slate-900 { color: var(--ink) !important; }
+.app-shell .text-slate-700,
+.app-shell .text-slate-600 { color: var(--ink) !important; }
+.app-shell .text-slate-500,
+.app-shell .text-slate-400 { color: var(--muted) !important; }
+.app-shell .border-slate-100,
+.app-shell .border-slate-200,
+.app-shell .border-slate-300 { border-color: var(--line) !important; }
+.app-shell .bg-slate-300 { background-color: var(--line-strong, var(--line)) !important; }
+.app-shell .hover\:bg-slate-50:hover,
+.app-shell .hover\:bg-slate-100:hover { background-color: var(--surface-2) !important; }
+
 .card {
-  @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
-  box-shadow: 0 14px 34px rgb(37 33 27 / 0.06);
+  @apply rounded-sm border border-slate-200 bg-white;
+}
+.app-shell .card {
+  background: var(--surface);
+  border-color: var(--line);
 }
 
 .btn {
-  @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm
+  @apply inline-flex items-center justify-center rounded-sm px-4 py-2 text-sm
     font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-50
     active:translate-y-px;
 }
 
 .btn-primary {
-  @apply btn bg-brand text-white hover:bg-brand-dark;
+  @apply btn bg-brand text-white hover:opacity-90;
 }
 
 .btn-ghost {
   @apply btn border border-slate-300 bg-white text-slate-700 hover:border-brand/40 hover:bg-brand/5 hover:text-brand;
 }
+.app-shell .btn-ghost {
+  background: var(--surface);
+  border-color: var(--line-strong, var(--line));
+  color: var(--ink);
+}
 
 .input {
-  @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm
+  @apply w-full rounded-sm border border-slate-300 px-3 py-2 text-sm
     outline-none focus:border-brand focus:ring-2 focus:ring-brand/20;
+}
+.app-shell .input {
+  background: var(--surface-2, var(--surface));
+  border-color: var(--line);
+  color: var(--ink);
 }
 
 .label {
   @apply mb-1 block text-sm font-medium text-slate-700;
 }
 
-.display-type {
-  font-family: Georgia, "Times New Roman", serif;
-  letter-spacing: -0.035em;
+/* A small accent tag, e.g. "ANALYSIS", "BENEFITS" - mono uppercase over a
+ * translucent brand tint. */
+.pill {
+  @apply inline-flex items-center rounded-sm px-3 py-1 text-xs font-semibold uppercase tracking-wide;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  background: rgb(191 78 43 / 0.12);
+  color: #9c3f22;
+}
+.dark .pill {
+  background: rgb(212 96 58 / 0.16);
+  color: #e28361;
 }
 
-.app-shell {
-  background:
-    radial-gradient(circle at 100% 0%, rgb(168 71 44 / 0.1), transparent 25rem),
-    radial-gradient(circle at 0% 100%, rgb(24 71 53 / 0.08), transparent 30rem),
-    var(--bg);
+/* The two recurring text roles inside a .card - a section title and a
+ * small mono eyebrow label above a stat/table. Defined once so every page
+ * (Dashboard, Analysis, Profile, Revise, public profile) uses the exact
+ * same size/weight/color instead of each call site picking its own. */
+.card-title {
+  @apply font-serif text-xl font-semibold text-slate-900;
+}
+.card-eyebrow {
+  @apply font-mono text-[11px] uppercase tracking-wider text-slate-500;
+}
+
+.display-type {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .focus-ring:focus-visible,
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 3px solid rgb(168 71 44 / 0.38);
+  outline: 3px solid rgb(191 78 43 / 0.38);
   outline-offset: 3px;
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #e9e4da 25%, #f4f0e9 40%, #e9e4da 60%);
+  background: linear-gradient(90deg, #e3ddd1 25%, #ede8dc 40%, #e3ddd1 60%);
   background-size: 200% 100%;
   animation: shimmer 1.25s ease-in-out infinite;
 }
@@ -84,31 +164,57 @@ input:focus-visible {
 }
 
 .dark {
-  --bg: #111714;
-  --ink: #eff4ed;
-  --muted: #aeb8b0;
-  --surface: #19211d;
-  --line: #304039;
+  --bg: #05070c;
+  --ink: #eef1f8;
+  --muted: #8b93a7;
+  --surface: #0d1017;
+  --line: rgb(255 255 255 / 0.09);
+  --focus: #60a5fa;
   color-scheme: dark;
+}
+
+.dark.app-shell,
+.dark .app-shell {
+  --bg: #141210;
+  --ink: #eae4d8;
+  --muted: #9b9288;
+  --surface: #1c1917;
+  --surface-2: #242018;
+  --line: rgba(234, 228, 216, 0.1);
+  --line-strong: rgba(234, 228, 216, 0.22);
+  --focus: #d4603a;
+  --success: #4caf82;
+  --success-pale: #0e2d1e;
+  --danger: #e05060;
+  --danger-pale: #2d0e14;
+  --amber: #d4a040;
+  --amber-pale: #2d2208;
+}
+
+.dark .card {
+  border-color: var(--line);
 }
 
 .dark body,
 .dark .bg-white { background-color: var(--surface) !important; }
-.dark [class~="bg-white/90"] { background-color: rgb(25 33 29 / 0.9) !important; }
-.dark .bg-slate-50 { background-color: #1e2823 !important; }
-.dark .bg-slate-100 { background-color: #26322c !important; }
-.dark .bg-slate-200 { background-color: #354139 !important; }
-.dark .text-slate-900 { color: #f0f5f0 !important; }
-.dark .text-slate-700 { color: #d6ded7 !important; }
-.dark .text-slate-600 { color: #c0c9c2 !important; }
+.dark [class~="bg-white/90"] { background-color: rgb(28 25 23 / 0.85) !important; }
+.dark .bg-slate-50 { background-color: var(--surface-2, #181c26) !important; }
+.dark .bg-slate-100 { background-color: #242018 !important; }
+.dark .bg-slate-200 { background-color: #2e2820 !important; }
+.dark .text-slate-900 { color: #f2f4f8 !important; }
+.dark .text-slate-700 { color: #d7dbe4 !important; }
+.dark .text-slate-600 { color: #b7bec9 !important; }
 .dark .text-slate-500,
-.dark .text-slate-400 { color: #aeb8b0 !important; }
+.dark .text-slate-400 { color: #9b9288 !important; }
 .dark .border-slate-100,
 .dark .border-slate-200,
 .dark .border-slate-300 { border-color: var(--line) !important; }
-.dark .hover\:bg-slate-50:hover { background-color: #26322c !important; }
-.dark .input { background: #111714; color: #f0f5f0; border-color: #415048; }
-.dark .skeleton { background: linear-gradient(90deg, #26322c 25%, #354139 40%, #26322c 60%); background-size: 200% 100%; }
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover { background-color: var(--surface-2, #181c26) !important; }
+.dark .input { background: #0b0e14; color: #f2f4f8; border-color: #2a303f; }
+.dark.app-shell .input,
+.dark .app-shell .input { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+.dark .skeleton { background: linear-gradient(90deg, #242018 25%, #2e2820 40%, #242018 60%); background-size: 200% 100%; }
 
 /* Correct/incorrect/marked-for-review badges (answer review, question
  * palette): the light-50/100 Tailwind backgrounds stay near-white in dark

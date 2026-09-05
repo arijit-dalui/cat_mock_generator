@@ -41,7 +41,7 @@ export default function LoginPage() {
       <div className="mx-auto flex max-w-md justify-end"><ThemeToggle /></div>
       <div className="mx-auto flex min-h-[calc(100dvh-6rem)] max-w-md flex-col justify-center">
       <div className="card p-8 sm:p-10">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">CAT practice</p>
+        <p className="pill">CAT practice</p>
         <h1 className="display-type mt-3 text-4xl font-bold text-slate-900">Welcome back</h1>
         <p className="mt-1 text-sm text-slate-500">
           Log in to generate and practise sets.

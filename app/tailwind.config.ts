@@ -7,10 +7,15 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#a8472c",
-          dark: "#84351f",
-          light: "#c45a3c",
+          DEFAULT: "#BF4E2B",
+          dark: "#9c3f22",
+          light: "#D4603A",
         },
+      },
+      fontFamily: {
+        serif: ["Fraunces", "Georgia", "serif"],
+        sans: ["DM Sans", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
     },
   },

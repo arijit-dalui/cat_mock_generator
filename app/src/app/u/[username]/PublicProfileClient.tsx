@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import ThemeToggle from "../../components/ThemeToggle";
-import UserMenu from "../../components/UserMenu";
+import NavHeader from "../../components/NavHeader";
 
 const SECTION_NAMES: Record<string, string> = {
   VA: "Verbal Ability",
@@ -54,21 +53,7 @@ export default function PublicProfileClient({ username, viewerUsername }: { user
 
   return (
     <div className="app-shell min-h-screen">
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
-          <div className="flex items-center gap-5 text-sm">
-            <Link href="/dashboard" className="font-medium text-slate-500 hover:text-brand">
-              Dashboard
-            </Link>
-            <Link href="/analysis" className="font-medium text-slate-500 hover:text-brand">
-              Analysis
-            </Link>
-            <ThemeToggle />
-            <UserMenu username={viewerUsername} />
-          </div>
-        </div>
-      </header>
+      <NavHeader active="" username={viewerUsername} maxWidth="max-w-3xl" />
 
       <main className="mx-auto max-w-3xl px-6 py-8">
         {error && (
@@ -82,19 +67,20 @@ export default function PublicProfileClient({ username, viewerUsername }: { user
         {!error && !data && <p className="text-slate-400">Loading...</p>}
         {data && (
           <>
-            <section className="card flex items-center gap-5 p-6">
+            <div className="h-2 bg-brand" />
+            <section className="card flex items-center gap-5 border-t-0 p-6">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand text-2xl font-bold text-white">
                 {data.username.charAt(0).toUpperCase()}
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-900">{data.username}</h1>
+                <h1 className="font-serif text-2xl font-semibold text-slate-900">{data.username}</h1>
                 <p className="mt-1 text-sm text-slate-500">Member since {fmtDate(data.createdAt)}</p>
               </div>
             </section>
 
             {Object.keys(data.socialLinks).length > 0 && (
               <section className="card mt-6 p-6">
-                <p className="text-sm font-semibold text-slate-700">Links</p>
+                <p className="card-eyebrow">Links</p>
                 <div className="mt-3 flex flex-wrap gap-3">
                   {Object.entries(data.socialLinks).map(([key, url]) => (
                     <a
@@ -112,18 +98,18 @@ export default function PublicProfileClient({ username, viewerUsername }: { user
             )}
 
             <section className="card mt-6 p-6">
-              <p className="text-sm font-semibold text-slate-700">Best scores</p>
+              <p className="card-eyebrow">Best scores</p>
               {Object.keys(data.sections).length === 0 ? (
                 <p className="mt-2 text-sm text-slate-400">No submitted mocks yet.</p>
               ) : (
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {Object.entries(data.sections).map(([section, info]) => (
-                    <div key={section} className="rounded-lg border border-slate-200 p-4">
-                      <p className="text-xs uppercase tracking-wide text-slate-400">{SECTION_NAMES[section] || section}</p>
+                    <div key={section} className="rounded-sm border border-slate-200 p-4">
+                      <p className="card-eyebrow">{SECTION_NAMES[section] || section}</p>
                       {info ? (
                         <>
-                          <p className="mt-1 text-2xl font-bold text-slate-900">{info.bestScore} marks</p>
-                          <p className="text-xs text-slate-500">
+                          <p className="mt-1 font-serif text-2xl font-semibold text-slate-900">{info.bestScore} marks</p>
+                          <p className="font-mono text-xs text-slate-500">
                             {info.percentile.toFixed(1)}th percentile of {info.population} attempts
                           </p>
                         </>

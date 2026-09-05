@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import ThemeToggle from "../components/ThemeToggle";
-import UserMenu from "../components/UserMenu";
+import NavHeader from "../components/NavHeader";
+import PageHeader from "../components/PageHeader";
+import SegmentedTabs from "../components/SegmentedTabs";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -42,15 +43,26 @@ interface PercentileInfo {
   population: number;
   rawScore: number;
 }
+interface MockHistoryRow {
+  id: number;
+  createdAt: string;
+  phases: Record<string, number>;
+  total: number;
+  percentile: number | null;
+  population: number;
+}
 interface HistoryResponse {
   history: AttemptSummary[];
   topics: Record<string, TopicRow[]>;
   percentile: Record<string, PercentileInfo | null>;
   overallPercentile: number | null;
+  mockHistory: MockHistoryRow[];
 }
 interface LeaderboardRow {
   username: string;
   best_score: number;
+  total: number | null;
+  created_at: string | null;
 }
 
 /** Friendly labels for the question `type` field, which doubles as a
@@ -142,7 +154,7 @@ function TrendChart({ points }: { points: { label: string; value: number; date: 
             const boxY = c.y > padTop + 30 ? c.y - 40 : c.y + 10;
             return (
               <g transform={`translate(${boxX},${boxY})`}>
-                <rect width={boxW} height={32} rx={4} className="fill-slate-900" opacity={0.9} />
+                <rect width={boxW} height={32} rx={2} fill="#1a1714" opacity={0.92} />
                 <text x={boxW / 2} y={13} textAnchor="middle" fontSize="10" fill="#fff" fontWeight={700}>
                   {c.value} marks
                 </text>
@@ -215,7 +227,7 @@ function ResultsBarChart({ attempts }: { attempts: AttemptSummary[] }) {
       })}
       {hover !== null && (
         <g style={{ pointerEvents: "none" }} transform={`translate(${Math.min(Math.max(startX + hover * (barW + gap) - 30, 2), w - 122)}, ${padTop})`}>
-          <rect width={120} height={44} rx={4} className="fill-slate-900" opacity={0.9} />
+          <rect width={120} height={44} rx={2} fill="#1a1714" opacity={0.92} />
           <text x={60} y={13} textAnchor="middle" fontSize="10" fill="#4ade80">{attempts[hover].correct} correct</text>
           <text x={60} y={25} textAnchor="middle" fontSize="10" fill="#f87171">{attempts[hover].incorrect} incorrect</text>
           <text x={60} y={37} textAnchor="middle" fontSize="10" fill="#cbd5e1">{attempts[hover].unanswered} unanswered</text>
@@ -229,6 +241,7 @@ export default function AnalysisClient({ username }: { username: string }) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [tab, setTab] = useState<Section>("VA");
   const [view, setView] = useState<"individual" | "comparative">("individual");
+  const [scope, setScope] = useState<"sectional" | "mock">("sectional");
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState("");
 
@@ -253,95 +266,117 @@ export default function AnalysisClient({ username }: { username: string }) {
     setLeaderboard(null);
     (async () => {
       try {
-        const res = await fetch(`/api/leaderboard?section=${tab}`);
+        const qs = scope === "mock" ? "scope=mock" : `section=${tab}`;
+        const res = await fetch(`/api/leaderboard?${qs}`);
         const d = await res.json();
         if (res.ok) setLeaderboard(d.leaderboard);
       } catch {
         /* non-fatal - the leaderboard card just shows its empty state */
       }
     })();
-  }, [view, tab]);
+  }, [view, scope, tab]);
 
   const sectionHistory = (history?.history ?? []).filter((h) => h.section === tab);
   const sectionTopics = history?.topics[tab] ?? [];
   const trendPoints = sectionHistory.map((h, i) => ({ label: `#${i + 1}`, value: h.rawScore, date: fmtDate(h.createdAt) }));
 
+  const mockHistory = history?.mockHistory ?? [];
+  const mockTrendPoints = mockHistory.map((m, i) => ({ label: `#${i + 1}`, value: m.total, date: fmtDate(m.createdAt) }));
+
   return (
     <div className="app-shell min-h-screen">
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
-          <div className="flex items-center gap-5 text-sm">
-            <Link href="/dashboard" className="font-medium text-slate-500 hover:text-brand">
-              Dashboard
-            </Link>
-            <Link href="/analysis" className="font-medium text-brand">
-              Analysis
-            </Link>
-            <Link href="/revise" className="font-medium text-slate-500 hover:text-brand">
-              Revise
-            </Link>
-            <ThemeToggle />
-            <UserMenu username={username} />
-          </div>
-        </div>
-      </header>
+      <NavHeader active="/analysis" username={username} />
 
       <main className="mx-auto max-w-5xl px-6 py-8">
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-        <div className="max-w-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">Analysis</p>
-          <h1 className="display-type mt-2 text-3xl font-bold text-slate-900">Your progress, section by section.</h1>
-          <p className="mt-2 text-slate-500">
-            Computed from your own submitted mocks - score trend, mock history, and topic-wise accuracy.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Analysis"
+          title="Your progress, section by section."
+          subtitle="Computed from your own submitted mocks - score trend, mock history, and topic-wise accuracy."
+        />
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-2">
-            {(["individual", "comparative"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={
-                  "rounded-lg px-4 py-2 text-sm font-semibold capitalize " +
-                  (view === v ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50")
-                }
-              >
-                {v} performance
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {SECTIONS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setTab(s)}
-                className={
-                  "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
-                  (tab === s
-                    ? "bg-brand text-white"
-                    : "bg-white text-slate-600 border border-slate-300 hover:bg-slate-50")
-                }
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <SegmentedTabs
+            options={["individual", "comparative"] as const}
+            value={view}
+            onChange={setView}
+            labels={{ individual: "Individual performance", comparative: "Comparative performance" }}
+          />
+          {scope === "sectional" && <SegmentedTabs options={SECTIONS} value={tab} onChange={setTab} />}
         </div>
 
-        {view === "individual" ? (
+        <div className="mt-4">
+          <SegmentedTabs
+            options={["sectional", "mock"] as const}
+            value={scope}
+            onChange={setScope}
+            labels={{ sectional: "Sectional", mock: "Full Mock" }}
+          />
+        </div>
+
+        {view === "individual" && scope === "mock" ? (
           <>
             <section className="card mt-6 p-6">
-              <p className="text-sm font-semibold text-slate-700">Score trend - {SECTION_NAMES[tab]}</p>
+              <p className="card-title">Score trend - Full Mock</p>
+              <div className="mt-2 text-brand">
+                <TrendChart points={mockTrendPoints} />
+              </div>
+            </section>
+
+            <section className="card mt-6 p-6">
+              <p className="card-title">Full Mock history</p>
+              {mockHistory.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-400">No full mocks submitted yet.</p>
+              ) : (
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase text-slate-400">
+                        <th className="py-2">Date</th>
+                        <th>VARC</th>
+                        <th>DILR</th>
+                        <th>QA</th>
+                        <th>Total</th>
+                        <th>Percentile</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...mockHistory].reverse().map((m) => (
+                        <tr key={m.id} className="border-t border-slate-100">
+                          <td className="py-2 pr-3 text-slate-600">{fmtDate(m.createdAt)}</td>
+                          <td className="pr-3 font-mono text-slate-700">{m.phases.VARC ?? 0}</td>
+                          <td className="pr-3 font-mono text-slate-700">{m.phases.DILR ?? 0}</td>
+                          <td className="pr-3 font-mono text-slate-700">{m.phases.QA ?? 0}</td>
+                          <td className="pr-3 font-semibold text-slate-900">{m.total}</td>
+                          <td className="pr-3 font-mono text-slate-700">
+                            {m.percentile == null ? "-" : `${m.percentile.toFixed(1)}%ile`}
+                          </td>
+                          <td>
+                            <Link href={`/mocks/${m.id}`} className="text-xs font-medium text-brand">
+                              View
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        ) : view === "individual" ? (
+          <>
+            <section className="card mt-6 p-6">
+              <p className="card-title">Score trend - {SECTION_NAMES[tab]}</p>
               <div className="mt-2 text-brand">
                 <TrendChart points={trendPoints} />
               </div>
             </section>
 
             <section className="card mt-6 p-6">
-              <p className="text-sm font-semibold text-slate-700">Correct vs incorrect, per test - {SECTION_NAMES[tab]}</p>
+              <p className="card-title">Correct vs incorrect, per test - {SECTION_NAMES[tab]}</p>
               <div className="mt-2">
                 <ResultsBarChart attempts={sectionHistory} />
               </div>
@@ -353,7 +388,7 @@ export default function AnalysisClient({ username }: { username: string }) {
             </section>
 
             <section className="card mt-6 p-6">
-              <p className="text-sm font-semibold text-slate-700">Mock history - {SECTION_NAMES[tab]}</p>
+              <p className="card-title">Mock history - {SECTION_NAMES[tab]}</p>
               {sectionHistory.length === 0 ? (
                 <p className="mt-2 text-sm text-slate-400">No {tab} mocks submitted yet.</p>
               ) : (
@@ -391,7 +426,7 @@ export default function AnalysisClient({ username }: { username: string }) {
             </section>
 
             <section className="card mt-6 p-6">
-              <p className="text-sm font-semibold text-slate-700">Topic accuracy - {SECTION_NAMES[tab]}</p>
+              <p className="card-title">Topic accuracy - {SECTION_NAMES[tab]}</p>
               {sectionTopics.length === 0 ? (
                 <p className="mt-2 text-sm text-slate-400">Submit a {tab} mock to see topic-wise accuracy.</p>
               ) : (
@@ -409,12 +444,17 @@ export default function AnalysisClient({ username }: { username: string }) {
                     <tbody>
                       {sectionTopics.map((t) => {
                         const acc = t.attempts > 0 ? (t.correct / t.attempts) * 100 : 0;
+                        const weak = acc < 50;
                         return (
-                          <tr key={t.topic} className="border-t border-slate-100">
+                          <tr
+                            key={t.topic}
+                            className="border-t border-slate-100"
+                            style={weak ? { background: "var(--danger-pale)" } : undefined}
+                          >
                             <td className="py-2 pr-3 font-medium text-slate-700">
                               {TOPIC_NAMES[t.topic] || t.topic}
-                              {acc < 50 && (
-                                <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600">
+                              {weak && (
+                                <span className="ml-2 rounded-sm bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white">
                                   Weak
                                 </span>
                               )}
@@ -432,26 +472,31 @@ export default function AnalysisClient({ username }: { username: string }) {
               )}
             </section>
           </>
+        ) : scope === "mock" ? (
+          <>
+            <ComparativeMockPanel latest={mockHistory[mockHistory.length - 1] ?? null} />
+            <Leaderboard title="Full Mock Leaderboard" rows={leaderboard} viewerUsername={username} unit="marks" />
+          </>
         ) : (
           <>
             <section className="card mt-6 p-6">
-              <p className="text-sm font-semibold text-slate-700">Overall percentile</p>
+              <p className="card-eyebrow">Overall percentile</p>
               {history?.overallPercentile == null ? (
                 <p className="mt-2 text-sm text-slate-400">
                   Not enough data across sections yet to compute an overall standing.
                 </p>
               ) : (
                 <>
-                  <p className="mt-2 text-4xl font-bold text-slate-900">
+                  <p className="mt-2 font-serif text-4xl font-bold text-brand">
                     {history.overallPercentile.toFixed(1)}
-                    <span className="text-lg font-medium text-slate-400">th percentile</span>
+                    <span className="font-sans text-lg font-medium text-slate-400">th percentile</span>
                   </p>
                   <p className="mt-1 text-sm text-slate-500">Average of your per-section percentiles below.</p>
                 </>
               )}
             </section>
             <ComparativePanel section={tab} info={history?.percentile[tab] ?? null} />
-            <Leaderboard section={tab} rows={leaderboard} viewerUsername={username} />
+            <Leaderboard title={`Leaderboard - ${SECTION_NAMES[tab]}`} rows={leaderboard} viewerUsername={username} unit="marks" />
           </>
         )}
       </main>
@@ -466,7 +511,7 @@ export default function AnalysisClient({ username }: { username: string }) {
 function ComparativePanel({ section, info }: { section: Section; info: PercentileInfo | null }) {
   return (
     <section className="card mt-6 p-6">
-      <p className="text-sm font-semibold text-slate-700">Comparative standing - {SECTION_NAMES[section]}</p>
+      <p className="card-eyebrow">Comparative standing - {SECTION_NAMES[section]}</p>
       {!info ? (
         <p className="mt-3 text-sm text-slate-400">
           Not enough submitted {section} attempts yet (from you or other users) to compute a comparison.
@@ -474,9 +519,9 @@ function ComparativePanel({ section, info }: { section: Section; info: Percentil
         </p>
       ) : (
         <div className="mt-4">
-          <p className="text-4xl font-bold text-slate-900">
+          <p className="font-serif text-4xl font-bold text-brand">
             {info.percentile.toFixed(1)}
-            <span className="text-lg font-medium text-slate-400">th percentile</span>
+            <span className="font-sans text-lg font-medium text-slate-400">th percentile</span>
           </p>
           <p className="mt-1 text-sm text-slate-500">
             Your latest {section} attempt scored {info.rawScore} marks - better than {info.percentile.toFixed(0)}%
@@ -491,39 +536,140 @@ function ComparativePanel({ section, info }: { section: Section; info: Percentil
   );
 }
 
+/** Comparative standing for the user's most recent full mock - same honest
+ * "not enough data" rule as the sectional panel above. */
+function ComparativeMockPanel({ latest }: { latest: MockHistoryRow | null }) {
+  return (
+    <section className="card mt-6 p-6">
+      <p className="card-eyebrow">Comparative standing - Full Mock</p>
+      {!latest || latest.percentile == null ? (
+        <p className="mt-3 text-sm text-slate-400">
+          Not enough submitted full mocks yet (from you or other users) to compute a comparison.
+          This fills in automatically as more mocks get submitted.
+        </p>
+      ) : (
+        <div className="mt-4">
+          <p className="font-serif text-4xl font-bold text-brand">
+            {latest.percentile.toFixed(1)}
+            <span className="font-sans text-lg font-medium text-slate-400">th percentile</span>
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Your latest full mock scored {latest.total} marks - better than {latest.percentile.toFixed(0)}%
+            of {latest.population} submitted full mocks across all users.
+          </p>
+          <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-brand" style={{ width: `${latest.percentile}%` }} />
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** Top 10 by best score in a section, from real submitted attempts. Click a
  * row to see that person's public profile (best scores + whatever links
  * they've chosen to share - never anything private). */
-function Leaderboard({ section, rows, viewerUsername }: { section: Section; rows: LeaderboardRow[] | null; viewerUsername: string }) {
+const PODIUM_ORDER = [1, 0, 2]; // display order: 2nd, 1st, 3rd, tallest bar in the middle
+
+function Leaderboard({
+  title,
+  rows,
+  viewerUsername,
+  unit,
+}: {
+  title: string;
+  rows: LeaderboardRow[] | null;
+  viewerUsername: string;
+  unit: string;
+}) {
+  if (rows === null) {
+    return (
+      <section className="card mt-6 p-6">
+        <p className="card-title">{title}</p>
+        <p className="mt-2 text-sm text-slate-400">Loading...</p>
+      </section>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <section className="card mt-6 p-6">
+        <p className="card-title">{title}</p>
+        <p className="mt-2 text-sm text-slate-400">No submitted attempts yet.</p>
+      </section>
+    );
+  }
+
+  const top3 = rows.slice(0, 3);
+  const maxScore = Math.max(...top3.map((r) => r.best_score), 1);
+  // Bar heights: 1st tallest, 2nd/3rd scaled relative to it, with a floor so
+  // a lopsided leaderboard (e.g. only one entrant) doesn't collapse a bar.
+  const barHeight = (score: number) => Math.max(40, (score / maxScore) * 120);
+
   return (
     <section className="card mt-6 p-6">
-      <p className="text-sm font-semibold text-slate-700">Leaderboard - {SECTION_NAMES[section]}</p>
-      {rows === null ? (
-        <p className="mt-2 text-sm text-slate-400">Loading...</p>
-      ) : rows.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-400">No submitted {section} attempts yet.</p>
-      ) : (
-        <ol className="mt-3 space-y-1">
-          {rows.map((r, i) => (
-            <li key={r.username}>
+      <p className="card-title">{title}</p>
+
+      {/* Podium - top 3 */}
+      <div className="mt-6 flex items-end justify-center gap-4">
+        {PODIUM_ORDER.filter((i) => i < top3.length).map((i) => {
+          const r = top3[i];
+          const rank = i + 1;
+          const barColor = rank === 1 ? "var(--focus)" : rank === 2 ? "var(--muted)" : "var(--amber)";
+          return (
+            <div key={r.username} className="flex w-28 flex-col items-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
+                {r.username.charAt(0).toUpperCase()}
+              </div>
               <Link
                 href={`/u/${encodeURIComponent(r.username)}`}
-                className={
-                  "flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-50 " +
-                  (r.username === viewerUsername ? "bg-brand/5 font-semibold text-brand" : "text-slate-700")
-                }
+                className="mt-2 max-w-full truncate text-sm font-medium text-slate-900 hover:text-brand"
               >
+                {r.username}
+                {r.username === viewerUsername && " (you)"}
+              </Link>
+              <div
+                className="mt-2 flex w-full flex-col items-center justify-start rounded-sm pt-2"
+                style={{ height: barHeight(r.best_score), background: barColor, opacity: rank === 1 ? 1 : 0.75 }}
+              >
+                <span className="font-mono text-xs font-bold text-white">#{rank}</span>
+              </div>
+              <p className="mt-1 font-mono text-xs text-slate-500">
+                {r.best_score} {unit}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Full list */}
+      <ol className="mt-6 divide-y divide-slate-100 border-t border-slate-100">
+        {rows.map((r, i) => (
+          <li key={r.username}>
+            <Link
+              href={`/u/${encodeURIComponent(r.username)}`}
+              className={
+                "flex items-center justify-between px-2 py-3 text-sm transition-colors hover:bg-slate-50 " +
+                (r.username === viewerUsername ? "bg-brand/5 font-semibold text-brand" : "text-slate-700")
+              }
+            >
+              <span className="flex items-center gap-3">
+                <span className="w-6 text-right font-mono text-xs text-slate-400">{i + 1}</span>
                 <span>
-                  <span className="mr-3 inline-block w-5 text-right text-slate-400">{i + 1}</span>
                   {r.username}
                   {r.username === viewerUsername && " (you)"}
                 </span>
-                <span className="font-semibold">{r.best_score} marks</span>
-              </Link>
-            </li>
-          ))}
-        </ol>
-      )}
+              </span>
+              <span className="flex items-center gap-4 font-mono text-xs text-slate-400">
+                {r.created_at && <span>{fmtDate(r.created_at)}</span>}
+                {r.total != null && <span>/{r.total} questions</span>}
+                <span className="text-sm font-semibold">
+                  {r.best_score} {unit}
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }

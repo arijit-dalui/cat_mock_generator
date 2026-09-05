@@ -78,6 +78,8 @@ export interface User {
 export interface LeaderboardRow {
   username: string;
   best_score: number;
+  total: number | null;
+  created_at: string | null;
 }
 
 export interface SessionRow {
@@ -184,14 +186,43 @@ export const users = {
   async leaderboard(section: string, limit = 10): Promise<LeaderboardRow[]> {
     return db
       .prepare(
-        `SELECT u.username AS username, MAX(a.raw_score) AS best_score
-           FROM attempts a JOIN users u ON u.id = a.user_id
-          WHERE a.section = ? AND a.submitted = 1 AND a.raw_score IS NOT NULL
-          GROUP BY u.id
+        `SELECT username, best_score, total, created_at FROM (
+           SELECT u.username AS username, a.raw_score AS best_score, a.total AS total, a.created_at AS created_at,
+                  ROW_NUMBER() OVER (PARTITION BY u.id ORDER BY a.raw_score DESC) AS rn
+             FROM attempts a JOIN users u ON u.id = a.user_id
+            WHERE a.section = ? AND a.submitted = 1 AND a.raw_score IS NOT NULL
+         )
+         WHERE rn = 1
+         ORDER BY best_score DESC
+         LIMIT ?`,
+      )
+      .all(section, limit) as LeaderboardRow[];
+  },
+  /** Top N by best full-mock total (summed raw_score across a mock's five
+   * section attempts) - real submitted mocks only. `total` is the summed
+   * question count and `created_at` the date of that best mock. */
+  async mockLeaderboard(limit = 10): Promise<LeaderboardRow[]> {
+    return db
+      .prepare(
+        `WITH mock_totals AS (
+           SELECT m.id AS mock_id, m.user_id, m.created_at AS created_at,
+                  SUM(a.raw_score) AS total_score, SUM(a.total) AS total_questions
+             FROM mocks m JOIN attempts a ON a.mock_id = m.id
+            WHERE m.submitted = 1
+            GROUP BY m.id
+         ),
+         ranked AS (
+           SELECT user_id, total_score, total_questions, created_at,
+                  ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY total_score DESC) AS rn
+             FROM mock_totals
+         )
+         SELECT u.username AS username, r.total_score AS best_score, r.total_questions AS total, r.created_at AS created_at
+           FROM ranked r JOIN users u ON u.id = r.user_id
+          WHERE r.rn = 1
           ORDER BY best_score DESC
           LIMIT ?`,
       )
-      .all(section, limit) as LeaderboardRow[];
+      .all(limit) as LeaderboardRow[];
   },
 };
 
@@ -529,6 +560,26 @@ export const mocks = {
   async remove(id: number): Promise<void> {
     db.prepare("DELETE FROM mocks WHERE id = ?").run(id);
   },
+  /** Percentile of a full-mock total (summed raw_score across its five
+   * section attempts) against every OTHER submitted mock, across all
+   * users. Same null-below-population-2 rule as the sectional percentile -
+   * an honest "not enough data" instead of a fake 100th percentile. */
+  async percentile(totalRawScore: number): Promise<{ percentile: number; population: number } | null> {
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN totalScore < ? THEN 1 ELSE 0 END) AS below
+           FROM (
+             SELECT m.id, SUM(a.raw_score) AS totalScore
+               FROM mocks m JOIN attempts a ON a.mock_id = m.id
+              WHERE m.submitted = 1
+              GROUP BY m.id
+           )`,
+      )
+      .get(totalRawScore) as { total: number; below: number };
+    if (row.total < 2) return null;
+    return { percentile: (row.below / row.total) * 100, population: row.total };
+  },
 };
 
 // ---- user_external_stats (self-reported, other sources) ------------------
@@ -553,6 +604,49 @@ export const externalStats = {
          DO UPDATE SET solved = excluded.solved, accuracy = excluded.accuracy,
                        updated_at = datetime('now')`,
     ).run(userId, section, solved, accuracy);
+  },
+};
+
+export interface QuestionReport {
+  id: number;
+  user_id: number;
+  attempt_id: number | null;
+  set_id: number | null;
+  question_id: string;
+  section: string;
+  prompt_snapshot: string | null;
+  reason: string | null;
+  status: "open" | "resolved";
+  created_at: string;
+  resolved_at: string | null;
+}
+
+// ---- question_reports: "report this question" -> admin queue ------------
+export const questionReports = {
+  async create(row: {
+    userId: number;
+    attemptId: number | null;
+    setId: number | null;
+    questionId: string;
+    section: string;
+    promptSnapshot: string | null;
+    reason: string | null;
+  }): Promise<number> {
+    const info = db
+      .prepare(
+        `INSERT INTO question_reports (user_id, attempt_id, set_id, question_id, section, prompt_snapshot, reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(row.userId, row.attemptId, row.setId, row.questionId, row.section, row.promptSnapshot, row.reason);
+    return Number(info.lastInsertRowid);
+  },
+  async listOpen(): Promise<QuestionReport[]> {
+    return db
+      .prepare("SELECT * FROM question_reports WHERE status = 'open' ORDER BY created_at DESC")
+      .all() as QuestionReport[];
+  },
+  async resolve(id: number): Promise<void> {
+    db.prepare("UPDATE question_reports SET status = 'resolved', resolved_at = datetime('now') WHERE id = ?").run(id);
   },
 };
 

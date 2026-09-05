@@ -115,3 +115,19 @@ CREATE TABLE IF NOT EXISTS user_external_stats (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, section)
 );
+
+-- "Report this question" flags, feeding an admin queue.
+CREATE TABLE IF NOT EXISTS question_reports (
+  id              SERIAL PRIMARY KEY,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  attempt_id      INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
+  set_id          INTEGER,
+  question_id     TEXT NOT NULL,
+  section         TEXT NOT NULL,
+  prompt_snapshot TEXT,
+  reason          TEXT,
+  status          TEXT NOT NULL DEFAULT 'open',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_question_reports_status ON question_reports(status, created_at);

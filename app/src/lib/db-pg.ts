@@ -115,6 +115,20 @@ CREATE TABLE IF NOT EXISTS user_external_stats (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, section)
 );
+CREATE TABLE IF NOT EXISTS question_reports (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  attempt_id INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
+  set_id INTEGER,
+  question_id TEXT NOT NULL,
+  section TEXT NOT NULL,
+  prompt_snapshot TEXT,
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_question_reports_status ON question_reports(status, created_at);
 `;
 
 async function ensureSchema(): Promise<void> {
@@ -258,6 +272,23 @@ export const users = {
       SELECT u.username AS username, MAX(a.raw_score) AS best_score
         FROM attempts a JOIN users u ON u.id = a.user_id
        WHERE a.section = ${section} AND a.submitted = TRUE AND a.raw_score IS NOT NULL
+       GROUP BY u.id, u.username
+       ORDER BY best_score DESC
+       LIMIT ${limit}`;
+  },
+  /** Top N by best full-mock total (summed raw_score across a mock's five
+   * section attempts) - real submitted mocks only. */
+  async mockLeaderboard(limit = 10): Promise<LeaderboardRow[]> {
+    await ready;
+    return await sql<LeaderboardRow[]>`
+      WITH mock_totals AS (
+        SELECT m.id AS mock_id, m.user_id, SUM(a.raw_score) AS total
+          FROM mocks m JOIN attempts a ON a.mock_id = m.id
+         WHERE m.submitted = TRUE
+         GROUP BY m.id
+      )
+      SELECT u.username AS username, MAX(mt.total) AS best_score
+        FROM mock_totals mt JOIN users u ON u.id = mt.user_id
        GROUP BY u.id, u.username
        ORDER BY best_score DESC
        LIMIT ${limit}`;
@@ -652,6 +683,24 @@ export const mocks = {
     await ready;
     await sql`DELETE FROM mocks WHERE id = ${id}`;
   },
+  /** Percentile of a full-mock total (summed raw_score across its five
+   * section attempts) against every OTHER submitted mock, across all
+   * users. Same null-below-population-2 rule as the sectional percentile. */
+  async percentile(totalRawScore: number): Promise<{ percentile: number; population: number } | null> {
+    await ready;
+    const rows = await sql<{ total: number; below: number }[]>`
+      SELECT COUNT(*)::int AS total,
+             SUM(CASE WHEN totals.total_score < ${totalRawScore} THEN 1 ELSE 0 END)::int AS below
+        FROM (
+          SELECT m.id, SUM(a.raw_score) AS total_score
+            FROM mocks m JOIN attempts a ON a.mock_id = m.id
+           WHERE m.submitted = TRUE
+           GROUP BY m.id
+        ) totals`;
+    const row = rows[0];
+    if (!row || row.total < 2) return null;
+    return { percentile: (row.below / row.total) * 100, population: row.total };
+  },
 };
 
 // ---- user_external_stats (self-reported, other sources) ------------------
@@ -673,6 +722,51 @@ export const externalStats = {
         VALUES (${userId}, ${section}, ${solved}, ${accuracy}, now())
       ON CONFLICT (user_id, section)
         DO UPDATE SET solved = ${solved}, accuracy = ${accuracy}, updated_at = now()`;
+  },
+};
+
+export interface QuestionReport {
+  id: number;
+  user_id: number;
+  attempt_id: number | null;
+  set_id: number | null;
+  question_id: string;
+  section: string;
+  prompt_snapshot: string | null;
+  reason: string | null;
+  status: "open" | "resolved";
+  created_at: string;
+  resolved_at: string | null;
+}
+
+// ---- question_reports: "report this question" -> admin queue ------------
+export const questionReports = {
+  async create(row: {
+    userId: number;
+    attemptId: number | null;
+    setId: number | null;
+    questionId: string;
+    section: string;
+    promptSnapshot: string | null;
+    reason: string | null;
+  }): Promise<number> {
+    await ready;
+    const rows = await sql<{ id: number }[]>`
+      INSERT INTO question_reports (user_id, attempt_id, set_id, question_id, section, prompt_snapshot, reason)
+      VALUES (${row.userId}, ${row.attemptId}, ${row.setId}, ${row.questionId}, ${row.section}, ${row.promptSnapshot}, ${row.reason})
+      RETURNING id`;
+    return rows[0].id;
+  },
+  async listOpen(): Promise<QuestionReport[]> {
+    await ready;
+    return await sql<QuestionReport[]>`
+      SELECT id, user_id, attempt_id, set_id, question_id, section, prompt_snapshot, reason,
+             status, created_at::text, resolved_at::text
+        FROM question_reports WHERE status = 'open' ORDER BY created_at DESC`;
+  },
+  async resolve(id: number): Promise<void> {
+    await ready;
+    await sql`UPDATE question_reports SET status = 'resolved', resolved_at = now() WHERE id = ${id}`;
   },
 };
 

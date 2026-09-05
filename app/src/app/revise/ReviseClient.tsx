@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import ThemeToggle from "../components/ThemeToggle";
-import UserMenu from "../components/UserMenu";
+import NavHeader from "../components/NavHeader";
+import PageHeader from "../components/PageHeader";
+import SegmentedTabs from "../components/SegmentedTabs";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -72,37 +73,17 @@ export default function ReviseClient({ username }: { username: string }) {
 
   return (
     <div className="app-shell min-h-screen">
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
-          <div className="flex items-center gap-5 text-sm">
-            <Link href="/dashboard" className="font-medium text-slate-500 hover:text-brand">Dashboard</Link>
-            <Link href="/analysis" className="font-medium text-slate-500 hover:text-brand">Analysis</Link>
-            <Link href="/revise" className="font-medium text-brand">Revise</Link>
-            <ThemeToggle />
-            <UserMenu username={username} />
-          </div>
-        </div>
-      </header>
+      <NavHeader active="/revise" username={username} maxWidth="max-w-3xl" />
 
       <main className="mx-auto max-w-3xl px-6 py-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">Revise your mistakes</p>
-        <h1 className="display-type mt-2 text-3xl font-bold text-slate-900">Every question you got wrong.</h1>
-        <p className="mt-2 text-slate-500">Pulled from your own submitted attempts, most recent first.</p>
+        <PageHeader
+          eyebrow="Revise your mistakes"
+          title="Every question you got wrong."
+          subtitle="Pulled from your own submitted attempts, most recent first."
+        />
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          {(["ALL", ...SECTIONS] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => changeFilter(s)}
-              className={
-                "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
-                (filter === s ? "bg-brand text-white" : "bg-white text-slate-600 border border-slate-300 hover:bg-slate-50")
-              }
-            >
-              {s === "ALL" ? "All" : s}
-            </button>
-          ))}
+        <div className="mt-6">
+          <SegmentedTabs options={["ALL", ...SECTIONS] as const} value={filter} onChange={changeFilter} labels={{ ALL: "All" }} />
         </div>
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
@@ -120,7 +101,7 @@ export default function ReviseClient({ username }: { username: string }) {
           </div>
         ) : current ? (
           <div className="card mt-6 p-6">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center justify-between card-eyebrow">
               <span>
                 {current.section} - {fmtDate(current.createdAt)}
               </span>
@@ -128,7 +109,7 @@ export default function ReviseClient({ username }: { username: string }) {
                 {index + 1} of {filtered.length}
               </span>
             </div>
-            <p className="mt-3 whitespace-pre-wrap font-medium text-slate-900">{current.question.prompt}</p>
+            <p className="mt-3 whitespace-pre-wrap font-serif text-base text-slate-900">{current.question.prompt}</p>
 
             {current.question.format === "tita" ? (
               <div className="mt-4 text-sm">

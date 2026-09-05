@@ -89,6 +89,9 @@ export default function AdminClient({ username }: { username: string }) {
             <Link href="/admin/users" className="font-medium text-slate-500 hover:text-brand">
               Users
             </Link>
+            <Link href="/admin/reports" className="font-medium text-slate-500 hover:text-brand">
+              Reports
+            </Link>
             <span className="text-slate-500">{username}</span>
             <button onClick={logout} className="btn-ghost">
               Log out

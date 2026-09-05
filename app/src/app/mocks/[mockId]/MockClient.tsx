@@ -103,6 +103,10 @@ export default function MockClient({ mockId }: { mockId: string }) {
   const [visited, setVisited] = useState<Set<string>>(new Set());
   const [current, setCurrent] = useState(0);
   const [showCalc, setShowCalc] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(false);
@@ -291,6 +295,24 @@ export default function MockClient({ mockId }: { mockId: string }) {
     });
   }, []);
 
+  async function submitReport(attemptId: number, questionId: string) {
+    setReportSubmitting(true);
+    try {
+      await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attemptId, questionId, reason: reportReason }),
+      });
+      setReportedIds((s) => new Set(s).add(questionId));
+      setReportOpen(false);
+      setReportReason("");
+    } catch {
+      /* best-effort - reporting isn't part of the graded flow */
+    } finally {
+      setReportSubmitting(false);
+    }
+  }
+
   if (error && !data)
     return (
       <main style={{ maxWidth: 640, margin: "40px auto", padding: 20 }}>
@@ -455,14 +477,26 @@ export default function MockClient({ mockId }: { mockId: string }) {
         )}
 
         <div style={{ flex: 1, borderRight: `1px solid ${EXAM_COLORS.border}`, padding: 16, height: "calc(100vh - 156px)", overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 8 }}>
             <p style={{ fontWeight: 700, fontSize: 14 }}>Question No. {current + 1} <span style={{ fontWeight: 400, color: EXAM_COLORS.textMuted }}>({item.section})</span></p>
-            <button
-              onClick={() => toggleMark(currentKey)}
-              style={{ fontSize: 11, fontWeight: 600, border: `1px solid ${isMarked ? EXAM_COLORS.marked : EXAM_COLORS.border}`, background: isMarked ? EXAM_COLORS.markedBg : "#fff", color: isMarked ? EXAM_COLORS.marked : EXAM_COLORS.textMuted, borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}
-            >
-              {isMarked ? "Marked" : "Mark for Review"}
-            </button>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              {reportedIds.has(item.q.id) ? (
+                <span style={{ fontSize: 11, color: EXAM_COLORS.textMuted, alignSelf: "center" }}>Reported</span>
+              ) : (
+                <button
+                  onClick={() => setReportOpen(true)}
+                  style={{ fontSize: 11, fontWeight: 600, border: `1px solid ${EXAM_COLORS.border}`, background: "#fff", color: EXAM_COLORS.textMuted, borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}
+                >
+                  Report
+                </button>
+              )}
+              <button
+                onClick={() => toggleMark(currentKey)}
+                style={{ fontSize: 11, fontWeight: 600, border: `1px solid ${isMarked ? EXAM_COLORS.marked : EXAM_COLORS.border}`, background: isMarked ? EXAM_COLORS.markedBg : "#fff", color: isMarked ? EXAM_COLORS.marked : EXAM_COLORS.textMuted, borderRadius: 4, padding: "4px 10px", cursor: "pointer" }}
+              >
+                {isMarked ? "Marked" : "Mark for Review"}
+              </button>
+            </div>
           </div>
           <p style={{ fontSize: 14, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{withInstructionFallback(item.q)}</p>
 

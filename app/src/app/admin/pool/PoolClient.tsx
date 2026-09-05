@@ -56,6 +56,7 @@ export default function PoolClient() {
             <Link href="/admin" className="font-medium text-slate-500 hover:text-brand">Dashboard</Link>
             <Link href="/admin/questions" className="font-medium text-slate-500 hover:text-brand">Question sets</Link>
             <Link href="/admin/users" className="font-medium text-slate-500 hover:text-brand">Users</Link>
+            <Link href="/admin/reports" className="font-medium text-slate-500 hover:text-brand">Reports</Link>
           </div>
         </div>
       </header>

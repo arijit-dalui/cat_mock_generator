@@ -116,3 +116,20 @@ CREATE TABLE IF NOT EXISTS user_external_stats (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id, section)
 );
+
+-- "Report this question" flags, feeding an admin queue. The judge occasionally
+-- ships a flawed question despite its own review; this is the backstop.
+CREATE TABLE IF NOT EXISTS question_reports (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  attempt_id      INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
+  set_id          INTEGER,
+  question_id     TEXT NOT NULL,
+  section         TEXT NOT NULL,
+  prompt_snapshot TEXT,             -- so admins can see it without re-parsing the set payload
+  reason          TEXT,
+  status          TEXT NOT NULL DEFAULT 'open',  -- 'open' | 'resolved'
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_question_reports_status ON question_reports(status, created_at);

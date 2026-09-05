@@ -80,6 +80,7 @@ export default function UsersClient() {
             <Link href="/admin" className="font-medium text-brand">Dashboard</Link>
             <Link href="/admin/questions" className="font-medium text-slate-500 hover:text-brand">Question sets</Link>
             <Link href="/admin/pool" className="font-medium text-slate-500 hover:text-brand">Pool health</Link>
+            <Link href="/admin/reports" className="font-medium text-slate-500 hover:text-brand">Reports</Link>
           </div>
         </div>
       </header>

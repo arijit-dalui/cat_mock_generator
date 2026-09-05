@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { attempts, sets } from "@/lib/db";
+import { attempts, sets, mocks } from "@/lib/db";
 import type { GeneratedSet } from "@/lib/generate/types";
 import { allQuestions } from "@/lib/practice";
 
 export const dynamic = "force-dynamic";
+
+interface MockHistoryRow {
+  id: number;
+  createdAt: string;
+  phases: Record<string, number>; // phase -> summed raw_score
+  total: number;
+  percentile: number | null;
+  population: number;
+}
 
 interface AttemptSummary {
   id: number;
@@ -132,5 +141,32 @@ export async function GET() {
       ? validPercentiles.reduce((sum, p) => sum + p.percentile, 0) / validPercentiles.length
       : null;
 
-  return NextResponse.json({ history, topics, percentile, overallPercentile });
+  // Full-mock history: this user's submitted mocks, phase-wise raw score
+  // totals (VARC/DILR/QA) plus an overall total, each ranked against every
+  // other submitted mock's total across all users.
+  const mockRows = await mocks.listForUser(user.id);
+  const mockHistory: MockHistoryRow[] = [];
+  for (const m of mockRows) {
+    if (!m.submitted) continue;
+    const mAttempts = await attempts.byMock(m.id);
+    const phases: Record<string, number> = {};
+    let total = 0;
+    for (const a of mAttempts) {
+      const phase = a.phase || a.section;
+      phases[phase] = (phases[phase] ?? 0) + (a.raw_score ?? 0);
+      total += a.raw_score ?? 0;
+    }
+    const pct = await mocks.percentile(total);
+    mockHistory.push({
+      id: m.id,
+      createdAt: m.created_at,
+      phases,
+      total,
+      percentile: pct?.percentile ?? null,
+      population: pct?.population ?? 0,
+    });
+  }
+  mockHistory.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  return NextResponse.json({ history, topics, percentile, overallPercentile, mockHistory });
 }

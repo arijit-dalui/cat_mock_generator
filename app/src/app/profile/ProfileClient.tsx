@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import ThemeToggle from "../components/ThemeToggle";
-import UserMenu from "../components/UserMenu";
+import NavHeader from "../components/NavHeader";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -245,39 +244,30 @@ export default function ProfileClient({
 
   if (error)
     return (
-      <main className="mx-auto max-w-4xl px-6 py-10">
-        <p className="text-red-600">{error}</p>
-        <Link href="/dashboard" className="btn-ghost mt-4">
-          Back to dashboard
-        </Link>
-      </main>
+      <div className="app-shell min-h-screen">
+        <NavHeader active="/profile" username={username} role={role} maxWidth="max-w-4xl" />
+        <main className="mx-auto max-w-4xl px-6 py-10">
+          <p className="text-red-600">{error}</p>
+          <Link href="/dashboard" className="btn-ghost mt-4">
+            Back to dashboard
+          </Link>
+        </main>
+      </div>
     );
   if (!stats || !overall)
-    return <main className="mx-auto max-w-4xl px-6 py-10 text-slate-400">Loading...</main>;
+    return (
+      <div className="app-shell min-h-screen">
+        <NavHeader active="/profile" username={username} role={role} maxWidth="max-w-4xl" />
+        <main className="mx-auto max-w-4xl px-6 py-10 text-slate-400">Loading...</main>
+      </div>
+    );
 
   const overallAcc = pct(overall.correct, overall.solved);
   const grandSolved = overall.solved + overall.extSolved;
 
   return (
     <div className="app-shell min-h-screen">
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <span className="display-type text-xl font-bold text-slate-900">CAT practice</span>
-          <div className="flex items-center gap-5 text-sm">
-            <Link href="/dashboard" className="font-medium text-slate-500 hover:text-brand">
-              Dashboard
-            </Link>
-            <Link href="/analysis" className="font-medium text-slate-500 hover:text-brand">
-              Analysis
-            </Link>
-            <Link href="/revise" className="font-medium text-slate-500 hover:text-brand">
-              Revise
-            </Link>
-            <ThemeToggle />
-            <UserMenu username={username} role={role} />
-          </div>
-        </div>
-      </header>
+      <NavHeader active="/profile" username={username} role={role} maxWidth="max-w-4xl" />
 
       <main className="mx-auto max-w-4xl px-6 py-8 space-y-8">
         {/* Profile header */}
@@ -287,8 +277,8 @@ export default function ProfileClient({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900">{username}</h1>
-              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase text-slate-500">
+              <h1 className="font-serif text-2xl font-semibold text-slate-900">{username}</h1>
+              <span className="rounded-sm bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 {role}
               </span>
             </div>
@@ -423,7 +413,7 @@ export default function ProfileClient({
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase text-slate-400">
+                <tr className="text-left card-eyebrow">
                   <th className="py-2">Section</th>
                   <th>Solved</th>
                   <th>Accuracy %</th>
@@ -498,8 +488,8 @@ function Stat({
 }) {
   return (
     <div className={"card p-5 " + (highlight ? "border-brand bg-brand/5" : "")}>
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-slate-900">{value}</p>
+      <p className="card-eyebrow">{label}</p>
+      <p className="mt-1 font-serif text-3xl font-bold text-slate-900">{value}</p>
       {sub && <p className="text-xs text-slate-400">{sub}</p>}
     </div>
   );
