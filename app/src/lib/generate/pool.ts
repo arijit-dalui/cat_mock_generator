@@ -33,6 +33,11 @@ export async function generateOneForPool(
   // verification calls, ALL sequential (genQuestions/verifyAnswer await one
   // at a time, no parallelism) - confirmed via direct testing this legitimately
   // needs more than 260s end-to-end on Groq's on_demand tier, not a hang.
+  // 400s: QA's 5 writer + up to ~8 verify calls now run concurrently
+  // (genQuestions/QA verify use Promise.all, not a sequential loop), but a
+  // single call can still take 150s+ if it has to exhaust Groq's 429 retry
+  // ladder on every key, so the overall budget needs to clear that, not just
+  // a fast-path single call.
   const generateMs = opts.generateMs ?? 400_000;
   // 90s, not 30s: on OpenRouter's free-tier GLM pool the judge call competes
   // for the same congested/rate-limited upstream as the writer and can need

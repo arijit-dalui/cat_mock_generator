@@ -299,12 +299,18 @@ async function genQuestions(
   promptFn: (subtype: string, count: number, ex: any[], titaCount?: number) => string,
   warnings: string[],
 ): Promise<GenQuestion[]> {
-  const items: GenQuestion[] = [];
-  for (const [stepIdx, step] of plan.entries()) {
-    if (stepIdx > 0) await sleep(PACE_MS);
-    items.push(...(await genQuestionStep(section, step, promptFn, warnings)));
-  }
-  return items;
+  // Steps are independent (different subtypes, no shared state) - run them
+  // concurrently. Confirmed via timing (LLM_DEBUG_DUMP-adjacent instrumentation)
+  // that 5 sequential writer calls summed to 400s+ on Groq's on_demand tier,
+  // well past any reasonable per-set budget, while each individual call only
+  // takes single-digit to low tens of seconds most of the time - the old
+  // PACE_MS stagger was serializing work that didn't need to be serial. The
+  // 4-key round-robin in groqChat naturally spreads concurrent calls across
+  // keys instead of hammering one.
+  const results = await Promise.all(
+    plan.map((step) => genQuestionStep(section, step, promptFn, warnings)),
+  );
+  return results.flat();
 }
 
 /** Re-solve a question independently; returns true if the answer holds.
@@ -745,12 +751,16 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
 
   if (section === "QA") {
     const items = await genQuestions("QA", QA_PLAN, qaPrompt, warnings);
-    const verified: GenQuestion[] = [];
-    for (const [vi, q] of items.entries()) {
-      if (vi > 0) await sleep(500);
-      if (await verifyAnswer(q)) verified.push(q);
-      else warnings.push(`QA question failed answer verification and was dropped`);
-    }
+    // Each question's answer-verification is independent of the others, so
+    // run them concurrently instead of one at a time - confirmed via timing
+    // that a single verify call can take 150s+ under load, and eight of
+    // those back to back was blowing the whole per-set budget for no reason.
+    const oks = await Promise.all(items.map((q) => verifyAnswer(q)));
+    const verified = items.filter((_, vi) => {
+      if (oks[vi]) return true;
+      warnings.push(`QA question failed answer verification and was dropped`);
+      return false;
+    });
     return { section, kind: "questions", items: verified, meta };
   }
 
