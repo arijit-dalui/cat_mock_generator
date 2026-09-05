@@ -151,6 +151,9 @@ export default function DashboardClient({ username }: { username: string }) {
             <Link href="/analysis" className="font-medium text-slate-500 hover:text-brand">
               Analysis
             </Link>
+            <Link href="/revise" className="font-medium text-slate-500 hover:text-brand">
+              Revise
+            </Link>
             <ThemeToggle />
             <UserMenu username={username} />
           </div>
