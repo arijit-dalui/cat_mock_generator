@@ -67,7 +67,7 @@ export default function PublicProfileClient({ username, viewerUsername }: { user
         {!error && !data && <p className="text-slate-400">Loading...</p>}
         {data && (
           <>
-            <div className="h-2 bg-brand" />
+            <div className="h-2 rounded-t-xl bg-brand" />
             <section className="card flex items-center gap-5 border-t-0 p-6">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand text-2xl font-bold text-white">
                 {data.username.charAt(0).toUpperCase()}
@@ -104,7 +104,7 @@ export default function PublicProfileClient({ username, viewerUsername }: { user
               ) : (
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {Object.entries(data.sections).map(([section, info]) => (
-                    <div key={section} className="rounded-sm border border-slate-200 p-4">
+                    <div key={section} className="rounded-lg border border-slate-200 p-4">
                       <p className="card-eyebrow">{SECTION_NAMES[section] || section}</p>
                       {info ? (
                         <>

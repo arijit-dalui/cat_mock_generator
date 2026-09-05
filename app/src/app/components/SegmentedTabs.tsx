@@ -22,7 +22,7 @@ export default function SegmentedTabs<T extends string>({
           key={opt}
           onClick={() => onChange(opt)}
           className={
-            "rounded-sm px-4 py-2 text-sm font-semibold transition-colors " +
+            "rounded-lg px-4 py-2 text-sm font-semibold transition-colors " +
             (value === opt
               ? "bg-brand text-white"
               : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50")

@@ -42,7 +42,7 @@ export default function NavHeader({
               key={l.href}
               href={l.href}
               className={
-                "rounded-sm px-3.5 py-1.5 text-sm font-medium transition-colors " +
+                "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors " +
                 (active === l.href ? "bg-brand text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900")
               }
             >

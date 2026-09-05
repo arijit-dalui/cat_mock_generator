@@ -278,7 +278,7 @@ export default function ProfileClient({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-serif text-2xl font-semibold text-slate-900">{username}</h1>
-              <span className="rounded-sm bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 {role}
               </span>
             </div>

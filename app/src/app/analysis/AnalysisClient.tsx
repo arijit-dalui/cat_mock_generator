@@ -640,7 +640,7 @@ function Leaderboard({
                 {r.username === viewerUsername && " (you)"}
               </Link>
               <div
-                className="mt-2 flex w-full flex-col items-center justify-start rounded-sm pt-2"
+                className="mt-2 flex w-full flex-col items-center justify-start rounded-lg pt-2"
                 style={{ height: RANK_HEIGHT[i], background: RANK_COLOR[i] }}
               >
                 <span className="font-mono text-xs font-bold text-white">#{rank}</span>
