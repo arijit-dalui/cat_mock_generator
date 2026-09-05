@@ -38,8 +38,22 @@ interface AttemptData {
     total: number | null;
     answers: Record<string, unknown>;
     createdAt: string;
+    submittedAt: string | null;
   };
   set: GeneratedSet;
+}
+
+/** "12m 30s" between two timestamps - real elapsed time, not a fabricated
+ * duration. Handles the naive-UTC SQLite string format (no trailing Z). */
+function fmtTimeTaken(createdAt: string, submittedAt: string | null): string | null {
+  if (!submittedAt) return null;
+  const toDate = (s: string) => new Date(/T/.test(s) ? s : s.replace(" ", "T") + "Z");
+  const ms = toDate(submittedAt).getTime() - toDate(createdAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const totalSec = Math.round(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 /** One navigable slot in the single-question solving view. RC/DI/LR
@@ -640,6 +654,11 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
                 <p style={{ fontSize: 24, fontWeight: 700 }}>{score.rawScore} marks</p>
                 {score.total > 0 && (
                   <p style={{ fontSize: 15, opacity: 0.85 }}>{Math.round((score.correct / score.total) * 100)}% correct</p>
+                )}
+                {fmtTimeTaken(data.attempt.createdAt, data.attempt.submittedAt) && (
+                  <p style={{ fontSize: 13, opacity: 0.8 }}>
+                    Time taken: {fmtTimeTaken(data.attempt.createdAt, data.attempt.submittedAt)}
+                  </p>
                 )}
                 <p style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Review the explanations for every option below.</p>
               </div>

@@ -47,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   );
 
   return NextResponse.json({
-    mock: { id: mock.id, submitted: !!mock.submitted, createdAt: mock.created_at },
+    mock: { id: mock.id, submitted: !!mock.submitted, createdAt: mock.created_at, submittedAt: mock.submitted_at },
     attempts: withSets,
   });
 }

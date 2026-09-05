@@ -41,8 +41,20 @@ interface MockAttempt {
   set: GeneratedSet | null;
 }
 interface MockData {
-  mock: { id: number; submitted: boolean; createdAt: string };
+  mock: { id: number; submitted: boolean; createdAt: string; submittedAt: string | null };
   attempts: MockAttempt[];
+}
+
+/** "1h 2m" between two timestamps - real elapsed time, not fabricated. */
+function fmtTimeTaken(createdAt: string, submittedAt: string | null): string | null {
+  if (!submittedAt) return null;
+  const toDate = (s: string) => new Date(/T/.test(s) ? s : s.replace(" ", "T") + "Z");
+  const ms = toDate(submittedAt).getTime() - toDate(createdAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 interface NavItem {
   attemptId: number;
@@ -345,6 +357,11 @@ export default function MockClient({ mockId }: { mockId: string }) {
               {totals.correct} correct out of {totals.total}
               {totals.total > 0 && ` (${Math.round((totals.correct / totals.total) * 100)}%)`}
             </p>
+            {fmtTimeTaken(data.mock.createdAt, data.mock.submittedAt) && (
+              <p style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
+                Time taken: {fmtTimeTaken(data.mock.createdAt, data.mock.submittedAt)}
+              </p>
+            )}
           </div>
           <div style={{ marginTop: 20 }}>
             {PHASES.map((p) => (
