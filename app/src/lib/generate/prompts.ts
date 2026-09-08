@@ -143,16 +143,14 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
   const brief = VA_BRIEF[subtype] ?? VA_BRIEF.va_other;
   const formatRules =
     subtype === "para_jumble"
-      ? `\nThis is a TITA question - it has NO answer options at all. Output ` +
-        `shape per question:\n` +
-        `{"prompt": "Arrange the following sentences in the correct logical ` +
-        `order.\\n1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n4. <sentence>", ` +
-        `"options": [], "answer": "3142", "explanations": [], "solution": ` +
-        `"<why this order is correct>"}\n` +
-        `"options" MUST be an empty array - do not invent multiple-choice ` +
-        `options for this question type. "answer" is a 4-character string, a ` +
-        `permutation of "1234" (every digit used exactly once, e.g. "3142"), ` +
-        `naming the correct reading order of the 4 sentences.\n` +
+      ? `\nFormat each "prompt" exactly like:\n` +
+        `"Arrange the following sentences in the correct logical ` +
+        `order.\n1. <sentence>\n2. <sentence>\n3. <sentence>\n4. <sentence>"\n` +
+        `The four options are ALWAYS four candidate orderings (4-digit strings ` +
+        `using each of 1-4 exactly once, e.g. ["1324", "3142", "2413", "4231"]) ` +
+        `and "answer" is the LETTER (A, B, C, or D) of the correct ordering. ` +
+        `The "solution" must trace the order sentence by sentence and end by ` +
+        `naming that letter, and exactly ONE explanation begins "Correct.".\n` +
         `The resolution must depend on the LOGICAL flow of the argument (claim ` +
         `-> elaboration -> example -> conclusion), NOT on calendar dates, ` +
         `numeric labels, or obvious word-glue. Do NOT make the order trivially ` +
@@ -169,16 +167,22 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
         `be the standalone opener; a sentence beginning with a back-reference ` +
         `or connective ("However", "Moreover", "Therefore", "This", "Such") ` +
         `can NEVER be first. Before output, COUNT the sentences in your prompt ` +
-        `- exactly 4, not 5 - and confirm "answer" is a permutation of 1-4.`
+        `- exactly 4, not 5 - and re-derive the ordering from your own ` +
+        `explanation trace: the trace MUST yield the key's option, or redo it.`
       : subtype === "odd_one_out"
       ? `\nFormat each "prompt" exactly like:\n` +
-        `"The five sentences below relate to the same theme. ` +
+        `"The four sentences below relate to the same theme. ` +
         `Identify the ONE sentence that does not fit logically with the ` +
-        `others.\\n1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n` +
-        `4. <sentence>\\n5. <sentence>"\n` +
-        `Each option must be a single digit string "1"-"5" naming the misfit. ` +
-        `The misfit should break the thematic line (advocacy vs description, ` +
-        `cause vs effect, etc.), not the surface vocabulary.`
+        `others.\n1. <sentence>\n2. <sentence>\n` +
+        `3. <sentence>\n4. <sentence>"\n` +
+        `The four options are ALWAYS exactly ["1", "2", "3", "4"] (the ` +
+        `sentence numbers, in order) and "answer" is the LETTER (A, B, C, or ` +
+        `D) of the misfit's number. The "solution" must end by naming that ` +
+        `letter, and exactly ONE explanation begins "Correct." (the misfit's). ` +
+        `The misfit must break the thematic line (advocacy vs description, ` +
+        `cause vs effect, a normative claim among descriptive ones), never ` +
+        `the surface vocabulary - and it must be UNIQUE (exactly one ` +
+        `sentence misfits, the other three cohere).`
       : subtype === "summary"
       ? `\nFormat each "prompt" exactly as: the paragraph, then a NEWLINE, ` +
         `then the literal question "Which of the following best summarises ` +
@@ -252,6 +256,10 @@ export function qaPrompt(topic: string, count: number, exemplars: KbItem[], tita
     `CRITICAL: solve every question yourself step by step and double-check ` +
     `the arithmetic. The "answer" index MUST point to the mathematically ` +
     `correct option, and "solution" must show the working that proves it. ` +
+    `If your computed answer does not EXACTLY match one of the 4 options you ` +
+    `wrote, REDO the numbers until it does - never ship a key your own ` +
+    `working contradicts, and never write "closest option" or "scaling ` +
+    `error" instead of fixing it. ` +
     `Each option must be a CONCRETE numeric or algebraic value (e.g. "24", ` +
     `"3/5", "x = 2"), never a placeholder like "o1". Numbers in the question ` +
     `should NOT be round (avoid 100, 1000) unless the question is about ` +
@@ -412,13 +420,20 @@ export function lrPrompt(exemplars: KbItem[]): string {
   );
 }
 
-/** Independent re-solve, used to verify a generated QA/DI question. */
+/** Independent re-solve, used to verify a generated QA/DI question. The
+ * verifier must be honest, not accommodating: if its computed answer matches
+ * NONE of the options it reports no-match, and if several options are
+ * defensible it reports ambiguous - instead of guessing an index. */
 export function verifyPrompt(prompt: string, options: string[]): string {
   return (
     `Solve this CAT question carefully and independently. Show your working.\n\n` +
     `QUESTION:\n${prompt}\n\nOPTIONS:\n` +
     options.map((o, i) => `${i}: ${o}`).join("\n") +
     `\n\nReturn JSON: {"answer": <0-based index of the correct option>, ` +
-    `"working": "your step-by-step solution"}`
+    `"working": "your step-by-step solution"}. ` +
+    `If your computed answer matches NONE of the options, return {"answer": null, ` +
+    `"working": "...", "issue": "no-match: computed <value>"} instead of ` +
+    `guessing. If the question admits two valid answers or is ambiguous, ` +
+    `return {"answer": null, "issue": "ambiguous: <why>"}.`
   );
 }

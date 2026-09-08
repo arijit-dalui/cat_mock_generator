@@ -54,16 +54,12 @@ export const config = {
     groqApiKey: (process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || "")
       .split(",")[0]
       ?.trim() || "",
-    groqModel: env("GROQ_MODEL", "llama-3.1-8b-instant"),
+    groqModel: env("GROQ_MODEL", "openai/gpt-oss-120b"),
     // The pool BUILDER uses this model, independent of GROQ_MODEL (which the
-    // on-demand "Generate" path uses). Prod sets GROQ_MODEL to the 70B writer
-    // for quality, but the 70B free tier has a 100K tokens/DAY cap that the
-    // daily batch exhausts — every over-cap request 429s with a ~570s
-    // retry-after, stalling each builder unit to its timeout (0 sets generated).
-    // The 8B model has far more daily headroom and answers in ~3s, so the
-    // builder defaults to it. Point POOL_WRITER_MODEL at the 70B only on a paid
-    // Groq tier where the daily cap isn't a constraint.
-    poolWriterModel: env("POOL_WRITER_MODEL", "llama-3.1-8b-instant"),
+    // on-demand "Generate" path uses). Groq retired the old llama-3.1/3.3
+    // model IDs (verified live: both 404 with model_not_found), so the
+    // defaults below point at the live gpt-oss family instead.
+    poolWriterModel: env("POOL_WRITER_MODEL", "openai/gpt-oss-120b"),
     // Groq's free ("on_demand") tier caps llama-3.1-8b-instant at 6000 tokens
     // per minute, and a SINGLE request may not exceed that limit: prompt +
     // max_tokens must stay under 6000 or Groq returns HTTP 413 "Request too
@@ -77,10 +73,10 @@ export const config = {
     // GROQ_MAX_TOKENS only on a higher Groq tier (e.g. a 70B model with 12K TPM).
     groqMaxTokens: parseInt(env("GROQ_MAX_TOKENS", "3800"), 10),
     // The judge is a SECOND model used to score freshly generated sets. We use
-    // the fast instant model here: it's far cheaper on tokens-per-minute than a
-    // reasoning model (qwen3-32b), which keeps judging from dominating the
-    // generation budget. Override with JUDGE_MODEL if you want a stronger judge.
-    judgeModel: env("JUDGE_MODEL", "llama-3.1-8b-instant"),
+    // the fast 20b model here: it's far cheaper on tokens-per-minute than a
+    // reasoning model, which keeps judging from dominating the generation
+    // budget. Override with JUDGE_MODEL if you want a stronger judge.
+    judgeModel: env("JUDGE_MODEL", "openai/gpt-oss-20b"),
 
     // Z.ai (maker of GLM) - OpenAI-compatible endpoint, real free tier on
     // the Flash models. Set LLM_PROVIDER=zai to use it instead of Groq.
@@ -113,6 +109,9 @@ export const config = {
   /** Maximum quality-graded sets the cron will hold per section. Target 50+
    * so a user practically never exhausts the unseen pool (= no repeats). */
   poolTarget: parseInt(env("POOL_TARGET", "50"), 10),
+  /** Maximum quality-graded sets held per QA drill topic. Smaller than the
+   * mixed pool: drills are consumed topic by topic, so depth matters less. */
+  topicPoolTarget: parseInt(env("TOPIC_POOL_TARGET", "5"), 10),
   /** Maximum sets the cron tries to generate per single invocation.
    * Vercel Hobby caps a single function call at 300s; a single set takes
    * 60-200s including the judge. Default 1 keeps each tick safely under
@@ -137,6 +136,11 @@ export const config = {
 /** The five practice sections. */
 export const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 export type Section = (typeof SECTIONS)[number];
+
+/** QA drill topics (question subtypes). A topic drill is 10 MCQ questions of
+ * one topic, pooled separately from full mixed sets (topic NULL = mixed). */
+export const QA_TOPICS = ["geometry", "algebra", "arithmetic", "number_system", "modern_math"] as const;
+export type QaTopic = (typeof QA_TOPICS)[number];
 
 /** How many items a single generated set contains, per section. */
 export const SET_SHAPE: Record<Section, string> = {

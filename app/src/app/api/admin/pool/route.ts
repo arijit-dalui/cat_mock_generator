@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { config, SECTIONS } from "@/lib/config";
+import { config, SECTIONS, QA_TOPICS } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -135,11 +135,29 @@ export async function GET() {
     }
   }
 
+  // QA drill pools, per topic: pooled + judge-graded drill sets. (The
+  // per-section counts above include drills in QA's totals; this breaks out
+  // what the drill strip on the dashboard actually has to serve.)
+  const drillRows = (await query(
+    `SELECT topic, COUNT(*) AS n
+       FROM generated_sets
+      WHERE section = 'QA' AND topic IS NOT NULL
+        AND status = 'pooled' AND quality_score IS NOT NULL
+      GROUP BY topic`,
+  )) as { topic: string; n: number }[];
+  const drillPools: Record<string, number> = {};
+  for (const t of QA_TOPICS) drillPools[t] = 0;
+  for (const r of drillRows) {
+    if (r.topic in drillPools) drillPools[r.topic] = Number(r.n);
+  }
+
   return NextResponse.json({
     sections: bySection,
     activity,
     inProgress,
+    drillPools,
     poolTarget: config.poolTarget,
+    topicPoolTarget: config.topicPoolTarget,
     minQuality: config.minQuality,
   });
 }

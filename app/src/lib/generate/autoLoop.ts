@@ -19,7 +19,7 @@
  * more reliable. Use the "Generate all needed now" button for a genuine
  * parallel burst instead.
  */
-import { SECTIONS, config, type Section } from "@/lib/config";
+import { SECTIONS, QA_TOPICS, config, type Section, type QaTopic } from "@/lib/config";
 import { sets } from "@/lib/db";
 import { generateOneForPool } from "./pool";
 
@@ -49,22 +49,47 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let cursor = 0;
 
+/** Everything the loop keeps warm: full mixed pools per section, plus one
+ * small drill pool per QA topic. Round-robined as a single flat list so a
+ * struggling pool can never starve the others (the same reason sections
+ * round-robin instead of going neediest-first). */
+interface WarmTarget {
+  section: Section;
+  topic: QaTopic | null;
+  target: number;
+  label: string;
+}
+
+function warmTargets(): WarmTarget[] {
+  const list: WarmTarget[] = SECTIONS.map((section) => ({
+    section,
+    topic: null,
+    target: config.poolTarget,
+    label: section,
+  }));
+  for (const topic of QA_TOPICS) {
+    list.push({ section: "QA", topic, target: config.topicPoolTarget, label: `QA:${topic}` });
+  }
+  return list;
+}
+
 async function loop(): Promise<void> {
   while (running) {
     // Walk the fixed cycle starting from wherever we left off, generating
-    // for the first section that's still below target. Advancing the
+    // for the first target that's still below its depth. Advancing the
     // cursor every call (not just on a hit) is what makes this a true
     // round-robin instead of "always start checking from VA".
+    const targets = warmTargets();
     let firedThisPass = false;
-    for (let i = 0; i < SECTIONS.length; i++) {
-      const section = SECTIONS[cursor % SECTIONS.length];
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[cursor % targets.length];
       cursor += 1;
       if (!running) return;
-      const pool = await sets.qualityPoolCount(section);
-      if (pool >= config.poolTarget) continue;
+      const pool = await sets.qualityPoolCount(t.section, t.topic);
+      if (pool >= t.target) continue;
       ticking = true;
       lastTickAt = Date.now();
-      await generateOneForPool(section, "worker").catch(() => null);
+      await generateOneForPool(t.section, "worker", { topic: t.topic ?? undefined }).catch(() => null);
       ticking = false;
       firedThisPass = true;
       break;

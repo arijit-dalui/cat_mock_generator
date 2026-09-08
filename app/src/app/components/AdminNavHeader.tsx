@@ -7,6 +7,7 @@ import UserMenu from "./UserMenu";
 const NAV_LINKS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/questions", label: "Question sets" },
+  { href: "/admin/mocks", label: "Mocks" },
   { href: "/admin/pool", label: "Pool health" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/reports", label: "Reports" },

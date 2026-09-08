@@ -25,6 +25,19 @@ const SET_SHAPE: Record<Section, string> = {
   QA: "10 questions - geometry, algebra, arithmetic, number system, modern math",
 };
 
+/** QA drill topics. "mixed" is the full 10-question mixed set; anything else
+ * is a 10-question drill of one topic with fresh numbers every set. */
+const QA_TOPIC_OPTIONS = ["mixed", "geometry", "algebra", "arithmetic", "number_system", "modern_math"] as const;
+type QaTopicOption = (typeof QA_TOPIC_OPTIONS)[number];
+const QA_TOPIC_LABELS: Record<QaTopicOption, string> = {
+  mixed: "Full mix",
+  geometry: "Geometry",
+  algebra: "Algebra",
+  arithmetic: "Arithmetic",
+  number_system: "Number Systems",
+  modern_math: "Modern Math",
+};
+
 interface AttemptRow {
   id: number;
   section: string;
@@ -43,6 +56,7 @@ export default function DashboardClient({ username }: { username: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<"sectional" | "mock">("sectional");
   const [tab, setTab] = useState<Section>("VA");
+  const [qaTopic, setQaTopic] = useState<QaTopicOption>("mixed");
   const [attempts, setAttempts] = useState<AttemptRow[]>([]);
   const [mockList, setMockList] = useState<MockRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,10 +78,14 @@ export default function DashboardClient({ username }: { username: string }) {
     }
   }, []);
 
-  const loadAttempts = useCallback(async (section: Section) => {
+  const loadAttempts = useCallback(async (section: Section, topic: QaTopicOption) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/attempts?section=${section}`);
+      const url =
+        section === "QA"
+          ? `/api/attempts?section=${section}&topic=${topic === "mixed" ? "mixed" : topic}`
+          : `/api/attempts?section=${section}`;
+      const res = await fetch(url);
       const data = await res.json();
       setAttempts(res.ok ? data.attempts : []);
     } catch {
@@ -78,9 +96,14 @@ export default function DashboardClient({ username }: { username: string }) {
   }, []);
 
   useEffect(() => {
-    if (mode === "sectional") loadAttempts(tab);
+    if (mode === "sectional") loadAttempts(tab, qaTopic);
     else loadMocks();
-  }, [mode, tab, loadAttempts, loadMocks]);
+  }, [mode, tab, qaTopic, loadAttempts, loadMocks]);
+
+  function switchTab(s: Section) {
+    setTab(s);
+    setQaTopic("mixed");
+  }
 
   async function generate() {
     setError("");
@@ -89,7 +112,11 @@ export default function DashboardClient({ username }: { username: string }) {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ section: tab }),
+        body: JSON.stringify(
+          tab === "QA" && qaTopic !== "mixed"
+            ? { section: tab, topic: qaTopic }
+            : { section: tab },
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -167,27 +194,49 @@ export default function DashboardClient({ username }: { username: string }) {
         {mode === "sectional" ? (
           <>
             <div className="mt-6">
-              <SegmentedTabs options={SECTIONS} value={tab} onChange={setTab} />
+              <SegmentedTabs options={SECTIONS} value={tab} onChange={switchTab} />
             </div>
+
+            {tab === "QA" && (
+              <div className="mt-4">
+                <SegmentedTabs
+                  options={QA_TOPIC_OPTIONS}
+                  value={qaTopic}
+                  onChange={setQaTopic}
+                  labels={QA_TOPIC_LABELS}
+                />
+              </div>
+            )}
 
             <section className="card mt-6 p-6">
               <h2 className="card-title">
                 {SECTION_NAMES[tab]}
+                {tab === "QA" && qaTopic !== "mixed" ? ` - ${QA_TOPIC_LABELS[qaTopic]} drill` : ""}
               </h2>
-              <p className="mt-1 text-sm text-slate-500">{SET_SHAPE[tab]}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {tab === "QA" && qaTopic !== "mixed"
+                  ? `10 fresh ${QA_TOPIC_LABELS[qaTopic].toLowerCase()} questions - same concepts, new numbers every set.`
+                  : SET_SHAPE[tab]}
+              </p>
               {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
               <button
                 onClick={generate}
                 className="btn-primary mt-4"
                 disabled={generating}
               >
-                {generating ? "Generating - this can take a minute..." : "Generate a new set"}
+                {generating
+                  ? "Generating - this can take a minute..."
+                  : tab === "QA" && qaTopic !== "mixed"
+                    ? `Generate ${QA_TOPIC_LABELS[qaTopic].toLowerCase()} drill`
+                    : "Generate a new set"}
               </button>
             </section>
 
             <section className="mt-8">
               <h3 className="card-eyebrow">
-                Previously generated {tab} sets
+                {tab === "QA" && qaTopic !== "mixed"
+                  ? `Previous ${QA_TOPIC_LABELS[qaTopic].toLowerCase()} drills`
+                  : `Previously generated ${tab} sets`}
               </h3>
               {loading ? (
                 <div className="mt-4 space-y-2" aria-label="Loading previous sets">

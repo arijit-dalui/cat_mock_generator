@@ -6,7 +6,7 @@ import { events } from "./db";
 
 export type GenOutcome = "accept" | "reject" | "error";
 
-export type GenSource = "worker" | "cron" | "admin";
+export type GenSource = "worker" | "cron" | "admin" | "agent";
 
 export async function recordGeneration(
   section: string,

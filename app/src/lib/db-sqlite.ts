@@ -48,6 +48,17 @@ function open(): Database.Database {
   } catch {
     /* column already exists */
   }
+  // Topic drills (NULL topic = full mixed set). Same guarded-ALTER pattern:
+  // existing DBs predate the column.
+  try {
+    db.exec("ALTER TABLE generated_sets ADD COLUMN topic TEXT");
+  } catch {
+    /* column already exists */
+  }
+  // Index must come after the ALTER above - on a pre-topic database the
+  // column doesn't exist until then, and an index on a missing column
+  // throws (same reason idx_attempts_mock lives here, not in schema.sql).
+  db.exec("CREATE INDEX IF NOT EXISTS idx_sets_topic ON generated_sets(section, topic, status)");
   // Deferred until here: an index on mock_id would throw during
   // db.exec(schema) above on any DB from before that column existed.
   db.exec("CREATE INDEX IF NOT EXISTS idx_attempts_mock ON attempts(mock_id)");
@@ -92,6 +103,7 @@ export interface SessionRow {
 export interface GeneratedSet {
   id: number;
   section: string;
+  topic: string | null;
   payload: string;
   status: "pooled" | "served";
   created_by: string | null;
@@ -118,6 +130,7 @@ export interface Attempt {
 export interface PagedSet {
   id: number;
   section: string;
+  topic: string | null;
   payload: string;
   status: string;
   quality_score: number | null;
@@ -337,12 +350,13 @@ export const sets = {
     createdBy: string,
     qualityScore: number,
     judgeNotes: string,
+    topic?: string | null,
   ): Promise<number> {
     const info = db
       .prepare(
-        "INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes, status) VALUES (?, ?, ?, ?, ?, 'pending')",
+        "INSERT INTO generated_sets (section, topic, payload, created_by, quality_score, judge_notes, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
       )
-      .run(section, JSON.stringify(payload), createdBy, qualityScore, judgeNotes);
+      .run(section, topic ?? null, JSON.stringify(payload), createdBy, qualityScore, judgeNotes);
     return Number(info.lastInsertRowid);
   },
   /** Admin approval: moves a reviewed 'pending' set into the live pool. */
@@ -350,22 +364,25 @@ export const sets = {
     db.prepare("UPDATE generated_sets SET status = 'pooled' WHERE id = ? AND status = 'pending'").run(id);
   },
   /** Highest-quality pooled set in `section` the user has NOT seen yet, or
-   * undefined if they've seen them all. The caller should generate a fresh set
-   * when this returns undefined rather than re-serving an old one. */
-  async pickForUser(section: string, userId: number): Promise<GeneratedSet | undefined> {
+   * undefined if they've seen them all. `topic` selects a drill pool (a QA
+   * topic string) or, when null/omitted, the full mixed pool. The caller
+   * should generate a fresh set when this returns undefined rather than
+   * re-serving an old one. */
+  async pickForUser(section: string, userId: number, topic?: string | null): Promise<GeneratedSet | undefined> {
     // Only serve JUDGE-GRADED sets (quality_score NOT NULL). Legacy pre-grading
     // rows carry the old wrong/off-by-one keys, so they're never picked;
     // exhausting graded sets makes the route generate fresh instead.
     return db
       .prepare(
         `SELECT g.* FROM generated_sets g
-           WHERE g.section = ?
-             AND g.status = 'pooled'
-             AND g.quality_score IS NOT NULL
-             AND g.id NOT IN (SELECT set_id FROM user_seen_sets WHERE user_id = ?)
-           ORDER BY g.quality_score DESC, g.created_at DESC LIMIT 1`,
+            WHERE g.section = ?
+              AND ${topic ? "g.topic = ?" : "g.topic IS NULL"}
+              AND g.status = 'pooled'
+              AND g.quality_score IS NOT NULL
+              AND g.id NOT IN (SELECT set_id FROM user_seen_sets WHERE user_id = ?)
+            ORDER BY g.quality_score DESC, g.created_at DESC LIMIT 1`,
       )
-      .get(section, userId) as GeneratedSet | undefined;
+      .get(...(topic ? [section, topic, userId] : [section, userId])) as GeneratedSet | undefined;
   },
   /** Last-resort fallback: the set this user saw longest ago. Only used when
    * the pool is exhausted AND fresh generation failed, so we never hand the
@@ -380,13 +397,13 @@ export const sets = {
       )
       .get(section, userId) as GeneratedSet | undefined;
   },
-  async qualityPoolCount(section: string): Promise<number> {
+  async qualityPoolCount(section: string, topic?: string | null): Promise<number> {
     return (
       db
         .prepare(
-          "SELECT COUNT(*) c FROM generated_sets WHERE section = ? AND quality_score IS NOT NULL",
+          `SELECT COUNT(*) c FROM generated_sets WHERE section = ? AND ${topic ? "topic = ?" : "topic IS NULL"} AND quality_score IS NOT NULL`,
         )
-        .get(section) as { c: number }
+        .get(...(topic ? [section, topic] : [section])) as { c: number }
     ).c;
   },
   /** Admin browse: newest-first page of sets, optionally filtered by section.
@@ -410,9 +427,9 @@ export const sets = {
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     return db
       .prepare(
-        `SELECT id, section, payload, status, quality_score, judge_notes, created_at
-           FROM generated_sets ${where}
-           ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `SELECT id, section, topic, payload, status, quality_score, judge_notes, created_at
+            FROM generated_sets ${where}
+            ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset) as PagedSet[];
   },
@@ -424,25 +441,26 @@ export const sets = {
   // ---- incremental draft building (mirror of db-pg.ts) -------------------
   async getDraft(
     section: string,
+    topic?: string | null,
     maxAgeMinutes = 180,
   ): Promise<{ id: number; payload: string } | undefined> {
     return db
       .prepare(
         `SELECT id, payload FROM generated_sets
-           WHERE section = ? AND status = 'draft'
-             AND created_at > datetime('now', ?)
-           ORDER BY created_at DESC LIMIT 1`,
+            WHERE section = ? AND ${topic ? "topic = ?" : "topic IS NULL"} AND status = 'draft'
+              AND created_at > datetime('now', ?)
+            ORDER BY created_at DESC LIMIT 1`,
       )
-      .get(section, `-${maxAgeMinutes} minutes`) as
+      .get(...(topic ? [section, topic, `-${maxAgeMinutes} minutes`] : [section, `-${maxAgeMinutes} minutes`])) as
       | { id: number; payload: string }
       | undefined;
   },
-  async createDraft(section: string, payload: unknown): Promise<number> {
+  async createDraft(section: string, payload: unknown, topic?: string | null): Promise<number> {
     const info = db
       .prepare(
-        "INSERT INTO generated_sets (section, payload, status, created_by) VALUES (?, ?, 'draft', 'builder')",
+        "INSERT INTO generated_sets (section, topic, payload, status, created_by) VALUES (?, ?, ?, 'draft', 'builder')",
       )
-      .run(section, JSON.stringify(payload));
+      .run(section, topic ?? null, JSON.stringify(payload));
     return Number(info.lastInsertRowid);
   },
   async updateDraft(id: number, payload: unknown): Promise<void> {
@@ -502,7 +520,16 @@ export const attempts = {
   async byMock(mockId: number): Promise<Attempt[]> {
     return db.prepare("SELECT * FROM attempts WHERE mock_id = ? ORDER BY id").all(mockId) as Attempt[];
   },
-  async listForUser(userId: number, section?: string): Promise<Attempt[]> {
+  async listForUser(userId: number, section?: string, topic?: string | null): Promise<Attempt[]> {
+    if (section && topic !== undefined) {
+      return db
+        .prepare(
+          `SELECT a.* FROM attempts a JOIN generated_sets g ON g.id = a.set_id
+             WHERE a.user_id = ? AND a.section = ? AND ${topic ? "g.topic = ?" : "g.topic IS NULL"}
+             ORDER BY a.created_at DESC`,
+        )
+        .all(...(topic ? [userId, section, topic] : [userId, section])) as Attempt[];
+    }
     if (section) {
       return db
         .prepare(
@@ -596,6 +623,59 @@ export const mocks = {
   /** Cleans up a mock that failed to fully build (cascades to its attempts). */
   async remove(id: number): Promise<void> {
     db.prepare("DELETE FROM mocks WHERE id = ?").run(id);
+  },
+  /** Admin view: newest-first mocks with the owning username plus every
+   * linked section attempt (section, score/total, submitted flag). */
+  async listDetailed(limit = 50): Promise<
+    Array<{
+      id: number;
+      username: string;
+      submitted: number;
+      created_at: string;
+      submitted_at: string | null;
+      attempts: Array<{
+        id: number;
+        section: string;
+        phase: string | null;
+        score: number | null;
+        total: number | null;
+        raw_score: number | null;
+        submitted: number;
+      }>;
+    }>
+  > {
+    const mocks = db
+      .prepare(
+        `SELECT m.id, m.submitted, m.created_at, m.submitted_at, u.username
+           FROM mocks m JOIN users u ON u.id = m.user_id
+          ORDER BY m.created_at DESC LIMIT ?`,
+      )
+      .all(limit) as Array<{
+      id: number;
+      submitted: number;
+      created_at: string;
+      submitted_at: string | null;
+      username: string;
+    }>;
+    const att = db.prepare(
+      `SELECT id, mock_id, section, phase, score, total, raw_score, submitted
+         FROM attempts WHERE mock_id = ? ORDER BY id`,
+    );
+    return mocks.map((m) => ({
+      ...m,
+      attempts: (
+        att.all(m.id) as Array<{
+          id: number;
+          mock_id: number;
+          section: string;
+          phase: string | null;
+          score: number | null;
+          total: number | null;
+          raw_score: number | null;
+          submitted: number;
+        }>
+      ).map(({ mock_id, ...a }) => a),
+    }));
   },
   /** Percentile of a full-mock total (summed raw_score across its five
    * section attempts) against every OTHER submitted mock, across all

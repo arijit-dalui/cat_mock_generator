@@ -380,19 +380,20 @@ export async function chat(prompt: string, opts: ChatOptions = {}): Promise<stri
 // since existing code imports it from "@/lib/llm".
 export { extractJSON };
 
+const JSON_SYSTEM_SUFFIX =
+  "Respond with valid JSON only. No markdown, no commentary. " +
+  "Every string value in the JSON must contain ONLY the final, polished " +
+  "content - never your reasoning process, hesitation, or self-correction " +
+  "('wait', 'let me recalculate', 'actually', 'I made a mistake', 'hmm'). " +
+  "Work out the answer silently; the JSON you output is the finished " +
+  "result, not a transcript of how you got there.";
+
 /** Chat call that expects and returns parsed JSON. */
 export async function chatJSON<T = unknown>(
   prompt: string,
   opts: ChatOptions = {},
 ): Promise<T> {
-  const system =
-    (opts.system ? opts.system + "\n" : "") +
-    "Respond with valid JSON only. No markdown, no commentary. " +
-    "Every string value in the JSON must contain ONLY the final, polished " +
-    "content - never your reasoning process, hesitation, or self-correction " +
-    "('wait', 'let me recalculate', 'actually', 'I made a mistake', 'hmm'). " +
-    "Work out the answer silently; the JSON you output is the finished " +
-    "result, not a transcript of how you got there.";
+  const system = (opts.system ? opts.system + "\n" : "") + JSON_SYSTEM_SUFFIX;
   const raw = await chat(prompt, { ...opts, system });
   try {
     return extractJSON(raw) as T;

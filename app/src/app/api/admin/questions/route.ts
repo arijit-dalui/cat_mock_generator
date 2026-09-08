@@ -39,6 +39,7 @@ export async function GET(req: Request) {
     return {
       id: r.id,
       section: r.section,
+      topic: r.topic ?? null,
       status: r.status,
       qualityScore: r.quality_score,
       judgeNotes: r.judge_notes,

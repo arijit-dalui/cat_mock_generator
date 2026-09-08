@@ -12,7 +12,7 @@
  * honest "not available right now", not a silent live generation.
  */
 import { sets, attempts, userSeen } from "@/lib/db";
-import type { Section } from "@/lib/config";
+import type { Section, QaTopic } from "@/lib/config";
 import { dedupeRcPayload } from "@/lib/generate";
 
 /** Thrown when the pool has no unseen set left for this user/section - the
@@ -28,9 +28,9 @@ export class NoSetsAvailableError extends Error {
 export async function serveSectionAttempt(
   userId: number,
   section: Section,
-  extra?: { mockId?: number; phase?: string },
+  extra?: { mockId?: number; phase?: string; topic?: QaTopic | null },
 ): Promise<number> {
-  let setRow = await sets.pickForUser(section, userId);
+  let setRow = await sets.pickForUser(section, userId, extra?.topic ?? null);
   if (!setRow) {
     throw new NoSetsAvailableError(section);
   }

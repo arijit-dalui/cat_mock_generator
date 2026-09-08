@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS kb_items (
 );
 CREATE INDEX IF NOT EXISTS idx_kb_section ON kb_items(section, subtype);
 CREATE TABLE IF NOT EXISTS generated_sets (
-  id SERIAL PRIMARY KEY, section TEXT NOT NULL, payload JSONB NOT NULL,
+  id SERIAL PRIMARY KEY, section TEXT NOT NULL, topic TEXT, payload JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'pooled', created_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   quality_score INTEGER, judge_notes TEXT
@@ -73,6 +73,9 @@ CREATE INDEX IF NOT EXISTS idx_sets_section_quality
 -- Migrations for existing deploys (Postgres allows IF NOT EXISTS on ADD COLUMN since 9.6).
 ALTER TABLE generated_sets ADD COLUMN IF NOT EXISTS quality_score INTEGER;
 ALTER TABLE generated_sets ADD COLUMN IF NOT EXISTS judge_notes TEXT;
+ALTER TABLE generated_sets ADD COLUMN IF NOT EXISTS topic TEXT;
+-- After the ALTERs: an index on a missing column throws and aborts the batch.
+CREATE INDEX IF NOT EXISTS idx_sets_topic ON generated_sets(section, topic, status);
 CREATE TABLE IF NOT EXISTS user_seen_sets (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   set_id  INTEGER NOT NULL REFERENCES generated_sets(id) ON DELETE CASCADE,
@@ -167,6 +170,7 @@ export interface SessionRow {
 export interface GeneratedSet {
   id: number;
   section: string;
+  topic: string | null;
   payload: string; // JSON string (we serialise on insert, parse on read for compatibility)
   status: "pooled" | "served";
   created_by: string | null;
@@ -193,6 +197,7 @@ export interface Attempt {
 export interface PagedSet {
   id: number;
   section: string;
+  topic: string | null;
   payload: string;
   status: string;
   quality_score: number | null;
@@ -419,12 +424,13 @@ export const sets = {
     createdBy: string,
     qualityScore: number,
     judgeNotes: string,
+    topic?: string | null,
   ): Promise<number> {
     await ready;
     const rows = await sql<
       { id: number }[]
-    >`INSERT INTO generated_sets (section, payload, created_by, quality_score, judge_notes, status)
-        VALUES (${section}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, ${createdBy}, ${qualityScore}, ${judgeNotes}, 'pending')
+    >`INSERT INTO generated_sets (section, topic, payload, created_by, quality_score, judge_notes, status)
+        VALUES (${section}, ${topic ?? null}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, ${createdBy}, ${qualityScore}, ${judgeNotes}, 'pending')
         RETURNING id`;
     return rows[0].id;
   },
@@ -440,17 +446,36 @@ export const sets = {
   async pickForUser(
     section: string,
     userId: number,
+    topic?: string | null,
   ): Promise<GeneratedSet | undefined> {
     await ready;
     // Only serve JUDGE-GRADED sets (quality_score IS NOT NULL). Legacy
     // pre-grading rows (NULL score) carry the old wrong/off-by-one keys, so we
     // never pick them — exhausting graded sets triggers fresh generation in the
     // route instead. Their review links stay valid; they're just never served.
+    // `topic` selects a drill pool, or the full mixed pool when null/omitted.
+    if (topic) {
+      const rows = await sql<
+        GeneratedSet[]
+      >`SELECT g.id, g.section, g.topic, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
+          FROM generated_sets g
+          WHERE g.section = ${section}
+            AND g.topic = ${topic}
+            AND g.status = 'pooled'
+            AND g.quality_score IS NOT NULL
+            AND g.id NOT IN (
+              SELECT set_id FROM user_seen_sets WHERE user_id = ${userId}
+            )
+          ORDER BY g.quality_score DESC, g.created_at DESC
+          LIMIT 1`;
+      return rows[0];
+    }
     const fresh = await sql<
       GeneratedSet[]
-    >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
+    >`SELECT g.id, g.section, g.topic, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
         FROM generated_sets g
         WHERE g.section = ${section}
+          AND g.topic IS NULL
           AND g.status = 'pooled'
           AND g.quality_score IS NOT NULL
           AND g.id NOT IN (
@@ -470,7 +495,7 @@ export const sets = {
     await ready;
     const seen = await sql<
       GeneratedSet[]
-    >`SELECT g.id, g.section, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
+    >`SELECT g.id, g.section, g.topic, g.payload::text AS payload, g.status, g.created_by, g.created_at::text
         FROM generated_sets g
         JOIN user_seen_sets s ON s.set_id = g.id
         WHERE g.section = ${section} AND s.user_id = ${userId}
@@ -479,12 +504,19 @@ export const sets = {
     return seen[0];
   },
   /** Count of pooled sets in this section that have a judge score (i.e. the
-   * new-style pool, not legacy 'served' rows). */
-  async qualityPoolCount(section: string): Promise<number> {
+   * new-style pool, not legacy 'served' rows). `topic` narrows to a drill
+   * pool, or the full mixed pool when null/omitted. */
+  async qualityPoolCount(section: string, topic?: string | null): Promise<number> {
     await ready;
+    if (topic) {
+      const rows = await sql<
+        { c: number }[]
+      >`SELECT COUNT(*)::int c FROM generated_sets WHERE section = ${section} AND topic = ${topic} AND quality_score IS NOT NULL`;
+      return rows[0].c;
+    }
     const rows = await sql<
       { c: number }[]
-    >`SELECT COUNT(*)::int c FROM generated_sets WHERE section = ${section} AND quality_score IS NOT NULL`;
+    >`SELECT COUNT(*)::int c FROM generated_sets WHERE section = ${section} AND topic IS NULL AND quality_score IS NOT NULL`;
     return rows[0].c;
   },
   /** Admin browse: newest-first page of sets, optionally filtered by section.
@@ -498,24 +530,24 @@ export const sets = {
     await ready;
     if (section && status) {
       return await sql<PagedSet[]>`
-        SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+        SELECT id, section, topic, payload::text AS payload, status, quality_score, judge_notes, created_at::text
           FROM generated_sets WHERE section = ${section} AND status = ${status}
           ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
     }
     if (section) {
       return await sql<PagedSet[]>`
-        SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+        SELECT id, section, topic, payload::text AS payload, status, quality_score, judge_notes, created_at::text
           FROM generated_sets WHERE section = ${section}
           ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
     }
     if (status) {
       return await sql<PagedSet[]>`
-        SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+        SELECT id, section, topic, payload::text AS payload, status, quality_score, judge_notes, created_at::text
           FROM generated_sets WHERE status = ${status}
           ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
     }
     return await sql<PagedSet[]>`
-      SELECT id, section, payload::text AS payload, status, quality_score, judge_notes, created_at::text
+      SELECT id, section, topic, payload::text AS payload, status, quality_score, judge_notes, created_at::text
         FROM generated_sets
         ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
   },
@@ -534,21 +566,30 @@ export const sets = {
    * never wedges the section forever. */
   async getDraft(
     section: string,
+    topic?: string | null,
     maxAgeMinutes = 180,
   ): Promise<{ id: number; payload: string } | undefined> {
     await ready;
+    if (topic) {
+      const rows = await sql<{ id: number; payload: string }[]>`
+        SELECT id, payload::text AS payload FROM generated_sets
+          WHERE section = ${section} AND topic = ${topic} AND status = 'draft'
+            AND created_at > now() - (${maxAgeMinutes} || ' minutes')::interval
+          ORDER BY created_at DESC LIMIT 1`;
+      return rows[0];
+    }
     const rows = await sql<{ id: number; payload: string }[]>`
       SELECT id, payload::text AS payload FROM generated_sets
-        WHERE section = ${section} AND status = 'draft'
+        WHERE section = ${section} AND topic IS NULL AND status = 'draft'
           AND created_at > now() - (${maxAgeMinutes} || ' minutes')::interval
         ORDER BY created_at DESC LIMIT 1`;
     return rows[0];
   },
-  async createDraft(section: string, payload: unknown): Promise<number> {
+  async createDraft(section: string, payload: unknown, topic?: string | null): Promise<number> {
     await ready;
     const rows = await sql<{ id: number }[]>`
-      INSERT INTO generated_sets (section, payload, status, created_by)
-        VALUES (${section}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, 'draft', 'builder')
+      INSERT INTO generated_sets (section, topic, payload, status, created_by)
+        VALUES (${section}, ${topic ?? null}, ${sql.json(payload as Parameters<typeof sql.json>[0])}, 'draft', 'builder')
         RETURNING id`;
     return rows[0].id;
   },
@@ -630,8 +671,26 @@ export const attempts = {
               (submitted)::int AS submitted, created_at::text, submitted_at::text
         FROM attempts WHERE mock_id = ${mockId} ORDER BY id`;
   },
-  async listForUser(userId: number, section?: string): Promise<Attempt[]> {
+  async listForUser(userId: number, section?: string, topic?: string | null): Promise<Attempt[]> {
     await ready;
+    if (section && topic !== undefined) {
+      if (topic) {
+        return await sql<
+          Attempt[]
+        >`SELECT a.id, a.user_id, a.set_id, a.section, a.answers::text AS answers, a.score, a.total, a.raw_score, a.mock_id, a.phase,
+                  (a.submitted)::int AS submitted, a.created_at::text, a.submitted_at::text
+            FROM attempts a JOIN generated_sets g ON g.id = a.set_id
+            WHERE a.user_id = ${userId} AND a.section = ${section} AND g.topic = ${topic}
+            ORDER BY a.created_at DESC`;
+      }
+      return await sql<
+        Attempt[]
+      >`SELECT a.id, a.user_id, a.set_id, a.section, a.answers::text AS answers, a.score, a.total, a.raw_score, a.mock_id, a.phase,
+                (a.submitted)::int AS submitted, a.created_at::text, a.submitted_at::text
+          FROM attempts a JOIN generated_sets g ON g.id = a.set_id
+          WHERE a.user_id = ${userId} AND a.section = ${section} AND g.topic IS NULL
+          ORDER BY a.created_at DESC`;
+    }
     if (section) {
       return await sql<
         Attempt[]
@@ -726,6 +785,39 @@ export const mocks = {
   async remove(id: number): Promise<void> {
     await ready;
     await sql`DELETE FROM mocks WHERE id = ${id}`;
+  },
+  /** Admin view: newest-first mocks with the owning username plus every
+   * linked section attempt (section, score/total, submitted flag). */
+  async listDetailed(limit = 50) {
+    await ready;
+    const mocks = await sql<
+      Array<{
+        id: number;
+        submitted: number;
+        created_at: string;
+        submitted_at: string | null;
+        username: string;
+      }>
+    >`SELECT m.id, (m.submitted)::int AS submitted, m.created_at::text, m.submitted_at::text, u.username
+        FROM mocks m JOIN users u ON u.id = m.user_id
+       ORDER BY m.created_at DESC LIMIT ${limit}`;
+    return await Promise.all(
+      mocks.map(async (m) => ({
+        ...m,
+        attempts: await sql<
+          Array<{
+            id: number;
+            section: string;
+            phase: string | null;
+            score: number | null;
+            total: number | null;
+            raw_score: number | null;
+            submitted: number;
+          }>
+        >`SELECT id, section, phase, score, total, raw_score, (submitted)::int AS submitted
+            FROM attempts WHERE mock_id = ${m.id} ORDER BY id`,
+      })),
+    );
   },
   /** Percentile of a full-mock total (summed raw_score across its five
    * section attempts) against every OTHER submitted mock, across all

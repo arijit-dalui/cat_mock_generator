@@ -27,39 +27,58 @@ export interface JudgeVerdict {
 }
 
 /** Strip the full set down to just the parts the judge needs to score it.
- * Kept tight (~3.5K chars) to fit comfortably in Groq's smaller judge-model
- * context window. */
+ * Budgets are deliberately generous: slicing explanations/solutions mid-
+ * derivation makes complete working LOOK cut off, and the judge then
+ * penalises "incomplete numeric detail" that is actually present in the
+ * stored set. The judge model has a 100K+ context; a ~9K-char summary is
+ * cheap and preserves the decisive numbers. */
 function summariseForJudge(set: GeneratedSet): string {
   const lines: string[] = [`Section: ${set.section}`];
   if (set.kind === "questions" && set.items) {
     lines.push(`Items (${set.items.length}):`);
     for (const [i, q] of set.items.entries()) {
-      lines.push(`\nQ${i + 1} [${q.type}]: ${String(q.prompt).slice(0, 280)}`);
-      q.options.forEach((o, k) =>
-        lines.push(`  ${"ABCD"[k]}. ${String(o).slice(0, 120)}`),
-      );
+      lines.push(`\nQ${i + 1} [${q.type}]: ${String(q.prompt).slice(0, 300)}`);
+      if (q.format === "tita") {
+        lines.push(`  (TITA - typed answer, no options by design)`);
+      } else {
+        q.options.forEach((o, k) =>
+          lines.push(`  ${"ABCD"[k]}. ${String(o).slice(0, 120)}`),
+        );
+      }
       lines.push(`  ANSWER: ${q.format === "tita" ? String(q.answer) : "ABCD"[Number(q.answer)]}`);
-      lines.push(`  SOLUTION: ${String(q.solution).slice(0, 240)}`);
-      lines.push(
-        `  EXPL: ` +
-          q.explanations.map((e, k) => `${"ABCD"[k]}:${String(e).slice(0, 80)}`).join(" | "),
-      );
+      lines.push(`  SOLUTION: ${String(q.solution).slice(0, 400)}`);
+      if (q.format !== "tita") {
+        lines.push(
+          `  EXPL: ` +
+            q.explanations.map((e, k) => `${"ABCD"[k]}:${String(e).slice(0, 220)}`).join(" | "),
+        );
+      }
     }
   } else if (set.kind === "sets" && set.sets) {
     for (const [si, s] of set.sets.entries()) {
       lines.push(`\nSet ${si + 1} context:`);
-      lines.push(String(s.context).slice(0, 500));
+      // RC passages must go in nearly whole: a judge that only sees the
+      // opening paragraphs cannot verify detail/inference questions anchored
+      // later in the text, and rejects (or passes) blind.
+      lines.push(String(s.context).slice(0, 2500));
       for (const [i, q] of s.questions.entries()) {
-        lines.push(`\n  Q${i + 1}: ${String(q.prompt).slice(0, 220)}`);
-        q.options.forEach((o, k) =>
-          lines.push(`    ${"ABCD"[k]}. ${String(o).slice(0, 100)}`),
-        );
+        lines.push(`\n  Q${i + 1}: ${String(q.prompt).slice(0, 260)}`);
+        if (q.format === "tita") {
+          lines.push(`    (TITA - typed answer, no options by design)`);
+        } else {
+          q.options.forEach((o, k) =>
+            lines.push(`    ${"ABCD"[k]}. ${String(o).slice(0, 120)}`),
+          );
+        }
         lines.push(`    ANSWER: ${q.format === "tita" ? String(q.answer) : "ABCD"[Number(q.answer)]}`);
-        lines.push(`    SOLUTION: ${String(q.solution).slice(0, 200)}`);
+        lines.push(`    SOLUTION: ${String(q.solution).slice(0, 350)}`);
       }
     }
   }
-  return lines.join("\n").slice(0, 3500);
+  // ~16K cap: two full RC passages plus 8 fully-quoted questions fit the
+  // judge's 100K+ context easily, and truncated passages/questions produce
+  // blind verdicts (see above).
+  return lines.join("\n").slice(0, 16000);
 }
 
 const JUDGE_PROMPT = `You are a strict CAT (Common Admission Test) examiner reviewing an AI-generated practice set for the 99-percentile aspirant. Score the set 0-10 on EACH dimension:
@@ -82,10 +101,13 @@ const JUDGE_PROMPT = `You are a strict CAT (Common Admission Test) examiner revi
    0  = placeholder distractors
 
 4. explanation_depth:
-   10 = explanations name the specific misconception per option AND solution has concrete numbers/steps
-   6  = explanations attempt this but some are vague
-   3  = skeleton explanations ("first identify... then consider...")
-   0  = empty / placeholder
+    10 = explanations name the specific misconception per option AND solution has concrete numbers/steps
+    6  = explanations attempt this but some are vague
+    3  = skeleton explanations ("first identify... then consider...")
+    0  = empty / placeholder
+    (TITA questions carry no per-option explanations BY DESIGN - score them
+    on the solution's working alone, and never penalise the set merely for
+    TITA items lacking option explanations.)
 
 Be strict. A 7 means "I'd put this in a real CAT mock". A 4 means "weak but salvageable". Below 4 means "throw out".
 

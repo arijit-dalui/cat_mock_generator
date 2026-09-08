@@ -133,6 +133,15 @@ function renderContext(src: string): string {
 
   while (i < lines.length) {
     const ln = lines[i];
+    // Bank-imported diagram/solution images (local /pct/ SVGs saved by the importer).
+    const img = ln.trim().match(/^!\[([^\]]*)\]\((\/pct\/[^)]+)\)$/);
+    if (img) {
+      out.push(
+        `<div style="margin:8px 0;overflow-x:auto;"><img src="${img[2]}" alt="${escapeHtml(img[1])}" style="max-width:100%;height:auto;background:#fff;border:1px solid #c7d0da;border-radius:6px;padding:8px;" /></div>`,
+      );
+      i++;
+      continue;
+    }
     if (
       ln.trim().startsWith("|") &&
       i + 1 < lines.length &&
@@ -616,7 +625,10 @@ export default function SolveClient({ attemptId }: { attemptId: string }) {
         {q.solution && (
           <div style={{ marginTop: 10, background: EXAM_COLORS.tabBarBg, borderRadius: 4, padding: 10, fontSize: 13 }}>
             <span style={{ fontWeight: 600 }}>Solution: </span>
-            <span style={{ whiteSpace: "pre-wrap" }}>{q.solution}</span>
+            <span
+              style={{ whiteSpace: "pre-wrap" }}
+              dangerouslySetInnerHTML={{ __html: renderContext(q.solution) }}
+            />
           </div>
         )}
       </div>

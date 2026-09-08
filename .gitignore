@@ -11,6 +11,13 @@ ADMIN_CREDENTIALS.txt
 **/data/*.db-journal
 **/data/*.db-wal
 **/data/*.db-shm
+# scraper session tokens (must never be committed)
+**/mktoken.txt
+**/pct_token.txt
+# raw third-party banks (large + redistributable-risky; converted sets in outputs/ are the artifacts)
+work/pct_raw/
+work/pct_probe/
+work/mockat_raw/
 
 # ---- huge knowledge-base inputs (not part of the app) ----
 # Scoped to extraction/ specifically - a bare "mocks/" also matched

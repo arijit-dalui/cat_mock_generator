@@ -71,6 +71,15 @@ function renderContext(src: string): string {
 
   while (i < lines.length) {
     const ln = lines[i];
+    // Bank-imported diagram/solution images (local /pct/ SVGs saved by the importer).
+    const img = ln.trim().match(/^!\[([^\]]*)\]\((\/pct\/[^)]+)\)$/);
+    if (img) {
+      out.push(
+        `<div class="my-2 overflow-x-auto"><img src="${img[2]}" alt="${escapeHtml(img[1])}" style="max-width:100%;height:auto;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:8px;" /></div>`,
+      );
+      i++;
+      continue;
+    }
     if (
       ln.trim().startsWith("|") &&
       i + 1 < lines.length &&
