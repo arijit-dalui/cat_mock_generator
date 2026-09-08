@@ -1,0 +1,13 @@
+{
+ "version": "pool-v1",
+ "exported_at": "2026-09-08T17:44:45.425725+00:00",
+ "count": 530,
+ "by_section": {
+  "QA": 188,
+  "VA": 66,
+  "RC": 100,
+  "DI": 127,
+  "LR": 49
+ },
+ "note": "Import with: npm run seed-import (needs DATABASE_URL for Postgres). Idempotent; never touches users."
+}
