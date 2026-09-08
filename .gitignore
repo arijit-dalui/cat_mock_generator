@@ -11,9 +11,19 @@ ADMIN_CREDENTIALS.txt
 **/data/*.db-journal
 **/data/*.db-wal
 **/data/*.db-shm
+# scraper session tokens (must never be committed)
+**/mktoken.txt
+**/pct_token.txt
+# raw third-party banks (large + redistributable-risky; converted sets in outputs/ are the artifacts)
+work/pct_raw/
+work/pct_probe/
+work/mockat_raw/
 
 # ---- huge knowledge-base inputs (not part of the app) ----
-mocks/
+# Scoped to extraction/ specifically - a bare "mocks/" also matched
+# app/src/app/mocks/ and app/src/app/api/mocks/ (the full-mock feature's
+# actual source code), silently excluding them from every commit.
+extraction/mocks/
 extraction/extracted/
 extraction/docs/
 extraction/cache/

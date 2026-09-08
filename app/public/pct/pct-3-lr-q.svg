@@ -1,0 +1,36 @@
+<svg viewBox="0 0 300 230" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor">
+<text x="150" y="14" fill="currentColor" stroke="none" font-size="12" text-anchor="middle">Walkway network (totals at line ends)</text>
+
+<line x1="60" y1="60" x2="192" y2="60" stroke-width="1"/>
+<line x1="60" y1="110" x2="192" y2="110" stroke-width="1"/>
+<line x1="60" y1="180" x2="192" y2="180" stroke-width="1"/>
+
+<line x1="60" y1="60" x2="60" y2="180" stroke-width="1"/>
+<line x1="120" y1="60" x2="120" y2="180" stroke-width="1"/>
+<line x1="192" y1="60" x2="192" y2="180" stroke-width="1"/>
+
+<circle cx="60" cy="60" r="4" stroke-width="2"/>
+<circle cx="60" cy="110" r="4" stroke-width="2"/>
+<circle cx="60" cy="180" r="4" stroke-width="2"/>
+
+<circle cx="120" cy="60" r="4" stroke-width="2"/>
+<circle cx="120" cy="110" r="4" stroke-width="2"/>
+<circle cx="120" cy="180" r="4" stroke-width="2"/>
+
+<circle cx="192" cy="60" r="4" stroke-width="2"/>
+<circle cx="192" cy="110" r="4" stroke-width="2"/>
+<circle cx="192" cy="180" r="4" stroke-width="2"/>
+
+<text x="205" y="63" fill="currentColor" stroke="none" font-size="10">H-A 22</text>
+<text x="205" y="113" fill="currentColor" stroke="none" font-size="10">H-B 22</text>
+<text x="205" y="183" fill="currentColor" stroke="none" font-size="10">H-C 19</text>
+
+<text x="48" y="196" fill="currentColor" stroke="none" font-size="10">W1 24</text>
+<text x="108" y="196" fill="currentColor" stroke="none" font-size="10">W2 24</text>
+<text x="180" y="196" fill="currentColor" stroke="none" font-size="10">W3 15</text>
+
+<text x="87" y="55" fill="currentColor" stroke="none" font-size="9">5</text>
+<text x="153" y="55" fill="currentColor" stroke="none" font-size="9">6</text>
+<text x="46" y="88" fill="currentColor" stroke="none" font-size="9">4</text>
+<text x="46" y="148" fill="currentColor" stroke="none" font-size="9">6</text>
+</svg>

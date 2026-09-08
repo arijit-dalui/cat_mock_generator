@@ -15,8 +15,7 @@
 import { NextResponse } from "next/server";
 import { config, SECTIONS, type Section } from "@/lib/config";
 import { sets } from "@/lib/db";
-import { generateSet } from "@/lib/generate";
-import { judgeSet } from "@/lib/generate/judge";
+import { generateOneForPool } from "@/lib/generate/pool";
 
 export const maxDuration = 300;
 
@@ -24,19 +23,6 @@ function checkAuth(req: Request): boolean {
   const auth = req.headers.get("authorization") || "";
   const expected = process.env.CRON_SECRET || config.workerToken;
   return auth === `Bearer ${expected}`;
-}
-
-/** Resolve `p`, but reject if it takes longer than `ms`. The underlying work
- * isn't cancelled (Vercel freezes the function after maxDuration anyway), but
- * this lets the handler RETURN a response well under the 300s platform cap
- * instead of letting one slow generation hang the whole request until the
- * scheduler's curl times out — which is what was failing the warm workflow. */
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  let t: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<T>((_, reject) => {
-    t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(t)) as Promise<T>;
 }
 
 interface SectionStatus {
@@ -120,7 +106,7 @@ async function topupOnce(req: Request) {
   // slot before starting, so fast sections still pack 2-3 per invocation.
   const BUDGET_MS = 270_000;
   const PER_SET_MS = 185_000;
-  const JUDGE_MS = 30_000;
+  const JUDGE_MS = 60_000; // free-tier judge pool can need 429-retry rounds; 30s was too tight
   let toGenerate = maxPerTick;
   while (toGenerate > 0) {
     // Don't START a set we can't finish within budget: reserve a full per-set
@@ -135,31 +121,22 @@ async function topupOnce(req: Request) {
     if (!target) break;
     const sec = target.s;
 
-    try {
-      const generated = await withTimeout(generateSet(sec), PER_SET_MS, `${sec} generateSet`);
-      if (url.searchParams.get("debug")) {
-        (status[sec] as unknown as { warnings?: string[] }).warnings =
-          generated.meta.warnings;
-      }
-      const verdict = await withTimeout(judgeSet(generated), JUDGE_MS, `${sec} judge`);
-      if (verdict.accept) {
-        await sets.insertWithQuality(
-          sec,
-          generated,
-          "cron",
-          verdict.overall,
-          verdict.notes,
-        );
-        status[sec].generated += 1;
-        status[sec].pool += 1;
-        status[sec].lastNote = `accepted (score ${verdict.overall})`;
-      } else {
-        status[sec].rejected += 1;
-        status[sec].lastNote = `rejected (score ${verdict.overall}): ${verdict.notes}`;
-      }
-    } catch (e) {
+    const result = await generateOneForPool(sec, "cron", {
+      generateMs: PER_SET_MS,
+      judgeMs: JUDGE_MS,
+      debug: !!url.searchParams.get("debug"),
+    });
+    if (result.warnings) (status[sec] as unknown as { warnings?: string[] }).warnings = result.warnings;
+    if (result.accepted) {
+      status[sec].generated += 1;
+      status[sec].pool += 1;
+      status[sec].lastNote = `accepted (score ${result.score})`;
+    } else if (result.score > 0) {
+      status[sec].rejected += 1;
+      status[sec].lastNote = `rejected (score ${result.score}): ${result.notes}`;
+    } else {
       status[sec].errored += 1;
-      status[sec].lastNote = `error: ${e instanceof Error ? e.message : String(e)}`;
+      status[sec].lastNote = `error: ${result.notes}`;
     }
     toGenerate -= 1;
   }

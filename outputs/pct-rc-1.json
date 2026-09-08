@@ -1,0 +1,162 @@
+{
+ "sets": [
+  {
+   "contextLabel": "Reading Comprehension",
+   "context": "For more than a century, lichens were understood through a single phrase: a partnership between a fungus and an alga, in which the fungus provides shelter and structure and the alga, by photosynthesis, supplies the sugar. The phrase, repeated in textbooks for generations, had the merit of being short and the demerit of being incomplete. Recent work has shown the lichen to be a considerably more crowded community than the two-partner picture allowed, with a second kind of fungus regularly present and contributing, in ways still being clarified, to the structure long credited to the first.\n\nThe discovery did not arrive by accident. Researchers attempting to grow lichens in the laboratory found that combining the textbook fungus and alga produced, repeatedly, something that did not look like a lichen — a growth lacking the characteristic surface chemistry, the typical colours, the recognisable form. The puzzle stood for some years before a second yeast-like fungus, distinct from the first, was identified in the surface tissue of many lichen species. When this fungus was included, the artificial growths began, at last, to resemble the wild material. The phrase about two partners did not, on this evidence, capture what a lichen is.\n\nIt would be hasty, on the other hand, to leap from the addition of a partner to a portrait of lichens as freewheeling collectives. The second fungus is not present in every lichen, contributes differently across species, and is itself part of a broader microbial community whose role in the partnership is still being worked out by patient laboratory work. The lesson is not that the old picture was wrong in every detail but that its tidiness was an artefact of how lichens were originally studied, and of which organisms the available techniques were able to recover. Once researchers stopped assuming there were two partners and started looking with newer molecular tools, additional partners turned out to be there.\n\nThe case is instructive beyond lichens. A category long held to be settled — 'a fungus and an alga' — was settled in part because the available techniques could not see what they were not looking for. The corrective is not a romance of complexity but a habit of suspecting that the simplest available description may have been favoured for reasons of methodology rather than nature. Most settled categories, given new techniques, prove to be busier than they were thought to be.",
+   "source": "Bank /Practice RC 1",
+   "questions": [
+    {
+     "type": "rc",
+     "prompt": "Which one of the following best captures the main idea of the passage?",
+     "options": [
+      "The textbook two-partner picture of lichens is incomplete; recent work has revealed a more crowded community whose discovery illustrates how settled categories can be artefacts of method.",
+      "The yeast-like fungus recently discovered in lichen surface tissue is now known to be present in every lichen species that has ever been examined.",
+      "Researchers studying lichens in the laboratory have proved that the textbook description of a fungus and an alga is entirely false and should be discarded.",
+      "The proper response to the new findings is to abandon the notion of partnership in lichens and treat them as freewheeling microbial collectives without structure."
+     ],
+     "answer": 0,
+     "explanations": [
+      "Correct. A: correct → captures Paras 1–4 with hedging  B: overstatement → 'every' species not asserted  C: overstatement → 'entirely false' is not the passage's verdict  D: reversal → Para 3 explicitly resists the freewheeling picture",
+      "Incorrect. The working arrives at option A, not option B.",
+      "Incorrect. The working arrives at option A, not option C.",
+      "Incorrect. The working arrives at option A, not option D."
+     ],
+     "solution": "A: correct → captures Paras 1–4 with hedging  B: overstatement → 'every' species not asserted  C: overstatement → 'entirely false' is not the passage's verdict  D: reversal → Para 3 explicitly resists the freewheeling picture"
+    },
+    {
+     "type": "rc",
+     "prompt": "It can be inferred from the passage that laboratory attempts to grow a lichen from only the textbook fungus and alga:",
+     "options": [
+      "succeeded in producing material indistinguishable from wild lichens, which is why the conventional view of the two-partner lichen persisted.",
+      "failed to produce something with the characteristic features of the wild lichen, and that failure prompted the search that found the additional partner.",
+      "were attempted only after the second fungus had already been identified independently in wild field specimens of lichen.",
+      "produced material identical to wild lichen in every respect except for its surface chemistry, which differed in subtle ways."
+     ],
+     "answer": 1,
+     "explanations": [
+      "Incorrect. The working arrives at option B, not option A.",
+      "Correct. A: reversal → Para 2 says they failed  B: correct → directly matches Para 2  C: reversal → the failures came first, the second fungus was identified later  D: overstatement → 'identical in every respect' is denied",
+      "Incorrect. The working arrives at option B, not option C.",
+      "Incorrect. The working arrives at option B, not option D."
+     ],
+     "solution": "A: reversal → Para 2 says they failed  B: correct → directly matches Para 2  C: reversal → the failures came first, the second fungus was identified later  D: overstatement → 'identical in every respect' is denied"
+    },
+    {
+     "type": "rc",
+     "prompt": "The reference in the second paragraph to lichens grown from the textbook fungus and alga lacking 'the characteristic surface chemistry, the typical colours, the recognisable form' chiefly functions to:",
+     "options": [
+      "argue that surface chemistry, colour, and form are the only defensible criteria for identifying a lichen.",
+      "illustrate the difficulty of cultivating wild organisms in controlled laboratory conditions in general.",
+      "name the specific deficiencies of the textbook combination that motivated the search for an additional partner.",
+      "demonstrate that lichens grown in laboratories are aesthetically inferior to those collected from the wild."
+     ],
+     "answer": 2,
+     "explanations": [
+      "Incorrect. The working arrives at option C, not option A.",
+      "Incorrect. The working arrives at option C, not option B.",
+      "Correct. A: overstatement → 'only' not asserted  B: out-of-scope → no general-cultivation claim  C: correct → directly matches Para 2's use  D: out-of-scope → no aesthetic claim made",
+      "Incorrect. The working arrives at option C, not option D."
+     ],
+     "solution": "A: overstatement → 'only' not asserted  B: out-of-scope → no general-cultivation claim  C: correct → directly matches Para 2's use  D: out-of-scope → no aesthetic claim made"
+    },
+    {
+     "type": "rc",
+     "prompt": "In the final paragraph, 'the simplest available description may have been favoured for reasons of methodology rather than nature' most nearly suggests that:",
+     "options": [
+      "scientists deliberately conceal the complexity of natural categories in order to maintain the authority of their textbook descriptions.",
+      "methodological constraints in scientific laboratories have made the systematic study of natural categories practically impossible to carry out.",
+      "nature is, in general, considerably simpler than the available scientific descriptions of it have so far suggested it to be.",
+      "a description's apparent simplicity may reflect what the available techniques can see rather than the underlying state of nature."
+     ],
+     "answer": 3,
+     "explanations": [
+      "Incorrect. The working arrives at option D, not option A.",
+      "Incorrect. The working arrives at option D, not option B.",
+      "Incorrect. The working arrives at option D, not option C.",
+      "Correct. A: overstatement → 'deliberately conceal' not asserted  B: overstatement → study is not 'impossible'  C: reversal → the passage says the opposite  D: correct → matches Para 4"
+     ],
+     "solution": "A: overstatement → 'deliberately conceal' not asserted  B: overstatement → study is not 'impossible'  C: reversal → the passage says the opposite  D: correct → matches Para 4"
+    }
+   ]
+  },
+  {
+   "contextLabel": "Reading Comprehension",
+   "context": "That the weather of two weeks from now cannot, in any practical sense, be predicted is not a failure of meteorology but a consequence of mathematics. The equations that govern the atmosphere are sensitive to initial conditions in a way that compounds small errors into large ones at a rate set by the system itself; a fractional uncertainty in today's temperature field is, in some number of days, indistinguishable from total ignorance. The deeper insight, established in the 1960s through the work of Lorenz on a deliberately simplified model, was not that prediction is hard but that it is intrinsically bounded — there exists, for systems of this kind, a horizon beyond which prediction is impossible regardless of how good the observations or the computers become.\n\nThe result is sometimes misunderstood. Chaos in this technical sense does not mean randomness; the equations are entirely deterministic, with no chance term, and the same initial state, exactly specified, would always evolve in exactly the same way. The unpredictability arises from the fact that initial states cannot be exactly specified — every measurement has a finite precision — and that the system magnifies the unspecified part exponentially. The behaviour is, in the strict sense, deterministic chaos, a phrase whose apparent contradiction dissolves once one notices that determinism and predictability are different properties of the same system.\n\nThe misunderstanding matters because it shapes what one expects from improved instruments. A naive reader of meteorology might suppose that better satellites, denser observing networks, and faster computers will, eventually, push the prediction horizon to a month, a year, a decade. The mathematics suggests otherwise. Doubling the observational precision pushes the horizon by a fixed amount whose size depends on the system's growth rate, and for the atmosphere this amount is modest; reaching one extra week of useful prediction requires roughly an order-of-magnitude improvement in precision. The returns to investment in observation are not zero but, after a point, deeply diminishing.\n\nWhat the picture leaves room for is the prediction of statistics rather than states. One cannot say what the temperature will be in Delhi on a particular day three months hence; one can, given enough understanding of the climate, say something useful about the likely distribution of temperatures over that month. The horizon for statistics is much further out than the horizon for individual states, and a great deal of useful work on weather and climate proceeds in this statistical register. To collapse the two — to treat statistical prediction as a weaker form of state prediction — is to mistake the kind of claim each is making.",
+   "source": "Bank /Practice RC 2",
+   "questions": [
+    {
+     "type": "rc",
+     "prompt": "The primary purpose of the passage is to:",
+     "options": [
+      "argue that further improvements in observation and computing will, in time, overcome the practical limits of weather prediction altogether.",
+      "defend the use of randomness as a basic feature of the modern atmospheric models used in modern meteorology.",
+      "explain the mathematical basis of the prediction horizon and distinguish the kinds of claim weather prediction can support.",
+      "rank the meteorological agencies of various countries by the degree of their reliance on long-range forecasting tools."
+     ],
+     "answer": 2,
+     "explanations": [
+      "Incorrect. The working arrives at option C, not option A.",
+      "Incorrect. The working arrives at option C, not option B.",
+      "Correct. A: reversal → Para 3 says better instruments extend the horizon only modestly  B: reversal → Para 2 says no chance term is involved  C: correct → matches Paras 1–4  D: out-of-scope → no such ranking",
+      "Incorrect. The working arrives at option C, not option D."
+     ],
+     "solution": "A: reversal → Para 3 says better instruments extend the horizon only modestly  B: reversal → Para 2 says no chance term is involved  C: correct → matches Paras 1–4  D: out-of-scope → no such ranking"
+    },
+    {
+     "type": "rc",
+     "prompt": "All of the following can be inferred from the passage EXCEPT that:",
+     "options": [
+      "the atmospheric equations governing weather contain a stochastic term whose magnitude sets the practical limit of weather prediction.",
+      "doubling the precision of weather observation pushes the prediction horizon forward by an amount that depends on the atmosphere's growth rate.",
+      "the prediction of climate statistics over a future month operates within a much further horizon than the prediction of one day's weather.",
+      "the same initial atmospheric state, exactly specified, would always produce the same evolution under the deterministic equations the passage describes."
+     ],
+     "answer": 0,
+     "explanations": [
+      "Correct. A: correct (unsupported) → Para 2 explicitly says the equations have no chance term  B: supported → Para 3  C: supported → Para 4  D: supported → Para 2",
+      "Incorrect. The working arrives at option A, not option B.",
+      "Incorrect. The working arrives at option A, not option C.",
+      "Incorrect. The working arrives at option A, not option D."
+     ],
+     "solution": "A: correct (unsupported) → Para 2 explicitly says the equations have no chance term  B: supported → Para 3  C: supported → Para 4  D: supported → Para 2"
+    },
+    {
+     "type": "rc",
+     "prompt": "The argument in the third paragraph that the returns to investment in observation are eventually diminishing most directly assumes that:",
+     "options": [
+      "weather forecasting is a more wasteful use of public resources than climate-statistics forecasting is in practice.",
+      "the observational precision available to meteorologists has not substantially changed over the last several decades.",
+      "the public attaches little value to forecasts that extend beyond about one week into the future of weather.",
+      "a fixed multiplicative improvement in observational precision yields only an additive, fixed-sized extension of the prediction horizon."
+     ],
+     "answer": 3,
+     "explanations": [
+      "Incorrect. The working arrives at option D, not option A.",
+      "Incorrect. The working arrives at option D, not option B.",
+      "Incorrect. The working arrives at option D, not option C.",
+      "Correct. A: out-of-scope → no public-resource ranking made  B: out-of-scope → no historical-precision claim made  C: out-of-scope → no public-value claim  D: correct → the math premise the paragraph rests on"
+     ],
+     "solution": "A: out-of-scope → no public-resource ranking made  B: out-of-scope → no historical-precision claim made  C: out-of-scope → no public-value claim  D: correct → the math premise the paragraph rests on"
+    },
+    {
+     "type": "rc",
+     "prompt": "The author's attitude toward the public assumption that better instruments will eventually deliver indefinitely longer forecasts is best described as:",
+     "options": [
+      "enthusiastic — endorsing the assumption as scientifically well grounded and likely to be borne out within a generation.",
+      "corrective-but-patient — explaining why the mathematics sets a bounded horizon that better instruments can extend only modestly.",
+      "dismissive — treating the assumption as a basic confusion that scientifically literate readers should already have outgrown.",
+      "indifferent — neither endorsing nor critiquing the assumption while reporting the current research practice in meteorology."
+     ],
+     "answer": 1,
+     "explanations": [
+      "Incorrect. The working arrives at option B, not option A.",
+      "Correct. A: reversal → Para 3 says the opposite  B: correct → matches Paras 1, 3, 4  C: overstatement → the author corrects rather than dismisses  D: out-of-scope → the author takes a side",
+      "Incorrect. The working arrives at option B, not option C.",
+      "Incorrect. The working arrives at option B, not option D."
+     ],
+     "solution": "A: reversal → Para 3 says the opposite  B: correct → matches Paras 1, 3, 4  C: overstatement → the author corrects rather than dismisses  D: out-of-scope → the author takes a side"
+    }
+   ]
+  }
+ ]
+}

@@ -20,9 +20,9 @@
  * (Bearer CRON_SECRET, falling back to WORKER_TOKEN).
  */
 import { NextResponse } from "next/server";
-import { config, SECTIONS, type Section } from "@/lib/config";
+import { config, SECTIONS, QA_TOPICS, type Section, type QaTopic } from "@/lib/config";
 import { sets } from "@/lib/db";
-import { SECTION_UNITS, sectionKind, generateUnit } from "@/lib/generate";
+import { SECTION_UNITS, TOPIC_UNITS, sectionKind, generateUnit, unitExpectedCount } from "@/lib/generate";
 import { judgeSet } from "@/lib/generate/judge";
 import type { GeneratedSet } from "@/lib/generate/types";
 
@@ -121,7 +121,17 @@ async function handle(req: Request) {
     return NextResponse.json({ error: "Bad section." }, { status: 400 });
   }
   const sec = section as Section;
-  const total = SECTION_UNITS[sec];
+  // Optional drill topic (QA only): builds 10 MCQ questions of one topic as
+  // TOPIC_UNITS units, pooled under that topic instead of the mixed pool.
+  const topicParam = (url.searchParams.get("topic") || "").toLowerCase();
+  let topic: QaTopic | null = null;
+  if (topicParam) {
+    if (sec !== "QA" || !(QA_TOPICS as readonly string[]).includes(topicParam)) {
+      return NextResponse.json({ error: "Bad topic (QA drills: geometry, algebra, arithmetic, number_system, modern_math)." }, { status: 400 });
+    }
+    topic = topicParam as QaTopic;
+  }
+  const total = topic ? TOPIC_UNITS : SECTION_UNITS[sec];
 
   // Housekeeping: drop any drafts left by a crashed build so we never resume a
   // wedged one. (No-op when there are none.)
@@ -134,7 +144,7 @@ async function handle(req: Request) {
   // Load the in-progress draft, or start a new one.
   let draftId: number;
   let payload: Draft;
-  const existing = await sets.getDraft(sec);
+  const existing = await sets.getDraft(sec, topic);
   const parsed = existing ? parseDraft(existing.payload) : null;
   if (existing && parsed) {
     draftId = existing.id;
@@ -144,7 +154,7 @@ async function handle(req: Request) {
     // fresh so a bad row can never wedge the section with repeated 500s.
     if (existing) await sets.deleteDraft(existing.id);
     payload = freshDraft(sec);
-    draftId = await sets.createDraft(sec, payload);
+    draftId = await sets.createDraft(sec, payload, topic);
   }
 
   const unitsDone = payload._unitsDone ?? 0;
@@ -164,39 +174,53 @@ async function handle(req: Request) {
             { items: payload.items, sets: payload.sets },
             warnings,
             config.llm.poolWriterModel,
+            topic ?? undefined,
           ),
           UNIT_MS,
-          `${sec} unit ${idx + 1}/${total}`,
+          `${sec}${topic ? `:${topic}` : ""} unit ${idx + 1}/${total}`,
         );
-        // A sub-set (RC/DI/LR) only counts if it has enough questions: a runt
-        // one (e.g. an LR scenario that yielded <3 valid questions) is retried
-        // like an empty unit instead of advancing into a "set too small" reject.
+        // A standalone unit (VA/QA/drill) only counts when FULL - every
+        // requested question survived the filters. Partial units re-roll
+        // like empty ones: advancing short is what kept assembling
+        // sub-size sets that died pre-judge, wasting the whole set's
+        // worth of Groq calls. A sub-set (RC/DI/LR) only counts with 3+
+        // questions, as before.
         const subQ = unit.set ? unit.set.questions?.length ?? 0 : 0;
-        const gotContent = (unit.items?.length ?? 0) > 0 || subQ >= 3;
-        if (unit.items?.length) {
-          payload.items = [...(payload.items ?? []), ...unit.items];
-        }
-        if (unit.set && subQ >= 3) {
-          payload.sets = [...(payload.sets ?? []), unit.set];
-        }
+        const gotItems = unit.items?.length ?? 0;
+        const need = unitExpectedCount(sec, idx, topic ?? undefined);
+        const full = need !== null ? gotItems >= need : subQ >= 3;
         payload.meta.warnings = warnings.slice(-40);
-        if (gotContent) {
-          // Unit produced something: keep it and move to the next unit.
+        if (full) {
+          // Unit complete: keep it and move to the next unit.
+          if (unit.items?.length) {
+            payload.items = [...(payload.items ?? []), ...unit.items];
+          }
+          if (unit.set) {
+            payload.sets = [...(payload.sets ?? []), unit.set];
+          }
           payload._unitsDone = idx + 1;
           payload._unitTries = 0;
         } else {
-          // Empty unit: retry it up to MAX_EMPTY_TRIES before giving up, so one
-          // flaky unit doesn't force the whole set to be rebuilt (the cause of
-          // recurring "assembled set too small"). After the cap we advance
-          // anyway (short set -> rejected/rebuilt) so we can never wedge.
+          // Short unit: retry it up to MAX_EMPTY_TRIES before giving up, so
+          // one flaky unit doesn't force the whole set to be rebuilt. After
+          // the cap we keep this roll's yield and advance anyway (a short
+          // set dies pre-judge) so we can never wedge.
+          const have =
+            need !== null ? `${gotItems}/${need} items` : `${subQ} questions`;
           const tries = (payload._unitTries ?? 0) + 1;
           if (tries >= MAX_EMPTY_TRIES) {
+            if (unit.items?.length) {
+              payload.items = [...(payload.items ?? []), ...unit.items];
+            }
+            if (unit.set && subQ >= 3) {
+              payload.sets = [...(payload.sets ?? []), unit.set];
+            }
             payload._unitsDone = idx + 1;
             payload._unitTries = 0;
-            lastErr = `unit ${idx + 1} empty after ${tries} tries`;
+            lastErr = `unit ${idx + 1} short after ${tries} tries (${have})`;
           } else {
             payload._unitTries = tries;
-            lastErr = `unit ${idx + 1} empty, retrying (${tries}/${MAX_EMPTY_TRIES})`;
+            lastErr = `unit ${idx + 1} short, retrying (${tries}/${MAX_EMPTY_TRIES}, ${have})`;
             // Persist progress, then pause briefly before the loop re-rolls
             // this same unit.
             await sets.updateDraft(draftId, payload);
@@ -213,7 +237,7 @@ async function handle(req: Request) {
     }
     return NextResponse.json({
       status: "building",
-      section: sec,
+      section: sec, ...(topic ? { topic } : {}),
       unitsDone: payload._unitsDone ?? 0,
       total,
       items: payload.items?.length ?? 0,
@@ -240,7 +264,7 @@ async function handle(req: Request) {
     await sets.deleteDraft(draftId);
     return NextResponse.json({
       status: "rejected",
-      section: sec,
+      section: sec, ...(topic ? { topic } : {}),
       score: 0,
       note: "assembled set too small; discarded",
     });
@@ -252,7 +276,7 @@ async function handle(req: Request) {
       await sets.finalizeDraft(draftId, assembled, verdict.overall, verdict.notes);
       return NextResponse.json({
         status: "accepted",
-        section: sec,
+        section: sec, ...(topic ? { topic } : {}),
         score: verdict.overall,
         note: verdict.notes,
       });
@@ -260,7 +284,7 @@ async function handle(req: Request) {
     await sets.deleteDraft(draftId);
     return NextResponse.json({
       status: "rejected",
-      section: sec,
+      section: sec, ...(topic ? { topic } : {}),
       score: verdict.overall,
       note: verdict.notes,
     });
@@ -269,7 +293,7 @@ async function handle(req: Request) {
     await sets.deleteDraft(draftId);
     return NextResponse.json({
       status: "rejected",
-      section: sec,
+      section: sec, ...(topic ? { topic } : {}),
       score: 0,
       note: `judge failed: ${e instanceof Error ? e.message : String(e)}`,
     });

@@ -8,6 +8,7 @@ import http from "node:http";
 import https from "node:https";
 import { URL } from "node:url";
 import { config } from "./config";
+import { extractJSON } from "./jsonExtract";
 
 export interface ChatOptions {
   temperature?: number;
@@ -122,6 +123,12 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
     // under Groq's free-tier 6000 TPM per-request limit (8192 always 413'd).
     max_tokens: opts.maxTokens ?? config.llm.groqMaxTokens,
     response_format: { type: "json_object" },
+    // gpt-oss models are reasoning models too (hidden chain-of-thought by
+    // default) - confirmed this was the cause of Groq's own strict
+    // json_object validator rejecting output outright (400
+    // json_validate_failed, empty failed_generation) on harder prompts.
+    // Ignored by non-gpt-oss Groq models.
+    reasoning_effort: "low",
   });
   const keys = config.llm.groqApiKeys.length
     ? config.llm.groqApiKeys
@@ -147,7 +154,7 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
       }
       all429 = false;
       if (status < 200 || status >= 300)
-        throw new Error(`Groq chat failed: ${status}`);
+        throw new Error(`Groq chat failed: ${status} - ${body.slice(0, 300)}`);
       const data = JSON.parse(body);
       return data?.choices?.[0]?.message?.content ?? "";
     }
@@ -166,9 +173,197 @@ async function groqChat(prompt: string, opts: ChatOptions): Promise<string> {
   throw new Error("Groq chat failed: 429 after retries across all keys");
 }
 
+// ---- Z.ai (hosted, OpenAI-compatible) --------------------------------------
+async function zaiChat(prompt: string, opts: ChatOptions): Promise<string> {
+  const messages = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: prompt });
+  const payload = JSON.stringify({
+    model: opts.model ?? config.llm.zaiModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 8000,
+    response_format: { type: "json_object" },
+  });
+  const url = "https://api.z.ai/api/paas/v4/chat/completions";
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { status, body, headers } = await rawPost(url, payload, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.llm.zaiApiKey}`,
+    });
+    if (status === 429) {
+      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 25_000);
+      if (attempt < 3) {
+        await sleepMs(wait);
+        continue;
+      }
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`Z.ai chat failed: ${status} - ${body.slice(0, 300)}`);
+    const data = JSON.parse(body);
+    return data?.choices?.[0]?.message?.content ?? "";
+  }
+  throw new Error("Z.ai chat failed: 429 after retries");
+}
+
+// ---- DeepSeek (hosted, OpenAI-compatible) ----------------------------------
+async function deepseekChat(prompt: string, opts: ChatOptions): Promise<string> {
+  const messages = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: prompt });
+  const payload = JSON.stringify({
+    model: opts.model ?? config.llm.deepseekModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    // 4096, then 8000, then 16000 all still truncated DI/RC mid-JSON - turned
+    // out to be thinking mode (see below), not a token-budget problem. Set
+    // very high as a safety ceiling now that thinking is off and shouldn't
+    // actually be needed, rather than something we expect to hit.
+    max_tokens: opts.maxTokens ?? 200_000,
+    response_format: { type: "json_object" },
+    // deepseek-v4-flash runs with "thinking" mode ON by default (high
+    // effort) - that's what was leaking full chain-of-thought ("wait, let
+    // me recalculate...") directly into the JSON string fields, no matter
+    // what the system prompt asked for. This is the actual documented
+    // override, not a prompt-engineering problem.
+    thinking: { type: "disabled" },
+  });
+  const url = "https://api.deepseek.com/chat/completions";
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { status, body, headers } = await rawPost(url, payload, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.llm.deepseekApiKey}`,
+    });
+    if (status === 429) {
+      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 25_000);
+      if (attempt < 3) {
+        await sleepMs(wait);
+        continue;
+      }
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`DeepSeek chat failed: ${status} - ${body.slice(0, 300)}`);
+    const data = JSON.parse(body);
+    return data?.choices?.[0]?.message?.content ?? "";
+  }
+  throw new Error("DeepSeek chat failed: 429 after retries");
+}
+
+// ---- OpenRouter (hosted, OpenAI-compatible aggregator) ---------------------
+async function openrouterChat(prompt: string, opts: ChatOptions): Promise<string> {
+  const messages = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: prompt });
+  const payload = JSON.stringify({
+    model: opts.model ?? config.llm.openrouterModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 8000,
+    response_format: { type: "json_object" },
+  });
+  const url = "https://openrouter.ai/api/v1/chat/completions";
+
+  // Free-tier GLM on OpenRouter sees sustained multi-minute congestion windows
+  // upstream (confirmed: a manual retry loop needed 5 attempts at 60s
+  // intervals to succeed once), not brief spikes - the old 4-attempt/25s-cap
+  // backoff (~35s total) gave up well before congestion cleared. 7 attempts
+  // with a 30s cap (~130s total) fits inside generateSet's 260s budget.
+  const MAX_ATTEMPTS = 7;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const { status, body, headers } = await rawPost(url, payload, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.llm.openrouterApiKey}`,
+    });
+    if (status === 429) {
+      const wait = Math.min(retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 30_000);
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await sleepMs(wait);
+        continue;
+      }
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`OpenRouter chat failed: ${status} - ${body.slice(0, 300)}`);
+    const data = JSON.parse(body);
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    // Confirmed via LLM_DEBUG_DUMP: the free GLM pool sometimes returns
+    // HTTP 200 with an EMPTY content string when it's internally failing
+    // under congestion, instead of a proper 429 - retry that too, or every
+    // such response silently produces "No JSON found" with zero retries.
+    if (!content.trim() && attempt < MAX_ATTEMPTS - 1) {
+      await sleepMs(Math.min(5_000 * Math.pow(2, attempt), 30_000));
+      continue;
+    }
+    return content;
+  }
+  throw new Error("OpenRouter chat failed: 429/empty response after retries");
+}
+
+// ---- Google Gemini (hosted, OpenAI-compatible) -----------------------------
+async function geminiChat(prompt: string, opts: ChatOptions): Promise<string> {
+  const messages = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: prompt });
+  const payload = JSON.stringify({
+    model: opts.model ?? config.llm.geminiModel,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 8000,
+    response_format: { type: "json_object" },
+    // gemini-3.6-flash is a "thinking" model by default: confirmed via
+    // LLM_DEBUG_DUMP that it was burning most of max_tokens on internal
+    // reasoning and getting cut off mid-JSON (same failure shape as
+    // DeepSeek's thinking mode). "none" is rejected outright (400) - "low"
+    // is the minimum accepted value on this endpoint.
+    reasoning_effort: "low",
+  });
+  const url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+
+  // Free tier is a tight 5 requests/minute per model - confirmed via a live
+  // 429 body: {"details":[{"retryDelay":"46s"}]}. That delay is NOT an HTTP
+  // header (retryAfterMs can't see it), so on a plain header-based backoff
+  // we were retrying way too soon and never clearing the window. 6 attempts
+  // with a 60s cap gives real 429s room to actually clear.
+  const MAX_ATTEMPTS = 6;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const { status, body, headers } = await rawPost(url, payload, {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.llm.geminiApiKey}`,
+    });
+    if (status === 429) {
+      const bodyDelay = (() => {
+        const m = body.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/);
+        return m ? Number(m[1]) * 1000 : 0;
+      })();
+      const wait = Math.min(bodyDelay || retryAfterMs(headers) || 5_000 * Math.pow(2, attempt), 60_000);
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await sleepMs(wait);
+        continue;
+      }
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`Gemini chat failed: ${status} - ${body.slice(0, 300)}`);
+    const data = JSON.parse(body);
+    return data?.choices?.[0]?.message?.content ?? "";
+  }
+  throw new Error("Gemini chat failed: 429 after retries");
+}
+
 /** Send a prompt to the active provider, with one retry. */
 export async function chat(prompt: string, opts: ChatOptions = {}): Promise<string> {
-  const fn = config.llm.provider === "groq" ? groqChat : ollamaChat;
+  const fn =
+    config.llm.provider === "groq"
+      ? groqChat
+      : config.llm.provider === "zai"
+      ? zaiChat
+      : config.llm.provider === "deepseek"
+      ? deepseekChat
+      : config.llm.provider === "openrouter"
+      ? openrouterChat
+      : config.llm.provider === "gemini"
+      ? geminiChat
+      : ollamaChat;
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -180,109 +375,40 @@ export async function chat(prompt: string, opts: ChatOptions = {}): Promise<stri
   throw lastErr instanceof Error ? lastErr : new Error("LLM request failed");
 }
 
-/** Escape raw control characters inside JSON string literals so JSON.parse
- * won't reject the payload. LLMs frequently emit literal newlines/tabs in
- * "context" / "prompt" / "solution" fields. */
-function sanitiseJsonControlChars(src: string): string {
-  let out = "";
-  let inStr = false;
-  let esc = false;
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i];
-    const code = src.charCodeAt(i);
-    if (inStr) {
-      if (esc) {
-        out += c;
-        esc = false;
-        continue;
-      }
-      if (c === "\\") {
-        out += c;
-        esc = true;
-        continue;
-      }
-      if (c === '"') {
-        out += c;
-        inStr = false;
-        continue;
-      }
-      if (code === 0x0a) {
-        out += "\\n";
-        continue;
-      }
-      if (code === 0x0d) {
-        out += "\\r";
-        continue;
-      }
-      if (code === 0x09) {
-        out += "\\t";
-        continue;
-      }
-      if (code < 0x20) {
-        out += " ";
-        continue;
-      }
-      out += c;
-      continue;
-    }
-    if (c === '"') {
-      inStr = true;
-    }
-    out += c;
-  }
-  return out;
-}
+// Pure JSON-from-messy-text extraction lives in jsonExtract.ts (no config/env
+// dependency there, so it's unit-testable standalone) - re-exported here
+// since existing code imports it from "@/lib/llm".
+export { extractJSON };
 
-/** Pull the first balanced JSON object/array out of an LLM response. */
-export function extractJSON(text: string): unknown {
-  let t = text.trim();
-  t = t.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
-  const sObj = t.indexOf("{");
-  const sArr = t.indexOf("[");
-  const candidates = [sObj, sArr].filter((i) => i >= 0);
-  if (!candidates.length) throw new Error("No JSON found in LLM response");
-  const start = Math.min(...candidates);
-  const open = t[start];
-  const close = open === "{" ? "}" : "]";
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let i = start; i < t.length; i++) {
-    const c = t[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (c === "\\") esc = true;
-      else if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === '"') inStr = true;
-    else if (c === open) depth++;
-    else if (c === close) {
-      depth--;
-      if (depth === 0) {
-        const slice = t.slice(start, i + 1);
-        try {
-          return JSON.parse(slice);
-        } catch {
-          // Retry after escaping raw control chars in string literals.
-          return JSON.parse(sanitiseJsonControlChars(slice));
-        }
-      }
-    }
-  }
-  throw new Error("Unbalanced JSON in LLM response");
-}
+const JSON_SYSTEM_SUFFIX =
+  "Respond with valid JSON only. No markdown, no commentary. " +
+  "Every string value in the JSON must contain ONLY the final, polished " +
+  "content - never your reasoning process, hesitation, or self-correction " +
+  "('wait', 'let me recalculate', 'actually', 'I made a mistake', 'hmm'). " +
+  "Work out the answer silently; the JSON you output is the finished " +
+  "result, not a transcript of how you got there.";
 
 /** Chat call that expects and returns parsed JSON. */
 export async function chatJSON<T = unknown>(
   prompt: string,
   opts: ChatOptions = {},
 ): Promise<T> {
-  const system =
-    (opts.system ? opts.system + "\n" : "") +
-    "Respond with valid JSON only. No markdown, no commentary.";
+  const system = (opts.system ? opts.system + "\n" : "") + JSON_SYSTEM_SUFFIX;
   const raw = await chat(prompt, { ...opts, system });
-  return extractJSON(raw) as T;
+  try {
+    return extractJSON(raw) as T;
+  } catch (e) {
+    // TEMPORARY diagnostic: dump the raw, untruncated response so we can see
+    // exactly where the JSON actually breaks, instead of guessing at
+    // max_tokens numbers. Remove once the real cause is found.
+    if (process.env.LLM_DEBUG_DUMP) {
+      const fs = await import("node:fs/promises");
+      const file = `E:/Geetesh/cat_mock_generator/app/llm-debug-${Date.now()}.txt`;
+      await fs.writeFile(file, raw, "utf8").catch(() => {});
+      console.error(`[chatJSON] extractJSON failed, raw response dumped to ${file} (length ${raw.length})`);
+    }
+    throw e;
+  }
 }
 
 /** Embed text via Ollama. Returns null if embeddings are unavailable. */

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user',          -- 'user' | 'admin'
+  social_links  TEXT,                                  -- JSON {reddit?, instagram?, twitter?, linkedin?} - self-entered URLs, shown on public profile
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -49,6 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_kb_section ON kb_items(section, subtype);
 CREATE TABLE IF NOT EXISTS generated_sets (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   section       TEXT NOT NULL,
+  topic         TEXT,                       -- QA drill topic (geometry|algebra|arithmetic|number_system|modern_math); NULL = full mixed set
   payload       TEXT NOT NULL,
   status        TEXT NOT NULL DEFAULT 'pooled',
   created_by    TEXT,
@@ -59,6 +61,10 @@ CREATE TABLE IF NOT EXISTS generated_sets (
 CREATE INDEX IF NOT EXISTS idx_sets_section_status ON generated_sets(section, status);
 CREATE INDEX IF NOT EXISTS idx_sets_section_quality
   ON generated_sets(section, quality_score DESC, created_at DESC);
+-- NOTE: idx_sets_topic is created in db-sqlite.ts open(), AFTER the guarded
+-- ALTER that adds the column - an index on a missing column throws and would
+-- abort this whole batch on pre-topic databases (same reason idx_attempts_mock
+-- lives in code, not here).
 
 CREATE TABLE IF NOT EXISTS user_seen_sets (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -67,6 +73,18 @@ CREATE TABLE IF NOT EXISTS user_seen_sets (
   PRIMARY KEY (user_id, set_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_seen_user ON user_seen_sets(user_id);
+
+-- A full mock: three timed phases (VARC, DILR, QA) bundling five section
+-- attempts. Sectional attempts (the existing single-section flow) leave
+-- mock_id NULL on the attempts row below.
+CREATE TABLE IF NOT EXISTS mocks (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  submitted     INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  submitted_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mocks_user ON mocks(user_id);
 
 -- User attempts at a generated set.
 CREATE TABLE IF NOT EXISTS attempts (
@@ -77,11 +95,21 @@ CREATE TABLE IF NOT EXISTS attempts (
   answers      TEXT,               -- JSON map of questionId -> chosen option
   score        REAL,
   total        INTEGER,
+  raw_score    REAL,               -- CAT marking: +3/-1/0 (see practice.ts scoreSet)
+  mock_id      INTEGER REFERENCES mocks(id) ON DELETE CASCADE,  -- NULL for a standalone sectional attempt
+  phase        TEXT,               -- 'VARC' | 'DILR' | 'QA' when part of a mock
   submitted    INTEGER NOT NULL DEFAULT 0,  -- 0 | 1
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   submitted_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id, section);
+-- idx_attempts_mock is created in db-sqlite.ts, after the guarded ALTER
+-- that adds mock_id - an existing DB's attempts table won't have that
+-- column yet at this point in schema application, and an index on a
+-- missing column throws (aborting this entire script, schema.sql runs as
+-- one batch).
+-- Percentile lookups scan submitted attempts by section across ALL users.
+CREATE INDEX IF NOT EXISTS idx_attempts_section_submitted ON attempts(section, submitted);
 
 -- Self-reported practice from sources outside this app (books, other mocks).
 -- One row per (user, section); upserted from the profile page.
@@ -93,3 +121,20 @@ CREATE TABLE IF NOT EXISTS user_external_stats (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id, section)
 );
+
+-- "Report this question" flags, feeding an admin queue. The judge occasionally
+-- ships a flawed question despite its own review; this is the backstop.
+CREATE TABLE IF NOT EXISTS question_reports (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  attempt_id      INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
+  set_id          INTEGER,
+  question_id     TEXT NOT NULL,
+  section         TEXT NOT NULL,
+  prompt_snapshot TEXT,             -- so admins can see it without re-parsing the set payload
+  reason          TEXT,
+  status          TEXT NOT NULL DEFAULT 'open',  -- 'open' | 'resolved'
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_question_reports_status ON question_reports(status, created_at);

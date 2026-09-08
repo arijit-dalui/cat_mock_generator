@@ -1,15 +1,21 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#1d4ed8",
-          dark: "#1e3a8a",
-          light: "#3b82f6",
+          DEFAULT: "#BF4E2B",
+          dark: "#9c3f22",
+          light: "#D4603A",
         },
+      },
+      fontFamily: {
+        serif: ["Fraunces", "Georgia", "serif"],
+        sans: ["DM Sans", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
     },
   },

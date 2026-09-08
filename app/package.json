@@ -10,7 +10,11 @@
     "lint": "next lint",
     "init-db": "node scripts/init-db.mjs",
     "build-kb": "node scripts/build-kb.mjs",
-    "worker": "node scripts/worker.mjs"
+    "worker": "node scripts/worker.mjs",
+    "agent": "node scripts/agent-generate.mjs",
+    "submit": "node scripts/agent-submit.mjs",
+    "seed-import": "node scripts/seed-import.mjs",
+    "test": "node --test tests/practice.test.ts tests/llm.test.ts tests/rateLimit.test.ts"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",
