@@ -1,0 +1,186 @@
+{
+ "items": [
+  {
+   "type": "arithmetic",
+   "prompt": "A coffee shop tracks daily sales of a new pastry. The average number of pastries sold per day over the first 6 days after launch is 45, and over the first 7 days is 48. On the 8th day, the shop sells 7 pastries more than on the 7th day. The average number of pastries sold per day from the 2nd day to the 8th day is 52. The number of pastries sold on the 1st day after launch is:",
+   "options": [
+    "38",
+    "42",
+    "45",
+    "51"
+   ],
+   "answer": 2,
+   "explanations": [
+    "Incorrect. The working arrives at option C, not option A.",
+    "Incorrect. The working arrives at option C, not option B.",
+    "Correct. Sum(1–6) = 45 × 6 = 270\nSum(1–7) = 48 × 7 = 336\nDay 7 = 336 − 270 = 66\nDay 8 = 66 + 7 = 73\nSum(2–8) = 52 × 7 = 364\nSum(1–8) = 336 + 73 = 409\nDay 1 = Sum(1–8) − Sum(2–8) = 409 − 364 = 45",
+    "Incorrect. The working arrives at option C, not option D."
+   ],
+   "solution": "Sum(1–6) = 45 × 6 = 270\nSum(1–7) = 48 × 7 = 336\nDay 7 = 336 − 270 = 66\nDay 8 = 66 + 7 = 73\nSum(2–8) = 52 × 7 = 364\nSum(1–8) = 336 + 73 = 409\nDay 1 = Sum(1–8) − Sum(2–8) = 409 − 364 = 45"
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "There are four numbers such that the average of the first two numbers is 2 more than the first number, the average of the first three numbers is 4 more than the average of the first two numbers, and the average of the first four numbers is 6 more than the average of the first three numbers. The difference between the largest and the smallest of the four numbers is:",
+   "options": [
+    "30",
+    "36",
+    "42",
+    "48"
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Let the four numbers be a, b, c, d.\nStep 1 - Translate condition 1: (a + b)/2 = a + 2, so a + b = 2a + 4, giving b = a + 4. The average of the first two equals a + 2.\nStep 2 - Translate condition 2: Average of first three = (a + 2) + 4 = a + 6. So a + b + c = 3(a + 6) = 3a + 18. Since a + b = 2a + 4, we get c = a + 14.\nStep 3 - Translate condition 3: Average of first four = (a + 6) + 6 = a + 12. So a + b + c + d = 4(a + 12) = 4a + 48. Since a + b + c = 3a + 18, we get d = a + 30.\nStep 4 - Identify range: The four numbers are a, a + 4, a + 14, a + 30. The smallest is a and the largest is a + 30. Difference = 30.\n(Note: the answer is independent of a, a structural feature of how the conditions chain.)\nAnswer = 30.",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Let the four numbers be a, b, c, d.\nStep 1 - Translate condition 1: (a + b)/2 = a + 2, so a + b = 2a + 4, giving b = a + 4. The average of the first two equals a + 2.\nStep 2 - Translate condition 2: Average of first three = (a + 2) + 4 = a + 6. So a + b + c = 3(a + 6) = 3a + 18. Since a + b = 2a + 4, we get c = a + 14.\nStep 3 - Translate condition 3: Average of first four = (a + 6) + 6 = a + 12. So a + b + c + d = 4(a + 12) = 4a + 48. Since a + b + c = 3a + 18, we get d = a + 30.\nStep 4 - Identify range: The four numbers are a, a + 4, a + 14, a + 30. The smallest is a and the largest is a + 30. Difference = 30.\n(Note: the answer is independent of a, a structural feature of how the conditions chain.)\nAnswer = 30."
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "A small cricket club has four players P, Q, R, and S. When a new player T is added to the squad, the average height of the squad increases by y cm. If instead of T, a different player U had been added, the average height of the squad would have decreased by 3y cm. Given that T is 40 cm taller than U, the value of y is:",
+   "options": [
+    "2",
+    "3",
+    "4",
+    "5"
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Let the average height of P, Q, R, S be m cm. So the total height of the four players = 4m.\nStep 1 - When T is added, squad size becomes 5 and new average is m + y. So (4m + T)/5 = m + y, which gives T = m + 5y.\nStep 2 - When U is added instead, new average is m - 3y. So (4m + U)/5 = m - 3y, which gives U = m - 15y.\nStep 3 - Given T is 40 cm taller than U: T - U = 40. Substituting: (m + 5y) - (m - 15y) = 40, which simplifies to 20y = 40.\nStep 4 - Solve: y = 2.\n(Note: the original average m cancels out, so the answer depends only on the change relationships, not on the actual heights of the four players.)\nAnswer = 2.",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Let the average height of P, Q, R, S be m cm. So the total height of the four players = 4m.\nStep 1 - When T is added, squad size becomes 5 and new average is m + y. So (4m + T)/5 = m + y, which gives T = m + 5y.\nStep 2 - When U is added instead, new average is m - 3y. So (4m + U)/5 = m - 3y, which gives U = m - 15y.\nStep 3 - Given T is 40 cm taller than U: T - U = 40. Substituting: (m + 5y) - (m - 15y) = 40, which simplifies to 20y = 40.\nStep 4 - Solve: y = 2.\n(Note: the original average m cancels out, so the answer depends only on the change relationships, not on the actual heights of the four players.)\nAnswer = 2."
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "At a certain simple rate of interest, a fixed deposit grows to ₹11,200 in 4 years and to ₹13,600 in 7 years. If the same sum had been invested for 2 years at the same annual rate but with interest compounded every 6 months, then the total interest earned, in rupees, would have been nearest to:",
+   "options": [
+    "1724",
+    "1680",
+    "1760",
+    "1800"
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Step 1 - Under simple interest, the amount grows by a constant amount each year. Over 7 - 4 = 3 years, the amount grows by 13,600 - 11,200 = 2,400, so SI per year = 800.\n Step 2 - At t = 4: P + 4 × 800 = 11,200, so P = 8,000.\n Step 3 - Rate = 800/8,000 = 10% per annum.\n Step 4 - For 2 years compounded half-yearly at 10% p.a., the half-yearly rate is 5% and the number of periods is 4.\n Step 5 - Amount = 8,000 × (1.05)^4 = 8,000 × 1.21550625 = 9,724.05.\n Step 6 - Total interest = 9,724.05 - 8,000 = 1,724.05, nearest to ₹1,724.\n Step 7 - Verify: 8,000 + 8,000 × 0.10 × 4 = 11,200 ✓ and 8,000 + 8,000 × 0.10 × 7 = 13,600 ✓.",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Step 1 - Under simple interest, the amount grows by a constant amount each year. Over 7 - 4 = 3 years, the amount grows by 13,600 - 11,200 = 2,400, so SI per year = 800.\n Step 2 - At t = 4: P + 4 × 800 = 11,200, so P = 8,000.\n Step 3 - Rate = 800/8,000 = 10% per annum.\n Step 4 - For 2 years compounded half-yearly at 10% p.a., the half-yearly rate is 5% and the number of periods is 4.\n Step 5 - Amount = 8,000 × (1.05)^4 = 8,000 × 1.21550625 = 9,724.05.\n Step 6 - Total interest = 9,724.05 - 8,000 = 1,724.05, nearest to ₹1,724.\n Step 7 - Verify: 8,000 + 8,000 × 0.10 × 4 = 11,200 ✓ and 8,000 + 8,000 × 0.10 × 7 = 13,600 ✓."
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "Kavya divided her investment of ₹2,00,000 between stocks, bonds, and gold. Her investment in bonds was 50% of her investment in gold. With annual returns of 8%, 5%, 10% on stocks, bonds, and gold respectively, she gained a total amount of ₹16,300 in one year. The amount, in rupees, that she gained from the bonds was:",
+   "options": [
+    "1200",
+    "1350",
+    "1500",
+    "1800"
+   ],
+   "answer": 2,
+   "explanations": [
+    "Incorrect. The working arrives at option C, not option A.",
+    "Incorrect. The working arrives at option C, not option B.",
+    "Correct. Step 1 - Let gold = g, bonds = 0.5g, stocks = 2,00,000 - 1.5g.\n Step 2 - Total gain: 0.08(2,00,000 - 1.5g) + 0.05(0.5g) + 0.10g = 16,300.\n Step 3 - Expand: 16,000 - 0.12g + 0.025g + 0.10g = 16,300, giving 16,000 + 0.005g = 16,300.\n Step 4 - 0.005g = 300, so g = 60,000. Bonds = 30,000.\n Step 5 - Gain from bonds = 0.05 × 30,000 = ₹1,500.\n Step 6 - Verify: stocks = 1,10,000 × 0.08 = 8,800; bonds = 30,000 × 0.05 = 1,500; gold = 60,000 × 0.10 = 6,000; sum = 16,300 ✓.",
+    "Incorrect. The working arrives at option C, not option D."
+   ],
+   "solution": "Step 1 - Let gold = g, bonds = 0.5g, stocks = 2,00,000 - 1.5g.\n Step 2 - Total gain: 0.08(2,00,000 - 1.5g) + 0.05(0.5g) + 0.10g = 16,300.\n Step 3 - Expand: 16,000 - 0.12g + 0.025g + 0.10g = 16,300, giving 16,000 + 0.005g = 16,300.\n Step 4 - 0.005g = 300, so g = 60,000. Bonds = 30,000.\n Step 5 - Gain from bonds = 0.05 × 30,000 = ₹1,500.\n Step 6 - Verify: stocks = 1,10,000 × 0.08 = 8,800; bonds = 30,000 × 0.05 = 1,500; gold = 60,000 × 0.10 = 6,000; sum = 16,300 ✓."
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "Aanya invests ₹5,000 in a bond at a certain rate of interest, compounded annually. If the ratio of the value of the investment after 4 years to the value of the investment after 6 years is 16 : 25, then the minimum number of years required for the value of the investment to exceed ₹25,000 is:",
+   "options": [
+    "5",
+    "6",
+    "7",
+    "8"
+   ],
+   "answer": 3,
+   "explanations": [
+    "Incorrect. The working arrives at option D, not option A.",
+    "Incorrect. The working arrives at option D, not option B.",
+    "Incorrect. The working arrives at option D, not option C.",
+    "Correct. Step 1 - Let r be the annual rate. Value after n years = 5,000 × (1+r)^n.\n Step 2 - Ratio of values at year 4 and year 6: 1/(1+r)² = 16/25, so (1+r)² = 25/16.\n Step 3 - 1 + r = 5/4 = 1.25, so r = 25%.\n Step 4 - Need 5,000 × 1.25^n > 25,000, i.e., 1.25^n > 5.\n Step 5 - 1.25^7 ≈ 4.768 (< 5) and 1.25^8 ≈ 5.960 (> 5). Minimum n = 8.\n Step 6 - Verify: 5,000 × 1.25^8 ≈ 29,802 > 25,000 ✓; 5,000 × 1.25^7 ≈ 23,842 < 25,000 ✓."
+   ],
+   "solution": "Step 1 - Let r be the annual rate. Value after n years = 5,000 × (1+r)^n.\n Step 2 - Ratio of values at year 4 and year 6: 1/(1+r)² = 16/25, so (1+r)² = 25/16.\n Step 3 - 1 + r = 5/4 = 1.25, so r = 25%.\n Step 4 - Need 5,000 × 1.25^n > 25,000, i.e., 1.25^n > 5.\n Step 5 - 1.25^7 ≈ 4.768 (< 5) and 1.25^8 ≈ 5.960 (> 5). Minimum n = 8.\n Step 6 - Verify: 5,000 × 1.25^8 ≈ 29,802 > 25,000 ✓; 5,000 × 1.25^7 ≈ 23,842 < 25,000 ✓."
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "A café offers a discount of 20% on the marked price of each travel mug, and gives 6 travel mugs to a customer for the discounted price of 5 mugs to earn a profit of 20% on the transaction. If the cost price of each travel mug is ₹50, then the marked price, in rupees, of each mug is:",
+   "options": [
+    "₹84",
+    "₹87",
+    "₹90",
+    "₹93"
+   ],
+   "answer": 2,
+   "explanations": [
+    "Incorrect. The working arrives at option C, not option A.",
+    "Incorrect. The working arrives at option C, not option B.",
+    "Correct. Step 1 - Let the marked price per mug = M. Discounted selling price per mug = 0.80M.\n Step 2 - The customer pays for 5 mugs but receives 6 mugs.\n Step 3 - Total revenue = 5 × 0.80M = 4M.\n Step 4 - Total cost of 6 mugs = 6 × 50 = ₹300.\n Step 5 - For 20% profit: revenue = 1.20 × 300 = ₹360. So 4M = 360, giving M = 90.\n Step 6 - Answer = ₹90.\n Step 7 - Verify: SP per mug = 0.80 × 90 = ₹72; revenue for 5 mugs = ₹360; cost of 6 mugs = ₹300; profit = ₹60 = 20% of ₹300 ✓.\n (Trap: don't forget the customer gets 6 mugs but pays for only 5; the cost base is for 6 mugs, the revenue is for 5.)",
+    "Incorrect. The working arrives at option C, not option D."
+   ],
+   "solution": "Step 1 - Let the marked price per mug = M. Discounted selling price per mug = 0.80M.\n Step 2 - The customer pays for 5 mugs but receives 6 mugs.\n Step 3 - Total revenue = 5 × 0.80M = 4M.\n Step 4 - Total cost of 6 mugs = 6 × 50 = ₹300.\n Step 5 - For 20% profit: revenue = 1.20 × 300 = ₹360. So 4M = 360, giving M = 90.\n Step 6 - Answer = ₹90.\n Step 7 - Verify: SP per mug = 0.80 × 90 = ₹72; revenue for 5 mugs = ₹360; cost of 6 mugs = ₹300; profit = ₹60 = 20% of ₹300 ✓.\n (Trap: don't forget the customer gets 6 mugs but pays for only 5; the cost base is for 6 mugs, the revenue is for 5.)"
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "Bhavna incurs a 20% loss when she sells a vintage camera at ₹5,600 to Sahil, who in turn sells the camera to Anil. If Bhavna had sold this camera to Sahil at the purchase price of Anil, she would have obtained a 15% profit. Then, the profit, in rupees, made by Sahil is:",
+   "options": [
+    "₹1,050",
+    "₹1,400",
+    "₹1,750",
+    "₹2,450"
+   ],
+   "answer": 3,
+   "explanations": [
+    "Incorrect. The working arrives at option D, not option A.",
+    "Incorrect. The working arrives at option D, not option B.",
+    "Incorrect. The working arrives at option D, not option C.",
+    "Correct. Step 1 - Bhavna's loss of 20% on selling at ₹5,600: Bhavna's CP × 0.80 = 5,600, so Bhavna's CP = ₹7,000.\n Step 2 - Anil's purchase price equals Sahil's selling price; this would have given Bhavna 15% profit if she had sold at it.\n Step 3 - Anil's price = 7,000 × 1.15 = ₹8,050.\n Step 4 - Sahil bought at ₹5,600 and sold at ₹8,050; profit = 8,050 − 5,600 = ₹2,450.\n Step 5 - Answer = ₹2,450.\n Step 6 - Verify: Bhavna CP = 7,000 → loss of 20% sells at 5,600 ✓; if sold at 8,050, profit = 1,050 = 15% of 7,000 ✓; Sahil's profit = 8,050 − 5,600 = ₹2,450 ✓."
+   ],
+   "solution": "Step 1 - Bhavna's loss of 20% on selling at ₹5,600: Bhavna's CP × 0.80 = 5,600, so Bhavna's CP = ₹7,000.\n Step 2 - Anil's purchase price equals Sahil's selling price; this would have given Bhavna 15% profit if she had sold at it.\n Step 3 - Anil's price = 7,000 × 1.15 = ₹8,050.\n Step 4 - Sahil bought at ₹5,600 and sold at ₹8,050; profit = 8,050 − 5,600 = ₹2,450.\n Step 5 - Answer = ₹2,450.\n Step 6 - Verify: Bhavna CP = 7,000 → loss of 20% sells at 5,600 ✓; if sold at 8,050, profit = 1,050 = 15% of 7,000 ✓; Sahil's profit = 8,050 − 5,600 = ₹2,450 ✓."
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "Maya marks a price on a perfume bottle in order to make 25% profit. Bharat gets an 8% discount on this marked price, and thus saves ₹24. Then, the profit, in rupees, made by Maya by selling the perfume bottle to Bharat, is:",
+   "options": [
+    "₹36",
+    "₹48",
+    "₹60",
+    "₹72"
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Step 1 - Let cost price = C. Marked price = 1.25C.\n Step 2 - Savings = 8% of MP = 0.08 × 1.25C = 0.10C = ₹24, so C = ₹240 and MP = ₹300.\n Step 3 - Selling price to Bharat = 0.92 × 300 = ₹276.\n Step 4 - Maya's profit = 276 − 240 = ₹36.\n Step 5 - Answer = ₹36.\n Step 6 - Verify: 25% markup gives MP ₹300; 8% discount saves ₹24 ✓; SP = ₹276; profit = ₹36 = 15% of ₹240 ✓.",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Step 1 - Let cost price = C. Marked price = 1.25C.\n Step 2 - Savings = 8% of MP = 0.08 × 1.25C = 0.10C = ₹24, so C = ₹240 and MP = ₹300.\n Step 3 - Selling price to Bharat = 0.92 × 300 = ₹276.\n Step 4 - Maya's profit = 276 − 240 = ₹36.\n Step 5 - Answer = ₹36.\n Step 6 - Verify: 25% markup gives MP ₹300; 8% discount saves ₹24 ✓; SP = ₹276; profit = ₹36 = 15% of ₹240 ✓."
+  },
+  {
+   "type": "arithmetic",
+   "prompt": "Eshan is twice as efficient as Faisal at editing a manuscript, and Faisal is twice as efficient as Ghosh at the same task. All three start the editing together; Faisal leaves after 10 days, and the editing is completed in 50 days in all. The number of days Ghosh, working alone, would have needed to complete the editing is:",
+   "options": [
+    "270",
+    "290",
+    "310",
+    "330"
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Step 1 - Let Ghosh's rate be r per day. Then Faisal's rate = 2r and Eshan's rate = 4r.\n Step 2 - Eshan works all 50 days; Faisal works 10 days; Ghosh works all 50 days.\n Step 3 - Total work = 50(4r) + 10(2r) + 50(r) = 200r + 20r + 50r = 270r.\n Step 4 - Setting total work to 1 unit: 270r = 1, so r = 1/270.\n Step 5 - Ghosh alone would take 1/r = 270 days.\n Step 6 - Answer = 270.\n Step 7 - Verify with r = 1/270: contributions are 200/270 + 20/270 + 50/270 = 270/270 = 1 ✓.",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Step 1 - Let Ghosh's rate be r per day. Then Faisal's rate = 2r and Eshan's rate = 4r.\n Step 2 - Eshan works all 50 days; Faisal works 10 days; Ghosh works all 50 days.\n Step 3 - Total work = 50(4r) + 10(2r) + 50(r) = 200r + 20r + 50r = 270r.\n Step 4 - Setting total work to 1 unit: 270r = 1, so r = 1/270.\n Step 5 - Ghosh alone would take 1/r = 270 days.\n Step 6 - Answer = 270.\n Step 7 - Verify with r = 1/270: contributions are 200/270 + 20/270 + 50/270 = 270/270 = 1 ✓."
+  }
+ ],
+ "source": "Bank /Practice Arithmetic mix",
+ "topic": "arithmetic"
+}

@@ -1,19 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import AdminNavHeader from "../../components/AdminNavHeader";
 
 const TABS = ["All", "VA", "RC", "DI", "LR", "QA"] as const;
 type Tab = (typeof TABS)[number];
+const STATUS_TABS = ["pending", "pooled", "served", "all"] as const;
+type StatusTab = (typeof STATUS_TABS)[number];
+const STATUS_LABELS: Record<StatusTab, string> = {
+  pending: "Pending review",
+  pooled: "Pooled (live)",
+  served: "Served",
+  all: "All",
+};
 const OPT = ["A", "B", "C", "D"];
 
 interface GenQuestion {
   id: string;
   type: string;
+  format?: "mcq" | "tita";
   prompt: string;
   options: string[];
-  answer: number;
+  answer: number | string;
   explanations: string[];
   solution: string;
 }
@@ -63,6 +71,15 @@ function renderContext(src: string): string {
 
   while (i < lines.length) {
     const ln = lines[i];
+    // Bank-imported diagram/solution images (local /pct/ SVGs saved by the importer).
+    const img = ln.trim().match(/^!\[([^\]]*)\]\((\/pct\/[^)]+)\)$/);
+    if (img) {
+      out.push(
+        `<div class="my-2 overflow-x-auto"><img src="${img[2]}" alt="${escapeHtml(img[1])}" style="max-width:100%;height:auto;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:8px;" /></div>`,
+      );
+      i++;
+      continue;
+    }
     if (
       ln.trim().startsWith("|") &&
       i + 1 < lines.length &&
@@ -123,20 +140,21 @@ function fmtDate(s: string): string {
 }
 
 export default function QuestionsClient({ username }: { username: string }) {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("All");
+  const [statusTab, setStatusTab] = useState<StatusTab>("pending");
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<SetRow[]>([]);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(async (t: Tab, p: number) => {
+  const load = useCallback(async (t: Tab, s: StatusTab, p: number) => {
     setLoading(true);
     setError("");
     try {
       const qs = new URLSearchParams({ page: String(p) });
       if (t !== "All") qs.set("section", t);
+      if (s !== "all") qs.set("status", s);
       const res = await fetch(`/api/admin/questions?${qs}`);
       const d = await res.json();
       if (!res.ok) {
@@ -156,50 +174,56 @@ export default function QuestionsClient({ username }: { username: string }) {
   }, []);
 
   useEffect(() => {
-    load(tab, page);
-  }, [tab, page, load]);
+    load(tab, statusTab, page);
+  }, [tab, statusTab, page, load]);
 
   function selectTab(t: Tab) {
     setTab(t);
     setPage(0);
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+  function selectStatusTab(s: StatusTab) {
+    setStatusTab(s);
+    setPage(0);
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Link href="/admin" className="text-sm font-medium text-brand">
-              &larr; Admin
-            </Link>
-            <span className="font-bold text-slate-900">Question sets</span>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-500">{username}</span>
-            <button onClick={logout} className="btn-ghost">
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="app-shell min-h-screen">
+      <AdminNavHeader active="/admin/questions" username={username} />
 
       <main className="mx-auto max-w-4xl px-6 py-8">
-        <div className="flex flex-wrap gap-2">
+        <p className="text-sm text-slate-500">
+          Freshly generated sets land here as <strong>pending</strong> - review the questions and answers, then
+          approve to make a set live (servable to real users). Nothing generated reaches a user unreviewed.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {STATUS_TABS.map((s) => (
+            <button
+              key={s}
+              onClick={() => selectStatusTab(s)}
+              className={
+                "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
+                (statusTab === s
+                  ? "bg-brand text-white"
+                  : "bg-white text-slate-600 border border-slate-300 hover:bg-slate-50")
+              }
+            >
+              {STATUS_LABELS[s]}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
           {TABS.map((t) => (
             <button
               key={t}
               onClick={() => selectTab(t)}
               className={
-                "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors " +
                 (tab === t
-                  ? "bg-brand text-white"
-                  : "bg-white text-slate-600 border border-slate-300 hover:bg-slate-50")
+                  ? "bg-slate-800 text-white"
+                  : "bg-white text-slate-500 border border-slate-300 hover:bg-slate-50")
               }
             >
               {t}
@@ -213,10 +237,12 @@ export default function QuestionsClient({ username }: { username: string }) {
           {loading ? (
             <p className="text-sm text-slate-400">Loading...</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-slate-400">No sets in this section yet.</p>
+            <p className="text-sm text-slate-400">
+              {statusTab === "pending" ? "Nothing waiting on review." : "No sets match this filter."}
+            </p>
           ) : (
             rows.map((r) => (
-              <SetCard key={r.id} row={r} onChanged={() => load(tab, page)} />
+              <SetCard key={r.id} row={r} onChanged={() => load(tab, statusTab, page)} />
             ))
           )}
         </div>
@@ -271,6 +297,24 @@ function SetCard({ row, onChanged }: { row: SetRow; onChanged: () => void }) {
         return;
       }
       setMode("view");
+      onChanged();
+    } catch {
+      setMsg("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/admin/questions/${row.id}`, { method: "PATCH" });
+      const d = await res.json();
+      if (!res.ok) {
+        setMsg(d.error || "Approve failed.");
+        return;
+      }
       onChanged();
     } catch {
       setMsg("Network error.");
@@ -346,6 +390,15 @@ function SetCard({ row, onChanged }: { row: SetRow; onChanged: () => void }) {
         <div className="flex items-center gap-2">
           {mode === "view" ? (
             <>
+              {row.status === "pending" && (
+                <button
+                  onClick={approve}
+                  disabled={busy}
+                  className="btn rounded-lg bg-green-600 text-white hover:bg-green-700"
+                >
+                  {busy ? "Approving..." : "Approve"}
+                </button>
+              )}
               <button onClick={startEdit} className="btn-ghost" disabled={!row.payload}>
                 Edit
               </button>
@@ -466,6 +519,8 @@ function QuestionBlock({
     onChange({ ...q, explanations });
   }
 
+  const isTita = q.format === "tita";
+
   if (!editing) {
     return (
       <div className="rounded-lg bg-slate-50 p-4">
@@ -473,22 +528,30 @@ function QuestionBlock({
           <span className="text-slate-400">Q{n}.</span>{" "}
           <span className="whitespace-pre-wrap">{q.prompt}</span>
         </p>
-        <ul className="mt-2 space-y-1 text-sm">
-          {q.options.map((opt, i) => (
-            <li
-              key={i}
-              className={
-                "rounded px-2 py-1 " +
-                (i === q.answer ? "bg-green-100 font-medium text-green-800" : "text-slate-600")
-              }
-            >
-              <span className="font-semibold">{OPT[i]}.</span> {opt}
-              {q.explanations?.[i] && (
-                <span className="ml-1 text-xs text-slate-500">— {q.explanations[i]}</span>
-              )}
-            </li>
-          ))}
-        </ul>
+        {isTita ? (
+          <p className="mt-2 text-sm">
+            <span className="rounded bg-green-100 px-2 py-1 font-medium text-green-800">
+              Typed answer: {String(q.answer)}
+            </span>
+          </p>
+        ) : (
+          <ul className="mt-2 space-y-1 text-sm">
+            {q.options.map((opt, i) => (
+              <li
+                key={i}
+                className={
+                  "rounded px-2 py-1 " +
+                  (i === q.answer ? "bg-green-100 font-medium text-green-800" : "text-slate-600")
+                }
+              >
+                <span className="font-semibold">{OPT[i]}.</span> {opt}
+                {q.explanations?.[i] && (
+                  <span className="ml-1 text-xs text-slate-500">— {q.explanations[i]}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
         {q.solution && (
           <p className="mt-2 text-xs text-slate-500">
             <span className="font-semibold">Solution:</span>{" "}
@@ -508,44 +571,58 @@ function QuestionBlock({
         value={q.prompt}
         onChange={(e) => set("prompt", e.target.value)}
       />
-      <div className="mt-3 space-y-2">
-        {q.options.map((opt, i) => (
-          <div key={i} className="flex items-start gap-2">
-            <button
-              type="button"
-              onClick={() => set("answer", i)}
-              title="Mark as correct answer"
-              className={
-                "mt-1 h-6 w-6 shrink-0 rounded-full border text-xs font-semibold " +
-                (q.answer === i
-                  ? "border-green-500 bg-green-500 text-white"
-                  : "border-slate-300 bg-white text-slate-500 hover:border-green-400")
-              }
-            >
-              {OPT[i]}
-            </button>
-            <div className="flex-1">
-              <input
-                className="input"
-                value={opt}
-                onChange={(e) => setOption(i, e.target.value)}
-                placeholder={`Option ${OPT[i]}`}
-              />
-              <textarea
-                className="input mt-1 text-xs"
-                rows={2}
-                value={q.explanations?.[i] ?? ""}
-                onChange={(e) => setExplanation(i, e.target.value)}
-                placeholder={`Why ${OPT[i]} is right/wrong`}
-              />
-            </div>
+      {isTita ? (
+        <div className="mt-3">
+          <label className="label">Typed answer (TITA - no options)</label>
+          <input
+            className="input"
+            value={String(q.answer)}
+            onChange={(e) => set("answer", e.target.value)}
+            placeholder="e.g. 3142, or a number"
+          />
+        </div>
+      ) : (
+        <>
+          <div className="mt-3 space-y-2">
+            {q.options.map((opt, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => set("answer", i)}
+                  title="Mark as correct answer"
+                  className={
+                    "mt-1 h-6 w-6 shrink-0 rounded-full border text-xs font-semibold " +
+                    (q.answer === i
+                      ? "border-green-500 bg-green-500 text-white"
+                      : "border-slate-300 bg-white text-slate-500 hover:border-green-400")
+                  }
+                >
+                  {OPT[i]}
+                </button>
+                <div className="flex-1">
+                  <input
+                    className="input"
+                    value={opt}
+                    onChange={(e) => setOption(i, e.target.value)}
+                    placeholder={`Option ${OPT[i]}`}
+                  />
+                  <textarea
+                    className="input mt-1 text-xs"
+                    rows={2}
+                    value={q.explanations?.[i] ?? ""}
+                    onChange={(e) => setExplanation(i, e.target.value)}
+                    placeholder={`Why ${OPT[i]} is right/wrong`}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <p className="mt-1 text-xs text-slate-400">
-        Correct answer: <span className="font-semibold">{OPT[q.answer] ?? "?"}</span> (click a
-        letter to change)
-      </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Correct answer: <span className="font-semibold">{OPT[q.answer as number] ?? "?"}</span> (click a
+            letter to change)
+          </p>
+        </>
+      )}
       <label className="label mt-3">Solution</label>
       <textarea
         className="input"

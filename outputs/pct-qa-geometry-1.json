@@ -1,0 +1,186 @@
+{
+ "items": [
+  {
+   "type": "geometry",
+   "prompt": "A triangular sail $ABC$ is cut so that the two equal edges satisfy $AB = AC = 25$ cm and the base $BC = 30$ cm. The sum of the lengths, in cm, of all three altitudes of triangle $ABC$ is:",
+   "options": [
+    "$44$",
+    "$64$",
+    "$68$",
+    "$72$"
+   ],
+   "answer": 2,
+   "explanations": [
+    "Incorrect. The working arrives at option C, not option A.",
+    "Incorrect. The working arrives at option C, not option B.",
+    "Correct. Step 1 - The sail is isosceles with $AB = AC = 25$ and $BC = 30$.\n Step 2 - The altitude from $A$ to $BC$ bisects the base, so half-base $= 15$ and this altitude $= \\sqrt{25^2 - 15^2} = \\sqrt{400} = 20$ cm.\n Step 3 - Area of the triangle $= \\frac{1}{2}\\times 30 \\times 20 = 300$ sq cm.\n Step 4 - Altitude to side $AB = \\frac{2\\times 300}{25} = 24$ cm; by symmetry the altitude to $AC = 24$ cm.\n Step 5 - Sum of all three altitudes $= 20 + 24 + 24 = 68$ cm.\n Step 6 - Answer $= 68$.\n Step 7 - Verify: $\\frac{1}{2}\\times 25 \\times 24 = 300$ sq cm matches the area found in Step 3 $\\checkmark$.",
+    "Incorrect. The working arrives at option C, not option D."
+   ],
+   "solution": "Step 1 - The sail is isosceles with $AB = AC = 25$ and $BC = 30$.\n Step 2 - The altitude from $A$ to $BC$ bisects the base, so half-base $= 15$ and this altitude $= \\sqrt{25^2 - 15^2} = \\sqrt{400} = 20$ cm.\n Step 3 - Area of the triangle $= \\frac{1}{2}\\times 30 \\times 20 = 300$ sq cm.\n Step 4 - Altitude to side $AB = \\frac{2\\times 300}{25} = 24$ cm; by symmetry the altitude to $AC = 24$ cm.\n Step 5 - Sum of all three altitudes $= 20 + 24 + 24 = 68$ cm.\n Step 6 - Answer $= 68$.\n Step 7 - Verify: $\\frac{1}{2}\\times 25 \\times 24 = 300$ sq cm matches the area found in Step 3 $\\checkmark$."
+  },
+  {
+   "type": "geometry",
+   "prompt": "On a survey grid, three corners of a parallelogram-shaped plot $PQRS$ are recorded as $P(-5, -1)$, $Q(-2, -6)$ and $R(9, -3)$. The diagonal $SQ$ meets the $x$-axis at the point $(a, 0)$. The value of $a$ is:",
+   "options": [
+    "$4$",
+    "$2$",
+    "$5$",
+    "$-1$"
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Step 1 - In parallelogram $PQRS$ the diagonals $PR$ and $QS$ share the same midpoint.\n Step 2 - Midpoint of $PR = \\left(\\frac{-5+9}{2}, \\frac{-1-3}{2}\\right) = (2, -2)$.\n Step 3 - So $S = 2(2,-2) - Q = (4-(-2),\\ -4-(-6)) = (6, 2)$.\n Step 4 - The diagonal $SQ$ joins $S(6,2)$ and $Q(-2,-6)$; its direction is $(8,8)$, so its slope is $1$.\n Step 5 - Equation of $SQ$: $y - 2 = 1\\cdot(x - 6)$, i.e. $y = x - 4$.\n Step 6 - Set $y = 0$: $x = 4$, so $a = 4$.\n Step 7 - Answer $= 4$.\n Step 8 - Verify: $(4,0)$ has $x$ between $-2$ and $6$, so it lies on segment $QS$ $\\checkmark$.",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Step 1 - In parallelogram $PQRS$ the diagonals $PR$ and $QS$ share the same midpoint.\n Step 2 - Midpoint of $PR = \\left(\\frac{-5+9}{2}, \\frac{-1-3}{2}\\right) = (2, -2)$.\n Step 3 - So $S = 2(2,-2) - Q = (4-(-2),\\ -4-(-6)) = (6, 2)$.\n Step 4 - The diagonal $SQ$ joins $S(6,2)$ and $Q(-2,-6)$; its direction is $(8,8)$, so its slope is $1$.\n Step 5 - Equation of $SQ$: $y - 2 = 1\\cdot(x - 6)$, i.e. $y = x - 4$.\n Step 6 - Set $y = 0$: $x = 4$, so $a = 4$.\n Step 7 - Answer $= 4$.\n Step 8 - Verify: $(4,0)$ has $x$ between $-2$ and $6$, so it lies on segment $QS$ $\\checkmark$."
+  },
+  {
+   "type": "geometry",
+   "prompt": "A triangular flower bed has its three corners at the grid points $(3, 2)$, $(15, 2)$ and $(3, 11)$. The radius of the incircle of this triangle is:",
+   "options": [
+    "$2$",
+    "$4$",
+    "$6$",
+    "$3$"
+   ],
+   "answer": 3,
+   "explanations": [
+    "Incorrect. The working arrives at option D, not option A.",
+    "Incorrect. The working arrives at option D, not option B.",
+    "Incorrect. The working arrives at option D, not option C.",
+    "Correct. Step 1 - The side from $(3,2)$ to $(15,2)$ is horizontal with length $12$; the side from $(3,2)$ to $(3,11)$ is vertical with length $9$.\n Step 2 - These two sides meet at $(3,2)$ at a right angle, so the triangle is right-angled with legs $9$ and $12$.\n Step 3 - Hypotenuse $= \\sqrt{9^2 + 12^2} = \\sqrt{225} = 15$.\n Step 4 - For a right triangle the inradius is $r = \\frac{\\text{leg}_1 + \\text{leg}_2 - \\text{hypotenuse}}{2} = \\frac{9 + 12 - 15}{2}$.\n Step 5 - $r = \\frac{6}{2} = 3$.\n Step 6 - Answer $= 3$.\n Step 7 - Verify: area $= \\frac{1}{2}(9)(12) = 54$ and semiperimeter $= \\frac{9+12+15}{2} = 18$, so $r = \\frac{54}{18} = 3$ $\\checkmark$."
+   ],
+   "solution": "Step 1 - The side from $(3,2)$ to $(15,2)$ is horizontal with length $12$; the side from $(3,2)$ to $(3,11)$ is vertical with length $9$.\n Step 2 - These two sides meet at $(3,2)$ at a right angle, so the triangle is right-angled with legs $9$ and $12$.\n Step 3 - Hypotenuse $= \\sqrt{9^2 + 12^2} = \\sqrt{225} = 15$.\n Step 4 - For a right triangle the inradius is $r = \\frac{\\text{leg}_1 + \\text{leg}_2 - \\text{hypotenuse}}{2} = \\frac{9 + 12 - 15}{2}$.\n Step 5 - $r = \\frac{6}{2} = 3$.\n Step 6 - Answer $= 3$.\n Step 7 - Verify: area $= \\frac{1}{2}(9)(12) = 54$ and semiperimeter $= \\frac{9+12+15}{2} = 18$, so $r = \\frac{54}{18} = 3$ $\\checkmark$."
+  },
+  {
+   "type": "geometry",
+   "prompt": "A circular lawn is divided into two regions by a straight path that is a chord of length $14\\sqrt{2}$ m. The chord subtends an angle of $90^\\circ$ at the centre of the lawn. The area, in sq. m, of the smaller of the two regions is:",
+   "options": [
+    "$49\\pi$",
+    "$49\\pi - 98$",
+    "$49\\pi - 196$",
+    "$98\\pi - 98$"
+   ],
+   "answer": 1,
+   "explanations": [
+    "Incorrect. The working arrives at option B, not option A.",
+    "Correct. Step 1 - A chord subtending $90^\\circ$ at the centre has length $2R\\sin 45^\\circ = R\\sqrt{2}$.\n Step 2 - So $R\\sqrt{2} = 14\\sqrt{2}$, giving radius $R = 14$ m.\n Step 3 - The smaller region is the minor segment cut off by the chord.\n Step 4 - Area of the $90^\\circ$ sector $= \\frac{90}{360}\\pi R^2 = \\frac{1}{4}\\pi(14)^2 = 49\\pi$ sq m.\n Step 5 - Area of the triangle (two radii with included $90^\\circ$) $= \\frac{1}{2}R^2\\sin 90^\\circ = \\frac{1}{2}(196) = 98$ sq m.\n Step 6 - Minor segment $=$ sector $-$ triangle $= 49\\pi - 98$ sq m.\n Step 7 - Answer $= 49\\pi - 98$.\n Step 8 - Verify: $49\\pi - 98 \\approx 153.9 - 98 = 55.9$ sq m, well under half the lawn's area $\\frac{1}{2}\\pi(196)\\approx 308$, so it is indeed the smaller region $\\checkmark$.",
+    "Incorrect. The working arrives at option B, not option C.",
+    "Incorrect. The working arrives at option B, not option D."
+   ],
+   "solution": "Step 1 - A chord subtending $90^\\circ$ at the centre has length $2R\\sin 45^\\circ = R\\sqrt{2}$.\n Step 2 - So $R\\sqrt{2} = 14\\sqrt{2}$, giving radius $R = 14$ m.\n Step 3 - The smaller region is the minor segment cut off by the chord.\n Step 4 - Area of the $90^\\circ$ sector $= \\frac{90}{360}\\pi R^2 = \\frac{1}{4}\\pi(14)^2 = 49\\pi$ sq m.\n Step 5 - Area of the triangle (two radii with included $90^\\circ$) $= \\frac{1}{2}R^2\\sin 90^\\circ = \\frac{1}{2}(196) = 98$ sq m.\n Step 6 - Minor segment $=$ sector $-$ triangle $= 49\\pi - 98$ sq m.\n Step 7 - Answer $= 49\\pi - 98$.\n Step 8 - Verify: $49\\pi - 98 \\approx 153.9 - 98 = 55.9$ sq m, well under half the lawn's area $\\frac{1}{2}\\pi(196)\\approx 308$, so it is indeed the smaller region $\\checkmark$."
+  },
+  {
+   "type": "geometry",
+   "prompt": "A rectangular courtyard $ABCD$ has $AB = 40$ m and $BC = 21$ m. $E$ is the midpoint of side $CD$. The radius, in m, of the incircle of triangle $ADE$ is:",
+   "options": [
+    "$4$",
+    "$8$",
+    "$12$",
+    "$6$"
+   ],
+   "answer": 3,
+   "explanations": [
+    "Incorrect. The working arrives at option D, not option A.",
+    "Incorrect. The working arrives at option D, not option B.",
+    "Incorrect. The working arrives at option D, not option C.",
+    "Correct. Step 1 - In rectangle $ABCD$, $CD = AB = 40$ m and $AD = BC = 21$ m.\n Step 2 - $E$ is the midpoint of $CD$, so $DE = 20$ m.\n Step 3 - The angle at $D$ in triangle $ADE$ is a corner of the rectangle, $90^\\circ$, so $ADE$ is right-angled at $D$ with legs $AD = 21$ and $DE = 20$.\n Step 4 - Hypotenuse $AE = \\sqrt{21^2 + 20^2} = \\sqrt{441 + 400} = \\sqrt{841} = 29$ m.\n Step 5 - For a right triangle the inradius is $r = \\frac{\\text{leg}_1 + \\text{leg}_2 - \\text{hypotenuse}}{2} = \\frac{21 + 20 - 29}{2}$.\n Step 6 - $r = \\frac{12}{2} = 6$ m.\n Step 7 - Answer $= 6$.\n Step 8 - Verify: area $= \\frac{1}{2}(21)(20) = 210$ and semiperimeter $= \\frac{21+20+29}{2} = 35$, so $r = \\frac{210}{35} = 6$ $\\checkmark$."
+   ],
+   "solution": "Step 1 - In rectangle $ABCD$, $CD = AB = 40$ m and $AD = BC = 21$ m.\n Step 2 - $E$ is the midpoint of $CD$, so $DE = 20$ m.\n Step 3 - The angle at $D$ in triangle $ADE$ is a corner of the rectangle, $90^\\circ$, so $ADE$ is right-angled at $D$ with legs $AD = 21$ and $DE = 20$.\n Step 4 - Hypotenuse $AE = \\sqrt{21^2 + 20^2} = \\sqrt{441 + 400} = \\sqrt{841} = 29$ m.\n Step 5 - For a right triangle the inradius is $r = \\frac{\\text{leg}_1 + \\text{leg}_2 - \\text{hypotenuse}}{2} = \\frac{21 + 20 - 29}{2}$.\n Step 6 - $r = \\frac{12}{2} = 6$ m.\n Step 7 - Answer $= 6$.\n Step 8 - Verify: area $= \\frac{1}{2}(21)(20) = 210$ and semiperimeter $= \\frac{21+20+29}{2} = 35$, so $r = \\frac{210}{35} = 6$ $\\checkmark$."
+  },
+  {
+   "type": "geometry",
+   "prompt": "Two straight walkways are drawn from a point $P$ outside a circular fountain with centre $O$, touching the boundary at $Q$ and $R$. Points $A$ and $B$ lie on $PQ$ and $PR$ respectively, so that the segment $AB$ is also a tangent to the fountain. If $\\angle AOB = 65^\\circ$, then $\\angle APB$, in degrees, equals:",
+   "options": [
+    "$50^\\circ$",
+    "$65^\\circ$",
+    "$40^\\circ$",
+    "$25^\\circ$"
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Step 1 - The circle touches the three lines $PQ$, $PR$ and $AB$, lying in the region beyond $AB$ as seen from $P$, so it is the excircle of triangle $APB$ opposite vertex $P$.\n Step 2 - For the excircle opposite $P$, its centre $O$ satisfies $\\angle AOB = 90^\\circ - \\frac{1}{2}\\angle APB$.\n Step 3 - Substitute $\\angle AOB = 65^\\circ$: $65 = 90 - \\frac{1}{2}\\angle APB$.\n Step 4 - So $\\frac{1}{2}\\angle APB = 25^\\circ$, giving $\\angle APB = 50^\\circ$.\n Step 5 - Answer $= 50^\\circ$.\n Step 6 - Verify: with $\\angle APB = 50^\\circ$, $90 - \\frac{1}{2}(50) = 90 - 25 = 65^\\circ = \\angle AOB$ $\\checkmark$.\n (Insight: $O$ is the excentre of $\\triangle APB$ opposite $P$, not the incentre, so the angle relation is $90^\\circ - \\frac{1}{2}\\angle P$.)",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Step 1 - The circle touches the three lines $PQ$, $PR$ and $AB$, lying in the region beyond $AB$ as seen from $P$, so it is the excircle of triangle $APB$ opposite vertex $P$.\n Step 2 - For the excircle opposite $P$, its centre $O$ satisfies $\\angle AOB = 90^\\circ - \\frac{1}{2}\\angle APB$.\n Step 3 - Substitute $\\angle AOB = 65^\\circ$: $65 = 90 - \\frac{1}{2}\\angle APB$.\n Step 4 - So $\\frac{1}{2}\\angle APB = 25^\\circ$, giving $\\angle APB = 50^\\circ$.\n Step 5 - Answer $= 50^\\circ$.\n Step 6 - Verify: with $\\angle APB = 50^\\circ$, $90 - \\frac{1}{2}(50) = 90 - 25 = 65^\\circ = \\angle AOB$ $\\checkmark$.\n (Insight: $O$ is the excentre of $\\triangle APB$ opposite $P$, not the incentre, so the angle relation is $90^\\circ - \\frac{1}{2}\\angle P$.)"
+  },
+  {
+   "type": "geometry",
+   "prompt": "A trapezoidal window pane $ABCD$ has $AB$ parallel to $DC$, with $AD$ perpendicular to $AB$ and $AB = 2\\cdot DC$. A circle inscribed in the pane touches all four sides and has radius $4$ cm. The area, in sq. cm, of the window pane $ABCD$ is:",
+   "options": [
+    "$48$",
+    "$72$",
+    "$60$",
+    "$84$"
+   ],
+   "answer": 1,
+   "explanations": [
+    "Incorrect. The working arrives at option B, not option A.",
+    "Correct. Step 1 - The inscribed circle touches both parallel sides $AB$ and $DC$, so the height $AD = 2\\times 4 = 8$ cm.\n Step 2 - Let $DC = x$; then $AB = 2x$.\n Step 3 - A tangential quadrilateral has equal sums of opposite sides: $AB + DC = AD + BC$, so $3x = 8 + BC$.\n Step 4 - The slant side $BC = \\sqrt{(AB-DC)^2 + AD^2} = \\sqrt{x^2 + 64}$.\n Step 5 - So $3x - 8 = \\sqrt{x^2 + 64}$; squaring gives $9x^2 - 48x + 64 = x^2 + 64$, i.e. $8x^2 = 48x$, so $x = 6$.\n Step 6 - Then $DC = 6$, $AB = 12$, height $= 8$; area $= \\frac{1}{2}(12 + 6)(8) = 72$ sq cm.\n Step 7 - Answer $= 72$.\n Step 8 - Verify: $BC = \\sqrt{36 + 64} = 10$, and $AB + DC = 18 = AD + BC = 8 + 10$ $\\checkmark$.",
+    "Incorrect. The working arrives at option B, not option C.",
+    "Incorrect. The working arrives at option B, not option D."
+   ],
+   "solution": "Step 1 - The inscribed circle touches both parallel sides $AB$ and $DC$, so the height $AD = 2\\times 4 = 8$ cm.\n Step 2 - Let $DC = x$; then $AB = 2x$.\n Step 3 - A tangential quadrilateral has equal sums of opposite sides: $AB + DC = AD + BC$, so $3x = 8 + BC$.\n Step 4 - The slant side $BC = \\sqrt{(AB-DC)^2 + AD^2} = \\sqrt{x^2 + 64}$.\n Step 5 - So $3x - 8 = \\sqrt{x^2 + 64}$; squaring gives $9x^2 - 48x + 64 = x^2 + 64$, i.e. $8x^2 = 48x$, so $x = 6$.\n Step 6 - Then $DC = 6$, $AB = 12$, height $= 8$; area $= \\frac{1}{2}(12 + 6)(8) = 72$ sq cm.\n Step 7 - Answer $= 72$.\n Step 8 - Verify: $BC = \\sqrt{36 + 64} = 10$, and $AB + DC = 18 = AD + BC = 8 + 10$ $\\checkmark$."
+  },
+  {
+   "type": "geometry",
+   "prompt": "A circular lake has centre $C$ and radius $5\\sqrt{2}$ km. Two straight parallel jetty-lines $PQ$ and $SR$ are chords of the lake lying on opposite sides of a diameter. If $\\angle PQC = 45^\\circ$ and the perpendicular distances of $PQ$ and $SR$ from $C$ are in the ratio $5 : 1$, then the area, in sq. km, of quadrilateral $PQRS$ is:",
+   "options": [
+    "$36$",
+    "$48$",
+    "$60$",
+    "$72$"
+   ],
+   "answer": 3,
+   "explanations": [
+    "Incorrect. The working arrives at option D, not option A.",
+    "Incorrect. The working arrives at option D, not option B.",
+    "Incorrect. The working arrives at option D, not option C.",
+    "Correct. Step 1 - In triangle $PQC$, $CP = CQ = 5\\sqrt{2}$ (radii), so it is isosceles with base angle $\\angle PQC = 45^\\circ$; hence $\\angle QPC = 45^\\circ$ and $\\angle PCQ = 90^\\circ$.\n Step 2 - Distance of $PQ$ from $C = 5\\sqrt{2}\\cos 45^\\circ = 5$ km, and chord $PQ = 2\\times 5\\sqrt{2}\\sin 45^\\circ = 10$ km.\n Step 3 - The distances are in ratio $5:1$, so $SR$ lies at distance $1$ km from $C$.\n Step 4 - Half of $SR = \\sqrt{(5\\sqrt{2})^2 - 1^2} = \\sqrt{49} = 7$, so $SR = 14$ km.\n Step 5 - $PQ$ and $SR$ lie on opposite sides of $C$, so the gap between them $= 5 + 1 = 6$ km.\n Step 6 - $PQRS$ is a trapezium: area $= \\frac{1}{2}(PQ + SR)\\times 6 = \\frac{1}{2}(10 + 14)(6) = 72$ sq km.\n Step 7 - Answer $= 72$.\n Step 8 - Verify: chord at distance $5$ has half-length $\\sqrt{50-25}=5$ $\\checkmark$; chord at distance $1$ has half-length $\\sqrt{50-1}=7$ $\\checkmark$."
+   ],
+   "solution": "Step 1 - In triangle $PQC$, $CP = CQ = 5\\sqrt{2}$ (radii), so it is isosceles with base angle $\\angle PQC = 45^\\circ$; hence $\\angle QPC = 45^\\circ$ and $\\angle PCQ = 90^\\circ$.\n Step 2 - Distance of $PQ$ from $C = 5\\sqrt{2}\\cos 45^\\circ = 5$ km, and chord $PQ = 2\\times 5\\sqrt{2}\\sin 45^\\circ = 10$ km.\n Step 3 - The distances are in ratio $5:1$, so $SR$ lies at distance $1$ km from $C$.\n Step 4 - Half of $SR = \\sqrt{(5\\sqrt{2})^2 - 1^2} = \\sqrt{49} = 7$, so $SR = 14$ km.\n Step 5 - $PQ$ and $SR$ lie on opposite sides of $C$, so the gap between them $= 5 + 1 = 6$ km.\n Step 6 - $PQRS$ is a trapezium: area $= \\frac{1}{2}(PQ + SR)\\times 6 = \\frac{1}{2}(10 + 14)(6) = 72$ sq km.\n Step 7 - Answer $= 72$.\n Step 8 - Verify: chord at distance $5$ has half-length $\\sqrt{50-25}=5$ $\\checkmark$; chord at distance $1$ has half-length $\\sqrt{50-1}=7$ $\\checkmark$."
+  },
+  {
+   "type": "geometry",
+   "prompt": "On a triangular plot of farmland $ABC$, $AB = AC = 15$ m and $D$ is a point on side $BC$ with $AD = 9$ m. The segment $AD$ is extended to a point $E$ such that $\\angle ACB = \\angle AEB$. The length, in m, of $AE$ is:",
+   "options": [
+    "$16$",
+    "$20$",
+    "$25$",
+    "$32$"
+   ],
+   "answer": 2,
+   "explanations": [
+    "Incorrect. The working arrives at option C, not option A.",
+    "Incorrect. The working arrives at option C, not option B.",
+    "Correct. Step 1 - Since $\\angle AEB = \\angle ACB$ and both angles subtend the segment $AB$, point $E$ lies on the circumcircle of triangle $ABC$.\n Step 2 - Then line $ADE$ and chord $BC$ are two chords of that circumcircle meeting at the interior point $D$.\n Step 3 - By the intersecting-chords (power of a point) relation: $BD\\cdot DC = AD\\cdot DE$.\n Step 4 - For a cevian $AD$ in the isosceles triangle, $BD\\cdot DC = AB^2 - AD^2 = 15^2 - 9^2 = 225 - 81 = 144$.\n Step 5 - So $144 = 9\\cdot DE$, giving $DE = 16$ m.\n Step 6 - $AE = AD + DE = 9 + 16 = 25$ m.\n Step 7 - Answer $= 25$.\n Step 8 - Verify: $AE = \\frac{AB^2}{AD} = \\frac{225}{9} = 25$ $\\checkmark$.\n (Insight: $\\angle AEB = \\angle ACB$ forces $E$ onto the circumcircle, which unlocks the power-of-a-point relation.)",
+    "Incorrect. The working arrives at option C, not option D."
+   ],
+   "solution": "Step 1 - Since $\\angle AEB = \\angle ACB$ and both angles subtend the segment $AB$, point $E$ lies on the circumcircle of triangle $ABC$.\n Step 2 - Then line $ADE$ and chord $BC$ are two chords of that circumcircle meeting at the interior point $D$.\n Step 3 - By the intersecting-chords (power of a point) relation: $BD\\cdot DC = AD\\cdot DE$.\n Step 4 - For a cevian $AD$ in the isosceles triangle, $BD\\cdot DC = AB^2 - AD^2 = 15^2 - 9^2 = 225 - 81 = 144$.\n Step 5 - So $144 = 9\\cdot DE$, giving $DE = 16$ m.\n Step 6 - $AE = AD + DE = 9 + 16 = 25$ m.\n Step 7 - Answer $= 25$.\n Step 8 - Verify: $AE = \\frac{AB^2}{AD} = \\frac{225}{9} = 25$ $\\checkmark$.\n (Insight: $\\angle AEB = \\angle ACB$ forces $E$ onto the circumcircle, which unlocks the power-of-a-point relation.)"
+  },
+  {
+   "type": "geometry",
+   "prompt": "A rhombus-shaped kite has each side $25$ cm long and an area of $336$ sq. cm. The absolute value of the difference between the lengths, in cm, of the two diagonals of the kite is:",
+   "options": [
+    "$24$",
+    "$34$",
+    "$48$",
+    "$62$"
+   ],
+   "answer": 1,
+   "explanations": [
+    "Incorrect. The working arrives at option B, not option A.",
+    "Correct. Step 1 - Let the diagonals be $d_1$ and $d_2$. Area $= \\frac{1}{2}d_1 d_2 = 336$, so $d_1 d_2 = 672$.\n Step 2 - The diagonals of a rhombus bisect each other at right angles, so $\\left(\\frac{d_1}{2}\\right)^2 + \\left(\\frac{d_2}{2}\\right)^2 = 25^2$.\n Step 3 - Hence $d_1^2 + d_2^2 = 4\\times 625 = 2500$.\n Step 4 - $(d_1 - d_2)^2 = d_1^2 + d_2^2 - 2d_1 d_2 = 2500 - 2(672) = 2500 - 1344 = 1156$.\n Step 5 - $|d_1 - d_2| = \\sqrt{1156} = 34$ cm.\n Step 6 - Answer $= 34$.\n Step 7 - Verify: $(d_1+d_2)^2 = 2500 + 1344 = 3844$, so $d_1+d_2 = 62$; with the difference $34$ this gives $d_1 = 48$, $d_2 = 14$, and $\\frac{1}{2}(48)(14) = 336$ $\\checkmark$.",
+    "Incorrect. The working arrives at option B, not option C.",
+    "Incorrect. The working arrives at option B, not option D."
+   ],
+   "solution": "Step 1 - Let the diagonals be $d_1$ and $d_2$. Area $= \\frac{1}{2}d_1 d_2 = 336$, so $d_1 d_2 = 672$.\n Step 2 - The diagonals of a rhombus bisect each other at right angles, so $\\left(\\frac{d_1}{2}\\right)^2 + \\left(\\frac{d_2}{2}\\right)^2 = 25^2$.\n Step 3 - Hence $d_1^2 + d_2^2 = 4\\times 625 = 2500$.\n Step 4 - $(d_1 - d_2)^2 = d_1^2 + d_2^2 - 2d_1 d_2 = 2500 - 2(672) = 2500 - 1344 = 1156$.\n Step 5 - $|d_1 - d_2| = \\sqrt{1156} = 34$ cm.\n Step 6 - Answer $= 34$.\n Step 7 - Verify: $(d_1+d_2)^2 = 2500 + 1344 = 3844$, so $d_1+d_2 = 62$; with the difference $34$ this gives $d_1 = 48$, $d_2 = 14$, and $\\frac{1}{2}(48)(14) = 336$ $\\checkmark$."
+  }
+ ],
+ "source": "Bank /Practice Geometry",
+ "topic": "geometry"
+}

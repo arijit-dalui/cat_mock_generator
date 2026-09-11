@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import NavHeader from "../components/NavHeader";
 
 const SECTIONS = ["VA", "RC", "DI", "LR", "QA"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -52,6 +52,17 @@ function barColor(p: number): string {
   return "bg-red-500";
 }
 
+/** Hidden per request - kept in code (not deleted) in case logging practice
+ * from outside this app turns out to be worth surfacing again later. */
+const SHOW_EXTERNAL_STATS = false;
+
+const SOCIAL_FIELDS = [
+  { key: "reddit", label: "Reddit" },
+  { key: "instagram", label: "Instagram" },
+  { key: "twitter", label: "Twitter / X" },
+  { key: "linkedin", label: "LinkedIn" },
+] as const;
+
 export default function ProfileClient({
   username,
   role,
@@ -61,9 +72,82 @@ export default function ProfileClient({
   role: string;
   createdAt: string;
 }) {
-  const router = useRouter();
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState("");
+  const [social, setSocial] = useState<Record<string, string>>({});
+  const [socialSaving, setSocialSaving] = useState(false);
+  const [socialSaved, setSocialSaved] = useState(false);
+  const [socialError, setSocialError] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/users/${encodeURIComponent(username)}`);
+        const d = await res.json();
+        if (res.ok) setSocial(d.socialLinks || {});
+      } catch {
+        /* non-fatal - the links section just starts blank */
+      }
+    })();
+  }, [username]);
+
+  async function saveSocial() {
+    setSocialSaving(true);
+    setSocialError("");
+    setSocialSaved(false);
+    try {
+      const res = await fetch("/api/profile/social", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(social),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setSocialError(d.error || "Could not save links.");
+        return;
+      }
+      setSocial(d.socialLinks);
+      setSocialSaved(true);
+      setTimeout(() => setSocialSaved(false), 1500);
+    } catch {
+      setSocialError("Network error.");
+    } finally {
+      setSocialSaving(false);
+    }
+  }
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwSaved, setPwSaved] = useState(false);
+  const [pwError, setPwError] = useState("");
+
+  async function changePassword() {
+    setPwSaving(true);
+    setPwError("");
+    setPwSaved(false);
+    try {
+      const res = await fetch("/api/profile/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setPwError(d.error || "Could not change password.");
+        return;
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setPwSaved(true);
+      setTimeout(() => setPwSaved(false), 2000);
+    } catch {
+      setPwError("Network error.");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
   const [forms, setForms] = useState<Record<string, ExtForm>>({});
 
   useEffect(() => {
@@ -92,12 +176,6 @@ export default function ProfileClient({
       }
     })();
   }, []);
-
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
 
   function setForm(section: Section, patch: Partial<ExtForm>) {
     setForms((prev) => ({ ...prev, [section]: { ...prev[section], ...patch } }));
@@ -166,31 +244,30 @@ export default function ProfileClient({
 
   if (error)
     return (
-      <main className="mx-auto max-w-4xl px-6 py-10">
-        <p className="text-red-600">{error}</p>
-        <Link href="/dashboard" className="btn-ghost mt-4">
-          Back to dashboard
-        </Link>
-      </main>
+      <div className="app-shell min-h-screen">
+        <NavHeader active="/profile" username={username} role={role} maxWidth="max-w-4xl" />
+        <main className="mx-auto max-w-4xl px-6 py-10">
+          <p className="text-red-600">{error}</p>
+          <Link href="/dashboard" className="btn-ghost mt-4">
+            Back to dashboard
+          </Link>
+        </main>
+      </div>
     );
   if (!stats || !overall)
-    return <main className="mx-auto max-w-4xl px-6 py-10 text-slate-400">Loading...</main>;
+    return (
+      <div className="app-shell min-h-screen">
+        <NavHeader active="/profile" username={username} role={role} maxWidth="max-w-4xl" />
+        <main className="mx-auto max-w-4xl px-6 py-10 text-slate-400">Loading...</main>
+      </div>
+    );
 
   const overallAcc = pct(overall.correct, overall.solved);
   const grandSolved = overall.solved + overall.extSolved;
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <Link href="/dashboard" className="text-sm font-medium text-brand">
-            &larr; Dashboard
-          </Link>
-          <button onClick={logout} className="btn-ghost">
-            Log out
-          </button>
-        </div>
-      </header>
+    <div className="app-shell min-h-screen">
+      <NavHeader active="/profile" username={username} role={role} maxWidth="max-w-4xl" />
 
       <main className="mx-auto max-w-4xl px-6 py-8 space-y-8">
         {/* Profile header */}
@@ -200,13 +277,82 @@ export default function ProfileClient({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900">{username}</h1>
-              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase text-slate-500">
+              <h1 className="font-serif text-2xl font-semibold text-slate-900">{username}</h1>
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 {role}
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-500">Member since {fmtDate(createdAt)}</p>
           </div>
+        </section>
+
+        {/* Social links - self-entered URLs shown on the public profile at
+         * /u/[username] and clickable from the leaderboard. Not an OAuth
+         * connection - just a link the user provides. */}
+        <section className="card p-6">
+          <h2 className="display-type text-2xl font-bold text-slate-900">Public links</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Shown on your public profile (visible to anyone via the leaderboard). Leave blank to hide.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {SOCIAL_FIELDS.map((f) => (
+              <div key={f.key}>
+                <label className="label" htmlFor={`social-${f.key}`}>{f.label}</label>
+                <input
+                  id={`social-${f.key}`}
+                  type="url"
+                  className="input"
+                  placeholder={`https://${f.key}.com/your-handle`}
+                  value={social[f.key] ?? ""}
+                  onChange={(e) => setSocial((s) => ({ ...s, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          {socialError && <p className="mt-3 text-sm text-red-600">{socialError}</p>}
+          <button onClick={saveSocial} disabled={socialSaving} className="btn-primary mt-4">
+            {socialSaving ? "Saving..." : socialSaved ? "Saved ✓" : "Save links"}
+          </button>
+        </section>
+
+        {/* Change password - requires the current one. Forgotten it entirely?
+         * There's no email/SMTP here to verify identity for self-service
+         * reset - an admin can reset it for you instead. */}
+        <section className="card p-6">
+          <h2 className="display-type text-2xl font-bold text-slate-900">Change password</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Forgotten your password entirely? There&apos;s no email-based reset here - ask an admin to reset it for you.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="current-password">Current password</label>
+              <input
+                id="current-password"
+                type="password"
+                className="input"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="new-password">New password</label>
+              <input
+                id="new-password"
+                type="password"
+                className="input"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          {pwError && <p className="mt-3 text-sm text-red-600">{pwError}</p>}
+          <button
+            onClick={changePassword}
+            disabled={pwSaving || !currentPassword || !newPassword}
+            className="btn-primary mt-4"
+          >
+            {pwSaving ? "Saving..." : pwSaved ? "Saved ✓" : "Change password"}
+          </button>
         </section>
 
         {/* Overall tracker */}
@@ -226,9 +372,8 @@ export default function ProfileClient({
 
         {/* Per-section tracker */}
         <section className="card p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            By section (in-app practice)
-          </h2>
+          <h2 className="display-type text-2xl font-bold text-slate-900">Your practice, by section</h2>
+          <p className="mt-1 text-sm text-slate-500">Look for a steady direction, not a perfect day.</p>
           <div className="mt-4 space-y-4">
             {SECTIONS.map((s) => {
               const a = stats.app[s];
@@ -258,10 +403,9 @@ export default function ProfileClient({
         </section>
 
         {/* Other sources */}
+        {SHOW_EXTERNAL_STATS && (
         <section className="card p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Other sources
-          </h2>
+          <h2 className="display-type text-2xl font-bold text-slate-900">Practice beyond this desk</h2>
           <p className="mt-1 text-sm text-slate-500">
             Practiced elsewhere (books, other mocks)? Log it here to track your
             full effort. Accuracy is a percentage.
@@ -269,7 +413,7 @@ export default function ProfileClient({
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase text-slate-400">
+                <tr className="text-left card-eyebrow">
                   <th className="py-2">Section</th>
                   <th>Solved</th>
                   <th>Accuracy %</th>
@@ -325,6 +469,7 @@ export default function ProfileClient({
             <Stat label="Total solved (all)" value={grandSolved} highlight />
           </div>
         </section>
+        )}
       </main>
     </div>
   );
@@ -343,8 +488,8 @@ function Stat({
 }) {
   return (
     <div className={"card p-5 " + (highlight ? "border-brand bg-brand/5" : "")}>
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-slate-900">{value}</p>
+      <p className="card-eyebrow">{label}</p>
+      <p className="mt-1 font-serif text-3xl font-bold text-slate-900">{value}</p>
       {sub && <p className="text-xs text-slate-400">{sub}</p>}
     </div>
   );

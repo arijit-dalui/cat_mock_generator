@@ -41,10 +41,37 @@ export async function GET(
       submitted: !!attempt.submitted,
       score: attempt.score,
       total: attempt.total,
+      createdAt: attempt.created_at,
+      submittedAt: attempt.submitted_at,
       answers: attempt.answers
         ? (typeof attempt.answers === "string" ? JSON.parse(attempt.answers) : attempt.answers)
         : {},
     },
     set,
   });
+}
+
+/** Autosave in-progress answers (and marked-for-review state, under the
+ * reserved "__marked" key) so a refresh or a resumed attempt doesn't lose
+ * progress. Silently ignored once the attempt is submitted. */
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } },
+) {
+  const user = await currentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+  const attempt = await attempts.byId(Number(params.id));
+  if (!attempt || attempt.user_id !== user.id) {
+    return NextResponse.json({ error: "Attempt not found." }, { status: 404 });
+  }
+  let body: { answers?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+  await attempts.saveDraft(attempt.id, body.answers ?? {});
+  return NextResponse.json({ ok: true });
 }

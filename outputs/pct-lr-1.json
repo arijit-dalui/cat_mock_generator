@@ -1,0 +1,162 @@
+{
+ "sets": [
+  {
+   "contextLabel": "Logical Reasoning",
+   "context": "Seven bays are arranged in a circle and numbered 1 to 7 in the clockwise direction. Four drones — Wisp, Xenon, Yara and Zephyr — rest on four of the seven bays; the other three bays are empty. On each turn the drone whose turn it is moves either clockwise or anticlockwise (its own choice) and lands on the FIRST empty bay reached in the chosen direction. The turns occur in this order: Wisp (Turn 1), Xenon (Turn 2), Yara (Turn 3), Zephyr (Turn 4), Wisp (Turn 5), Xenon (Turn 6), Yara (Turn 7). \"Four consecutive bays\" means four bays whose numbers are consecutive around the circle (e.g., 6,7,1,2). In the STARTING position (before Turn 1): Xenon and Yara rest on two adjacent bays, while each of Wisp and Zephyr has an empty bay on both of its sides.\nThe following is known.\n1. The four drones occupy four consecutive bays ONLY at the end of Turn 3 and at the end of Turn 5 (and at no other time, including the start).\n2. Zephyr is on Bay 6 after Turn 1 and on Bay 5 after Turn 5; Yara is on Bay 3 after Turn 2.",
+   "source": "Bank /Practice Arrangements set 1",
+   "questions": [
+    {
+     "type": "lr",
+     "prompt": "Which bay was initially occupied by Xenon (before Turn 1)?",
+     "options": [
+      "Bay 3",
+      "Bay 4",
+      "Bay 6",
+      "Bay 1"
+     ],
+     "answer": 1,
+     "explanations": [
+      "Incorrect. The working arrives at option B, not option A.",
+      "Correct. See solution working. Working arrives at option B.",
+      "Incorrect. The working arrives at option B, not option C.",
+      "Incorrect. The working arrives at option B, not option D."
+     ],
+     "solution": "See solution working. Working arrives at option B."
+    },
+    {
+     "type": "lr",
+     "prompt": "Which drone occupied Bay 7 at the end of Turn 4?",
+     "options": [
+      "Wisp",
+      "Xenon",
+      "Yara",
+      "Zephyr"
+     ],
+     "answer": 2,
+     "explanations": [
+      "Incorrect. The working arrives at option C, not option A.",
+      "Incorrect. The working arrives at option C, not option B.",
+      "Correct. See solution working. Working arrives at option C.",
+      "Incorrect. The working arrives at option C, not option D."
+     ],
+     "solution": "See solution working. Working arrives at option C."
+    },
+    {
+     "type": "lr",
+     "prompt": "Which set of bays was occupied at the end of Turn 5?",
+     "options": [
+      "Bays 1, 5, 6 and 7",
+      "Bays 2, 5, 6 and 7",
+      "Bays 1, 2, 6 and 7",
+      "Bays 1, 2, 5 and 6"
+     ],
+     "answer": 0,
+     "explanations": [
+      "Correct. See solution working. Working arrives at option A.",
+      "Incorrect. The working arrives at option A, not option B.",
+      "Incorrect. The working arrives at option A, not option C.",
+      "Incorrect. The working arrives at option A, not option D."
+     ],
+     "solution": "See solution working. Working arrives at option A."
+    },
+    {
+     "type": "lr",
+     "prompt": "For how many of the four drones can the bay occupied at the end of Turn 7 be uniquely determined?",
+     "options": [
+      "1",
+      "2",
+      "4",
+      "3"
+     ],
+     "answer": 3,
+     "explanations": [
+      "Incorrect. The working arrives at option D, not option A.",
+      "Incorrect. The working arrives at option D, not option B.",
+      "Incorrect. The working arrives at option D, not option C.",
+      "Correct. See solution working. Working arrives at option D."
+     ],
+     "solution": "See solution working. Working arrives at option D."
+    }
+   ]
+  },
+  {
+   "contextLabel": "Logical Reasoning",
+   "context": "Seven players — Ira, Jai, Kavya, Lalit, Mira, Nikhil and Omar — sit in a circle facing the centre (not necessarily in that order) and pass a token over 8 rounds. A player's IMMEDIATE RIGHT neighbour is the next player clockwise. In each round the holder passes the token to one of four players: one to the right (R1, the immediate clockwise neighbour), two to the right (R2), one to the left (L1, the immediate anticlockwise neighbour), or two to the left (L2). 'k-th to the left' means k places anticlockwise. Ira makes the first pass of Round 1; after Round 8 the token is held by Mira. The table gives, for some rounds, the pass type and/or the receiver; '?' marks unknown.\nRound 1: type L2, receiver Kavya.  Round 2: type ?, receiver Nikhil.  Round 3: type ?, receiver Lalit.  Round 4: type ?, receiver Mira.  Round 5: type ?, receiver ?.  Round 6: type ?, receiver Lalit.  Round 7: type ?, receiver Jai.  Round 8: type R2, receiver Mira.",
+   "source": "Bank /Practice Arrangements set 2",
+   "questions": [
+    {
+     "type": "lr",
+     "prompt": "Who is sitting immediately to the right of Ira?",
+     "options": [
+      "Jai",
+      "Lalit",
+      "Kavya",
+      "Omar"
+     ],
+     "answer": 0,
+     "explanations": [
+      "Correct. See solution working. Working arrives at option A.",
+      "Incorrect. The working arrives at option A, not option B.",
+      "Incorrect. The working arrives at option A, not option C.",
+      "Incorrect. The working arrives at option A, not option D."
+     ],
+     "solution": "See solution working. Working arrives at option A."
+    },
+    {
+     "type": "lr",
+     "prompt": "Who is sitting third to the left of Omar?",
+     "options": [
+      "Nikhil",
+      "Mira",
+      "Lalit",
+      "Kavya"
+     ],
+     "answer": 1,
+     "explanations": [
+      "Incorrect. The working arrives at option B, not option A.",
+      "Correct. See solution working. Working arrives at option B.",
+      "Incorrect. The working arrives at option B, not option C.",
+      "Incorrect. The working arrives at option B, not option D."
+     ],
+     "solution": "See solution working. Working arrives at option B."
+    },
+    {
+     "type": "lr",
+     "prompt": "In total, how many passes of type L2 (two to the left) were made over the eight rounds?",
+     "options": [
+      "1",
+      "2",
+      "3",
+      "4"
+     ],
+     "answer": 2,
+     "explanations": [
+      "Incorrect. The working arrives at option C, not option A.",
+      "Incorrect. The working arrives at option C, not option B.",
+      "Correct. See solution working. Working arrives at option C.",
+      "Incorrect. The working arrives at option C, not option D."
+     ],
+     "solution": "See solution working. Working arrives at option C."
+    },
+    {
+     "type": "lr",
+     "prompt": "For how many of the seven players can the exact number of times they received the token be determined?",
+     "options": [
+      "3",
+      "4",
+      "6",
+      "5"
+     ],
+     "answer": 3,
+     "explanations": [
+      "Incorrect. The working arrives at option D, not option A.",
+      "Incorrect. The working arrives at option D, not option B.",
+      "Incorrect. The working arrives at option D, not option C.",
+      "Correct. See solution working. Working arrives at option D."
+     ],
+     "solution": "See solution working. Working arrives at option D."
+    }
+   ]
+  }
+ ]
+}

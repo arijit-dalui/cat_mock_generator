@@ -13,3 +13,4 @@ next-env.d.ts
 .DS_Store
 tsconfig.tsbuildinfo
 vercel-env.env
+llm-debug-*.txt

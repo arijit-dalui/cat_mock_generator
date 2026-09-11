@@ -1,14 +1,18 @@
 /** Shared shapes for generated problem sets. */
 import type { Section } from "../config";
 
-/** A single multiple-choice question with per-option explanations. */
+export type QuestionFormat = "mcq" | "tita";
+
+/** A single question. TITA questions intentionally have no options and accept
+ * a typed answer; existing generated MCQs remain valid without `format`. */
 export interface GenQuestion {
   id: string;
   type: string; // subtype, e.g. para_jumble, geometry, rc
+  format?: QuestionFormat;
   prompt: string; // the question stem
-  options: string[]; // exactly 4
-  answer: number; // correct option index, 0-3
-  explanations: string[]; // 4 entries, parallel to options - why each is right/wrong
+  options: string[]; // exactly 4 for MCQ; empty for TITA
+  answer: number | string; // option index for MCQ; canonical typed answer for TITA
+  explanations: string[]; // parallel to options for MCQ
   solution: string; // overall worked solution
 }
 

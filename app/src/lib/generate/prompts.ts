@@ -128,9 +128,9 @@ function formatExemplars(items: KbItem[], max = 1): string {
 
 const VA_BRIEF: Record<string, string> = {
   para_jumble:
-    "para-jumble: 5 sentences (labelled 1-5 in scrambled order) that must be reordered into one coherent paragraph. EXACTLY ONE sentence must be a self-contained OPENER — a topic/thesis statement that introduces the subject with NO back-reference and NO transition-word start — and it must be the intended first sentence. Do NOT write sentences that nearly all begin with a connective: at most one or two sentences may start with 'however / moreover / therefore / by contrast / furthermore'; every other sentence must begin with its own subject (a noun phrase), not a discourse marker. CRUCIAL: the correct order must be driven by the LOGICAL / CONCEPTUAL progression of the argument (a claim, then its elaboration, an example, a qualification, a conclusion) — NOT by obvious surface cues. Do NOT lean on explicit conjunctions or pronouns ('this', 'such a view', 'the latter', 'however', 'therefore') as glue that makes the sequence trivially obvious; a solver should have to follow the MEANING and the flow of ideas, not just chain pronouns and connectives. Avoid chronology and digit labels as ordering signals.",
+    "para-jumble (real CAT format: TITA, no answer options): 4 sentences (labelled 1-4 in scrambled order) that must be reordered into one coherent paragraph. EXACTLY ONE sentence must be a self-contained OPENER — a topic/thesis statement that introduces the subject with NO back-reference and NO transition-word start — and it must be the intended first sentence. Do NOT write sentences that nearly all begin with a connective: at most one sentence may start with 'however / moreover / therefore / by contrast / furthermore'; every other sentence must begin with its own subject (a noun phrase), not a discourse marker. CRUCIAL: the correct order must be driven by the LOGICAL / CONCEPTUAL progression of the argument (a claim, then its elaboration, an example, a conclusion) — NOT by obvious surface cues. Do NOT lean on explicit conjunctions or pronouns ('this', 'such a view', 'the latter', 'however', 'therefore') as glue that makes the sequence trivially obvious; a solver should have to follow the MEANING and the flow of ideas, not just chain pronouns and connectives. Avoid chronology and digit labels as ordering signals.",
   para_completion:
-    "para-completion: a 4-6 sentence paragraph with the FINAL sentence blanked out (_____). The right completion must follow logically from the SPECIFIC argument the paragraph develops — not from generic topical relevance. Two distractors should be topically related but logically off (broaden the scope, contradict the implied premise, or echo a counter-argument).",
+    "paragraph-completion (missing sentence insertion, NOT 'finish the final sentence'): a short 4-6 sentence passage with ONE sentence removed and replaced by a numbered blank [_____] - the blank can sit ANYWHERE in the passage (start, middle, or end), not only at the end. Four candidate sentences are offered as options; exactly one slots into that specific position and restores the passage's logical/grammatical flow (matching what comes immediately before AND after the blank, not just the general topic). Distractors should: (a) fit the topic but break the local transition, (b) duplicate information already stated elsewhere in the passage, (c) introduce a claim the rest of the passage doesn't support.",
   odd_one_out:
     "odd-one-out: 5 sentences on a single theme, one of which does not fit. The odd one usually breaks the THEMATIC LINE (advocacy vs description, cause vs effect, historical vs contemporary). Surface keyword overlap with the rest is a red herring — the misfit should share vocabulary but diverge in argumentative role.",
   summary:
@@ -144,47 +144,64 @@ export function vaPrompt(subtype: string, count: number, exemplars: KbItem[]): s
   const formatRules =
     subtype === "para_jumble"
       ? `\nFormat each "prompt" exactly like:\n` +
-        `"Arrange the following sentences in the correct logical order.\\n` +
-        `1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n4. <sentence>\\n5. <sentence>"\n` +
-        `Each option must be a 5-character ordering string drawn from "12345" ` +
-        `(every digit 1-5 used exactly once), e.g. "31245". The resolution must ` +
-        `depend on the LOGICAL flow of the argument (claim -> elaboration -> ` +
-        `example/qualification -> conclusion), NOT on calendar dates, numeric ` +
-        `labels, or obvious word-glue. Do NOT make the order trivially obvious ` +
-        `by chaining explicit connectives or pronouns ("this", "such a view", ` +
-        `"the latter", "however", "therefore"); the solver should have to ` +
-        `reason about MEANING, not just spot a pronoun pointing back at the ` +
+        `"Arrange the following sentences in the correct logical ` +
+        `order.\n1. <sentence>\n2. <sentence>\n3. <sentence>\n4. <sentence>"\n` +
+        `The four options are ALWAYS four candidate orderings (4-digit strings ` +
+        `using each of 1-4 exactly once, e.g. ["1324", "3142", "2413", "4231"]) ` +
+        `and "answer" is the LETTER (A, B, C, or D) of the correct ordering. ` +
+        `The "solution" must trace the order sentence by sentence and end by ` +
+        `naming that letter, and exactly ONE explanation begins "Correct.".\n` +
+        `The resolution must depend on the LOGICAL flow of the argument (claim ` +
+        `-> elaboration -> example -> conclusion), NOT on calendar dates, ` +
+        `numeric labels, or obvious word-glue. Do NOT make the order trivially ` +
+        `obvious by chaining explicit connectives or pronouns ("this", "such a ` +
+        `view", "the latter", "however", "therefore"); the solver should have ` +
+        `to reason about MEANING, not just spot a pronoun pointing back at the ` +
         `previous sentence.\n` +
         `STYLE: do NOT have most sentences open with "However"/"Moreover"/` +
         `"Therefore"/"Furthermore" — that pattern destroys the puzzle. Keep the ` +
         `independent OPENER sentence (subject-first, no back-reference) so a ` +
         `unique start exists.\n` +
-        `CRITICAL — verify the key: actually SOLVE the jumble yourself and make ` +
-        `the "answer" letter point to the option whose ordering string ` +
-        `reconstructs the coherent paragraph. The sentence placed first in the ` +
-        `correct order MUST be the standalone opener; a sentence beginning with ` +
-        `a back-reference or connective ("However", "Moreover", "Therefore", ` +
-        `"This", "Such") can NEVER be first. Confirm every option is a ` +
-        `permutation of 1-5 and that exactly one option is correct.`
-      : subtype === "para_completion"
-      ? `\nIn the "prompt", show the paragraph with the final sentence ` +
-        `replaced by "_____". The blank should fall in a place where the ` +
-        `paragraph has built an EXPECTATION (a contrast, a corollary, a ` +
-        `qualification) — and the right option must satisfy that expectation. ` +
-        `Each option is a candidate sentence (full sentence, not a fragment).`
+        `CRITICAL — verify the key: actually SOLVE the jumble yourself before ` +
+        `writing "answer". The sentence placed first in the correct order MUST ` +
+        `be the standalone opener; a sentence beginning with a back-reference ` +
+        `or connective ("However", "Moreover", "Therefore", "This", "Such") ` +
+        `can NEVER be first. Before output, COUNT the sentences in your prompt ` +
+        `- exactly 4, not 5 - and re-derive the ordering from your own ` +
+        `explanation trace: the trace MUST yield the key's option, or redo it.`
       : subtype === "odd_one_out"
       ? `\nFormat each "prompt" exactly like:\n` +
-        `"The five sentences below relate to the same theme. ` +
+        `"The four sentences below relate to the same theme. ` +
         `Identify the ONE sentence that does not fit logically with the ` +
-        `others.\\n1. <sentence>\\n2. <sentence>\\n3. <sentence>\\n` +
-        `4. <sentence>\\n5. <sentence>"\n` +
-        `Each option must be a single digit string "1"-"5" naming the misfit. ` +
-        `The misfit should break the thematic line (advocacy vs description, ` +
-        `cause vs effect, etc.), not the surface vocabulary.`
+        `others.\n1. <sentence>\n2. <sentence>\n` +
+        `3. <sentence>\n4. <sentence>"\n` +
+        `The four options are ALWAYS exactly ["1", "2", "3", "4"] (the ` +
+        `sentence numbers, in order) and "answer" is the LETTER (A, B, C, or ` +
+        `D) of the misfit's number. The "solution" must end by naming that ` +
+        `letter, and exactly ONE explanation begins "Correct." (the misfit's). ` +
+        `The misfit must break the thematic line (advocacy vs description, ` +
+        `cause vs effect, a normative claim among descriptive ones), never ` +
+        `the surface vocabulary - and it must be UNIQUE (exactly one ` +
+        `sentence misfits, the other three cohere).`
       : subtype === "summary"
       ? `\nFormat each "prompt" exactly as: the paragraph, then a NEWLINE, ` +
         `then the literal question "Which of the following best summarises ` +
         `the paragraph above?". Each option is a one- or two-sentence summary.`
+      : subtype === "para_completion"
+      ? `\nThis is sentence-INSERTION, not "finish the paragraph" - the blank ` +
+        `is NOT necessarily the last sentence. Write a 4-6 sentence passage, ` +
+        `remove ONE sentence from ANY position (beginning, middle, or end - ` +
+        `vary this across questions), and mark exactly where it was removed ` +
+        `with "[_____]" left in place of that sentence. Format the "prompt" ` +
+        `as the passage (with the numbered blank inline) followed by a ` +
+        `NEWLINE and the literal question "Which sentence best fits the ` +
+        `blank above?". Each option is a candidate sentence for that ONE ` +
+        `blank - judge each option against BOTH the sentence immediately ` +
+        `before AND the sentence immediately after the blank, not just the ` +
+        `passage's general topic. Do NOT write a numeric/word-problem, a list ` +
+        `of MCQ-style derivations, or anything resembling a quant question - ` +
+        `this is a prose paragraph on a humanities/social-science/policy ` +
+        `topic, same register as the other VA question types.`
       : "";
   return (
     `You are a CAT (Common Admission Test) verbal-ability paper-setter, ` +
@@ -208,7 +225,7 @@ const QA_DEPTH: Record<string, string> = {
   geometry:
     "Mix coordinate geometry with circle/triangle properties, or layer two non-trivial theorems (power-of-a-point, angle bisector, Stewart's, Apollonius, Ptolemy, inscribed-angle). Avoid plug-and-chug Pythagoras unless wrapped in a non-obvious construction.",
   algebra:
-    "Use Vieta's, polynomial-remainder reasoning, functional equations, AM-GM/Cauchy bounds, or non-trivial system-of-equations with a parametric twist. Avoid 'solve 2x+5=11' baby algebra.",
+    "Real CAT algebra, NOT olympiad/JEE algebra: linear/quadratic equations with a word-problem wrapper, simultaneous equations with 3+ unknowns needing elimination insight, arithmetic/geometric progressions, basic inequalities, logs/exponents, or simple functions and maxima-minima (basic AM-GM at most - two terms, never Cauchy-Schwarz). NEVER use functional equations (f(x)+f(g(x))=... type), Vieta's on abstract polynomials, or multi-theorem proof chains - those are JEE/olympiad, not CAT. Avoid 'solve 2x+5=11' baby algebra too; the difficulty comes from a wordy setup and careful reading, not advanced technique.",
   arithmetic:
     "Use multi-stage percentage chains, mixture/alligation with non-uniform proportions, ratio-and-proportion with a hidden invariant, time-speed-distance with relative motion + breaks, or partnership with profit-share twists. Numbers should resist mental arithmetic without insight.",
   number_system:
@@ -217,22 +234,38 @@ const QA_DEPTH: Record<string, string> = {
     "Use combinatorics with restriction (derangements, inclusion-exclusion, with-repetition vs without), probability with conditional / Bayes-style reasoning, sequences with a non-obvious closed form, or set-theory Venn questions where the unknown overlap is the key.",
 };
 
-export function qaPrompt(topic: string, count: number, exemplars: KbItem[]): string {
+const QA_TITA_ADDENDUM = (titaCount: number, count: number) =>
+  `\n\nTITA MIX (real CAT QA is roughly a third TITA, not all MCQ): the LAST ` +
+  `${titaCount} of these ${count} questions must be TITA (type-in-the-answer, ` +
+  `no options), matching real CAT - the answer is typed, not chosen. For each ` +
+  `of those, use this shape instead of the usual one: {"prompt": "...", ` +
+  `"options": [], "format": "tita", "answer": "<the exact numeric/short ` +
+  `answer, e.g. \\"42\\" or \\"3/7\\">", "explanations": [], "solution": ` +
+  `"..."}. "options" MUST be empty for these; do not invent 4 choices for a ` +
+  `TITA question. The first ${count - titaCount} questions stay the normal ` +
+  `4-option MCQ shape.`;
+
+export function qaPrompt(topic: string, count: number, exemplars: KbItem[], titaCount = 0): string {
   const depth = QA_DEPTH[topic] ?? "";
   return (
     `You are a CAT quantitative-ability paper-setter, writing for the ` +
     `99-percentile aspirant. Create ${count} original, exam-quality ` +
-    `multiple-choice questions on the topic: ${topic}.\n\n` +
+    `questions on the topic: ${topic}.\n\n` +
     DIFFICULTY_RUBRIC +
     `\n\nTopic-specific depth requirement:\n${depth}\n\n` +
     `CRITICAL: solve every question yourself step by step and double-check ` +
     `the arithmetic. The "answer" index MUST point to the mathematically ` +
     `correct option, and "solution" must show the working that proves it. ` +
+    `If your computed answer does not EXACTLY match one of the 4 options you ` +
+    `wrote, REDO the numbers until it does - never ship a key your own ` +
+    `working contradicts, and never write "closest option" or "scaling ` +
+    `error" instead of fixing it. ` +
     `Each option must be a CONCRETE numeric or algebraic value (e.g. "24", ` +
     `"3/5", "x = 2"), never a placeholder like "o1". Numbers in the question ` +
     `should NOT be round (avoid 100, 1000) unless the question is about ` +
-    `roundness itself. Use straight ASCII quotes only.\n\n` +
-    EXPLANATION_RUBRIC +
+    `roundness itself. Use straight ASCII quotes only.` +
+    (titaCount > 0 ? QA_TITA_ADDENDUM(titaCount, count) : "") +
+    `\n\n` + EXPLANATION_RUBRIC +
     formatExemplars(exemplars) +
     `\n${SCHEMA_QUESTIONS}`
   );
@@ -276,7 +309,40 @@ export function rcPrompt(passage: string, sourceLabel: string, exemplars: KbItem
   );
 }
 
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Real CAT DILR is ~50% TITA - mix it into the 4-question set instead of
+ * generating all-MCQ sets. Shared shape with QA_TITA_ADDENDUM. */
+const SET_TITA_ADDENDUM = (titaCount: number) =>
+  `\n\nTITA MIX (real CAT DILR is close to half TITA, not all MCQ): exactly ` +
+  `${titaCount} of the 4 questions must be TITA (type-in-the-answer, no ` +
+  `options) - pick whichever question(s) have a single unambiguous typed ` +
+  `answer (a number, a name, a short value). For those, use this shape ` +
+  `instead of the usual one: {"prompt": "...", "options": [], "format": ` +
+  `"tita", "answer": "<the exact value>", "explanations": [], "solution": ` +
+  `"..."}. "options" MUST be empty for a TITA question. The remaining ` +
+  `questions stay the normal 4-option MCQ shape.`;
+
 export function diPrompt(exemplars: KbItem[]): string {
+  const style = pick(["table", "caselet"] as const);
+  const datasetRules =
+    style === "table"
+      ? `Put the full dataset in "context" as a GitHub-Flavoured Markdown ` +
+        `table with concrete numeric cells. Example shape:\n\n` +
+        `| Year | Region A | Region B | Region C |\n|---|---|---|---|\n` +
+        `| 2018 | 124 | 87 | 156 |\n| 2019 | 138 | 93 | * |\n\n` +
+        `Then in the prose below: state the hidden relationship (e.g. ` +
+        `"Region C in 2019 grew by 12.5% over 2018").`
+      : `This is a CASELET set (real CAT format, no table at all - the data ` +
+        `is embedded in prose paragraphs, common in about half of CAT's DI ` +
+        `sets). Put 2-4 short paragraphs of interlocking numeric facts in ` +
+        `"context" (e.g. "Five companies P, Q, R, S, T reported a combined ` +
+        `revenue of 450 crore in 2023. P's revenue was 20% more than Q's, ` +
+        `which..."). No markdown table anywhere - every number must be ` +
+        `stated in a sentence, and the test-taker has to hold several facts ` +
+        `in mind at once to answer any single question.`;
   return (
     `You are a CAT data-interpretation paper-setter, writing for the ` +
     `99-percentile aspirant. Invent an original DI set: a compact dataset ` +
@@ -284,40 +350,47 @@ export function diPrompt(exemplars: KbItem[]): string {
     DIFFICULTY_RUBRIC +
     `\n\nDI-specific rules:\n` +
     `- The dataset must contain a HIDDEN constraint that has to be discovered ` +
-    `before the questions can be answered (e.g. one row's value is given ` +
-    `only via a relationship to others; a column total must be inferred; a ` +
-    `cell is "*" or "X" meaning "deducible from the rest"). State this ` +
-    `constraint in the prose below the table.\n` +
-    `- Questions must require COMBINING at least 2 cells with at least 1 ` +
-    `derived quantity (percentage change, ratio, growth rate, weighted ` +
-    `average). One-cell-lookup questions ("What is February sales of Beta?") ` +
+    `before the questions can be answered (e.g. one value is given only via ` +
+    `a relationship to others, or a total must be inferred). State this ` +
+    `constraint in the prose.\n` +
+    `- Questions must require COMBINING at least 2 facts/cells with at least ` +
+    `1 derived quantity (percentage change, ratio, growth rate, weighted ` +
+    `average). One-fact-lookup questions ("What is February sales of Beta?") ` +
     `are BANNED.\n` +
-    `- Use multi-period or multi-segment data (4-6 rows × 3-4 columns) so ` +
-    `the test-taker has to track which subset applies.\n` +
+    `- Use multi-period or multi-entity data (at least 4-5 distinct data ` +
+    `points) so the test-taker has to track which subset applies.\n` +
     `- At least one question should be a "smart-shortcut" question where ` +
     `the elegant path is much faster than brute computation.\n\n` +
-    `Put the full dataset in "context" as a GitHub-Flavoured Markdown table ` +
-    `with concrete numeric cells. Example shape:\n\n` +
-    `| Year | Region A | Region B | Region C |\n|---|---|---|---|\n` +
-    `| 2018 | 124 | 87 | 156 |\n| 2019 | 138 | 93 | * |\n\n` +
-    `Then in the prose below: state the hidden relationship (e.g. ` +
-    `"Region C in 2019 grew by 12.5% over 2018"). Each question option must ` +
-    `be a CONCRETE value (number, percentage, name, short phrase) — never ` +
-    `a placeholder like "o1".\n\n` +
-    `Solve each question yourself; the "answer" index must be numerically ` +
+    datasetRules +
+    ` Each question option must be a CONCRETE value (number, percentage, ` +
+    `name, short phrase) — never a placeholder like "o1".\n\n` +
+    `Solve each question yourself; the "answer" must be numerically ` +
     `correct.\n\n` + EXPLANATION_RUBRIC +
+    SET_TITA_ADDENDUM(1) +
     `\n\nUse straight ASCII quotes only; escape newlines as \\n inside JSON strings.` +
     formatExemplars(exemplars, 2) +
     `\n${SCHEMA_SET}`
   );
 }
 
+const LR_STYLE: Record<string, string> = {
+  arrangement:
+    "an ARRANGEMENT/ordering puzzle: entities placed in a line, circle, or grid (seating, ranking, scheduling slots).",
+  games_tournament:
+    "a GAMES & TOURNAMENTS puzzle: a knockout/round-robin/league scenario where entities (players/teams) earn scores, win/lose matches, or advance rounds, and the questions ask about final standings, who played whom, or scores under partial information.",
+  distribution:
+    "a DISTRIBUTION/SELECTION puzzle: items, roles, or resources allocated among entities under quota/preference constraints (e.g. who gets which prize, how many units each person receives).",
+  routes_network:
+    "a ROUTES/NETWORK puzzle: entities (cities, people, computers) connected by routes/relationships with costs, distances, or directions, and questions about shortest/valid paths or connectivity under the given constraints.",
+};
+
 export function lrPrompt(exemplars: KbItem[]): string {
+  const styleKey = pick(Object.keys(LR_STYLE));
+  const styleBrief = LR_STYLE[styleKey];
   return (
     `You are a CAT logical-reasoning paper-setter, writing for the ` +
-    `99-percentile aspirant. Invent an original LR set: a self-contained ` +
-    `scenario with a clear set of conditions (arrangement, distribution, ` +
-    `ordering, grouping, matching) plus exactly 4 questions.\n\n` +
+    `99-percentile aspirant. Invent an original LR set: ${styleBrief} plus ` +
+    `exactly 4 questions.\n\n` +
     DIFFICULTY_RUBRIC +
     `\n\nLR-specific rules:\n` +
     `- The set must be a "partial-info" puzzle: the conditions narrow the ` +
@@ -333,7 +406,8 @@ export function lrPrompt(exemplars: KbItem[]): string {
     `analysis.\n` +
     `- Avoid trivial puzzles like "5 people in a row, A is left of B, who ` +
     `sits at position 3?".\n\n` +
-    `In "context": first state the scenario in 1-3 sentences, then list the ` +
+    SET_TITA_ADDENDUM(1) +
+    `\n\nIn "context": first state the scenario in 1-3 sentences, then list the ` +
     `conditions as a numbered list (1., 2., 3., ...). Then briefly outline ` +
     `the solution space (e.g. "there are 3 valid arrangements; in all of ` +
     `them, X sits at position 1"). Solve the scenario yourself first; if no ` +
@@ -346,13 +420,20 @@ export function lrPrompt(exemplars: KbItem[]): string {
   );
 }
 
-/** Independent re-solve, used to verify a generated QA/DI question. */
+/** Independent re-solve, used to verify a generated QA/DI question. The
+ * verifier must be honest, not accommodating: if its computed answer matches
+ * NONE of the options it reports no-match, and if several options are
+ * defensible it reports ambiguous - instead of guessing an index. */
 export function verifyPrompt(prompt: string, options: string[]): string {
   return (
     `Solve this CAT question carefully and independently. Show your working.\n\n` +
     `QUESTION:\n${prompt}\n\nOPTIONS:\n` +
     options.map((o, i) => `${i}: ${o}`).join("\n") +
     `\n\nReturn JSON: {"answer": <0-based index of the correct option>, ` +
-    `"working": "your step-by-step solution"}`
+    `"working": "your step-by-step solution"}. ` +
+    `If your computed answer matches NONE of the options, return {"answer": null, ` +
+    `"working": "...", "issue": "no-match: computed <value>"} instead of ` +
+    `guessing. If the question admits two valid answers or is ambiguous, ` +
+    `return {"answer": null, "issue": "ambiguous: <why>"}.`
   );
 }

@@ -1,0 +1,158 @@
+{
+ "items": [
+  {
+   "type": "para_jumble",
+   "format": "tita",
+   "prompt": "The four sentences (labelled 1, 2, 3 and 4) given below, when properly sequenced, would yield a coherent paragraph. Decide on the proper sequencing of the order of the sentences and key in the sequence of the four numbers as your answer.\n1. Disrupt that flushing, and the residue that should have been swept out — including the protein fragments associated with Alzheimer's — instead accumulates between neurons.\n2. For decades, sleep was treated as little more than a passive idling of the brain, useful for rest but otherwise uninteresting to those studying cognition.\n3. This re-framing has quietly turned the most basic of biological habits into one of the most consequential interventions we know.\n4. That assumption began to crack in the 1990s, when researchers showed that the brain's clearance of metabolic waste depends on a flushing system that runs almost exclusively when we are asleep.",
+   "options": [],
+   "answer": "2413",
+   "explanations": [],
+   "solution": "Opener = A (states the old view of sleep; nothing precedes it). B follows A (\"That assumption\" → the old view). C follows B (\"that flushing\" → the system in B; consequence). Closer = D (\"This re-framing\" — broadening reflection). Sequence A-B-C-D = 2-4-1-3 = 2413."
+  },
+  {
+   "type": "para_jumble",
+   "format": "tita",
+   "prompt": "The four sentences (labelled 1, 2, 3 and 4) given below, when properly sequenced, would yield a coherent paragraph. Decide on the proper sequencing of the order of the sentences and key in the sequence of the four numbers as your answer.\n1. And so free will may not be quite what we once imagined, but the case against it depends on a metaphysics few of its proponents would defend on its own.\n2. But this argument quietly assumes a strange picture of the self — one in which \"I\" am a passenger watching neurons fire, rather than the firing itself.\n3. The standard objection to free will is now almost a cliché: if every thought is the product of prior brain states, then \"I chose\" is an illusion the brain narrates after the fact.\n4. Drop that picture, and the supposed conflict softens; the choices my brain makes ARE the choices I make, because there is no second \"me\" standing apart to be deceived.",
+   "options": [],
+   "answer": "3241",
+   "explanations": [],
+   "solution": "Opener = A (states the standard objection to free will; nothing precedes it). B follows A (\"this argument\" → the objection). C follows B (\"that picture\" → the strange picture of self in B). Closer = D (\"And so\" — final reflection broadening from the argument). Sequence A-B-C-D = 3-2-4-1 = 3241. Opener trap: D sounds thesis-like, but \"And so\" forces it to close."
+  },
+  {
+   "type": "para_jumble",
+   "format": "tita",
+   "prompt": "The four sentences (labelled 1, 2, 3 and 4) given below, when properly sequenced, would yield a coherent paragraph. Decide on the proper sequencing of the order of the sentences and key in the sequence of the four numbers as your answer.\n1. The empire's instrument had become the subcontinent's first mass technology of mobility, and it had done so essentially by accident.\n2. When the East India Company laid India's first rail lines in the 1850s, the official purpose was to move troops and cotton with greater speed than river or road allowed.\n3. Pilgrims who had once walked for weeks to reach Banaras now arrived in three days; villagers crossed entire provinces to find work in the new mill cities.\n4. Almost immediately, however, a less anticipated traffic appeared: ordinary Indians who, given a way to travel cheaply, simply went.",
+   "options": [],
+   "answer": "2431",
+   "explanations": [],
+   "solution": "Opener = A (states the official purpose for which the railways were built; nothing precedes it). B follows A (\"however\" — unanticipated use contrasting the official purpose). C follows B (specific examples of the new traffic — pilgrims, villagers). Closer = D (\"by accident\" — closing reflection on the transformation). Sequence A-B-C-D = 2-4-3-1 = 2431."
+  },
+  {
+   "type": "summary",
+   "prompt": "The passage given below is followed by four alternate summaries. Choose the option that best captures the essence of the passage.\n\nForests have long been imagined as competitive arenas in which trees fight for light, water, and minerals; a closer look beneath the soil suggests the metaphor is incomplete. Threads of fungus weave through roots and link individual trees — often of different species — into networks that ferry sugars and chemical alarms between them. A shaded sapling can receive carbon from neighbours still in sunlight, and an injured tree can warn its kin nearby. The forest has not stopped competing, but it cooperates as well, in ways the older account obscured.",
+   "options": [
+    "Trees in a forest compete with one another for light, water, and minerals, as the older account of forest life rightly emphasised.",
+    "Threads of fungus in the soil have entirely replaced competition with cooperation, since trees now share sugars and chemical alarms across species.",
+    "Fungal networks beneath the soil ferry nutrients and signals between trees across species, so forests cooperate as well as compete — making the older competitive picture incomplete.",
+    "Injured trees release chemical alarms that warn nearby kin of danger, demonstrating that trees have developed sophisticated defensive communication."
+   ],
+   "answer": 2,
+   "explanations": [
+    "Incorrect. The working arrives at option C, not option A.",
+    "Incorrect. The working arrives at option C, not option B.",
+    "Correct. Essence: subterranean fungal networks ferry sugars/signals between trees so forests cooperate as well as compete, incompleting the old competition-only view. Correct = 3.  1: too narrow/reversal → preserves only the older account.  2: overreach + lexical bait → 'entirely replaced' contradicts passage's 'has not stopped competing'.  4: too narrow → seizes one example, drops the central reframing.",
+    "Incorrect. The working arrives at option C, not option D."
+   ],
+   "solution": "Essence: subterranean fungal networks ferry sugars/signals between trees so forests cooperate as well as compete, incompleting the old competition-only view. Correct = 3.  1: too narrow/reversal → preserves only the older account.  2: overreach + lexical bait → 'entirely replaced' contradicts passage's 'has not stopped competing'.  4: too narrow → seizes one example, drops the central reframing."
+  },
+  {
+   "type": "summary",
+   "prompt": "The passage given below is followed by four alternate summaries. Choose the option that best captures the essence of the passage.\n\nFlow, the absorbed state in which time seems to dissolve and effort feels effortless, is often pitched as the reward for matching one's skill to a sufficiently demanding task. Yet the celebration overlooks what flow leaves out. Inside it, the self that compares, doubts, and revises is quieted — useful for the immediate task, but the very faculty by which we judge whether a task is worth doing at all. Athletes and gamblers report flow alike; the experience tells us nothing about the value of what we are absorbed in. To pursue flow as an end is to risk perfecting our engagement with activities we have stopped examining.",
+   "options": [
+    "Chasing flow suppresses the reflective faculty that asks whether an activity is worth doing — risking deeper engagement with pursuits we have stopped examining.",
+    "Flow is the rewarding state achieved when skill matches the demand of a sufficiently challenging task, dissolving the sense of time and effort.",
+    "Athletes and gamblers both report flow, which proves that the experience cannot be used as a guide to the moral worth of an activity.",
+    "Because flow quiets the self that doubts and revises, it must be avoided by anyone seriously committed to ethical reflection on how they spend their lives."
+   ],
+   "answer": 0,
+   "explanations": [
+    "Correct. Essence: flow quiets the very faculty that judges whether an activity is worth doing, so chasing flow risks deepening engagement with unexamined pursuits. Correct = 1.  2: too narrow → only the definition, drops the warning.  3: too narrow/fragment → fixates on the athlete/gambler example, misses the broader caution.  4: overreach/distortion of stance → passage warns against pursuing flow as an end, not against flow itself.",
+    "Incorrect. The working arrives at option A, not option B.",
+    "Incorrect. The working arrives at option A, not option C.",
+    "Incorrect. The working arrives at option A, not option D."
+   ],
+   "solution": "Essence: flow quiets the very faculty that judges whether an activity is worth doing, so chasing flow risks deepening engagement with unexamined pursuits. Correct = 1.  2: too narrow → only the definition, drops the warning.  3: too narrow/fragment → fixates on the athlete/gambler example, misses the broader caution.  4: overreach/distortion of stance → passage warns against pursuing flow as an end, not against flow itself."
+  },
+  {
+   "type": "summary",
+   "prompt": "The passage given below is followed by four alternate summaries. Choose the option that best captures the essence of the passage.\n\nEconomists insist that past expenditures should not influence present decisions: only future costs and benefits matter. People nonetheless persist in failing projects because they have already invested heavily in them, a habit dismissed as the sunk-cost fallacy. The label, however, may flatter the economists more than it explains the behaviour. Honouring past commitments sustains the credibility on which future cooperation depends; quitting too readily teaches partners that one's promises decay with circumstance. What looks irrational at the level of a single decision can be rational at the level of a reputation.",
+   "options": [
+    "People who refuse to abandon failing projects after heavy investment are committing the sunk-cost fallacy, ignoring the principle that only future costs and benefits should guide present choices.",
+    "Persisting with failing projects after heavy investment looks irrational in isolation but can be rational as reputation management, since habitual quitters lose the credibility that sustains future cooperation.",
+    "Economists are wrong to insist that only future costs and benefits should guide decisions, since past expenditures are equally important to consider.",
+    "The sunk-cost fallacy is a label economists invented to flatter themselves, with no real bearing on how people actually behave under conditions of uncertainty."
+   ],
+   "answer": 1,
+   "explanations": [
+    "Incorrect. The working arrives at option B, not option A.",
+    "Correct. Essence: persisting with sunk costs looks irrational per decision but is rational at the reputation level, where credibility hinges on honouring past commitments. Correct = 2.  1: distortion of stance → reproduces the orthodox view the passage is challenging.  3: overreach/reversal → passage doesn't say past expenditures matter for the decision itself, only for reputation.  4: distortion + lexical bait → exaggerates a side remark ('flatters the economists') into the main claim.",
+    "Incorrect. The working arrives at option B, not option C.",
+    "Incorrect. The working arrives at option B, not option D."
+   ],
+   "solution": "Essence: persisting with sunk costs looks irrational per decision but is rational at the reputation level, where credibility hinges on honouring past commitments. Correct = 2.  1: distortion of stance → reproduces the orthodox view the passage is challenging.  3: overreach/reversal → passage doesn't say past expenditures matter for the decision itself, only for reputation.  4: distortion + lexical bait → exaggerates a side remark ('flatters the economists') into the main claim."
+  },
+  {
+   "type": "odd_one_out",
+   "prompt": "Five jumbled sentences (labelled 1, 2, 3, 4 and 5), related to a topic, are given below. Four of them can be put together to form a coherent paragraph. Identify the odd sentence out and select the number of that sentence.",
+   "options": [
+    "Coral reefs, which depend on the same calcifying chemistry, are weakening faster than warming alone would predict.",
+    "Larval oysters in some hatcheries now fail to form viable shells unless the incoming seawater is chemically buffered first.",
+    "Repeated bleaching events, triggered by spikes in sea-surface temperature, have left vast stretches of the Great Barrier Reef stripped of their colour and slow to recover.",
+    "As atmospheric carbon dioxide dissolves into the sea, it forms carbonic acid and steadily lowers the pH of surface waters."
+   ],
+   "answer": 2,
+   "explanations": [
+    "Incorrect. The working arrives at option C, not option A.",
+    "Incorrect. The working arrives at option C, not option B.",
+    "Correct. Coherent paragraph = 4-5-2-1: 4 sets the chemistry (CO2 → carbonic acid → lower pH), 5 names the casualties (calcifiers), 2 gives a specific case (oysters needing buffered water), 1 extends to reefs and signals 'faster than warming alone would predict' — a contrast that depends on the acidification thread. Odd = 3 (thematic-thread mismatch): on-topic about reef stress but driven by warming/bleaching, a different sub-theme from the acidification chemistry the other four share.",
+    "Incorrect. The working arrives at option C, not option D."
+   ],
+   "solution": "Coherent paragraph = 4-5-2-1: 4 sets the chemistry (CO2 → carbonic acid → lower pH), 5 names the casualties (calcifiers), 2 gives a specific case (oysters needing buffered water), 1 extends to reefs and signals 'faster than warming alone would predict' — a contrast that depends on the acidification thread. Odd = 3 (thematic-thread mismatch): on-topic about reef stress but driven by warming/bleaching, a different sub-theme from the acidification chemistry the other four share."
+  },
+  {
+   "type": "odd_one_out",
+   "prompt": "Five jumbled sentences (labelled 1, 2, 3, 4 and 5), related to a topic, are given below. Four of them can be put together to form a coherent paragraph. Identify the odd sentence out and select the number of that sentence.",
+   "options": [
+    "Printers chasing this larger readership pressed authors to write in their mother tongues, accelerating the eclipse of the old scholarly lingua franca.",
+    "Even theological pamphlets, once the unchallenged property of Latin, now appeared in translations a literate artisan could read at home.",
+    "The change reshaped not only what people read but who was permitted, by sheer access, to argue about it.",
+    "The printing press, developed by Gutenberg in the mid-fifteenth century, used movable type to mechanise the production of books."
+   ],
+   "answer": 3,
+   "explanations": [
+    "Incorrect. The working arrives at option D, not option A.",
+    "Incorrect. The working arrives at option D, not option B.",
+    "Incorrect. The working arrives at option D, not option C.",
+    "Correct. Coherent paragraph = 1-2-3-4: 1 dates the vernacular-over-Latin shift, 2 attributes it to printers chasing 'this larger readership', 3 illustrates with the striking case of vernacular theology, 4 names the consequence. Chain held by 'this readership → the change'. Odd = 5 (generality / plausible-opener mismatch): a textbook definition of the press that reads as a natural intro but does not join the specific 16th-century vernacular thread."
+   ],
+   "solution": "Coherent paragraph = 1-2-3-4: 1 dates the vernacular-over-Latin shift, 2 attributes it to printers chasing 'this larger readership', 3 illustrates with the striking case of vernacular theology, 4 names the consequence. Chain held by 'this readership → the change'. Odd = 5 (generality / plausible-opener mismatch): a textbook definition of the press that reads as a natural intro but does not join the specific 16th-century vernacular thread."
+  },
+  {
+   "type": "para_completion",
+   "prompt": "The given sentence is missing in the paragraph below. Decide where it best fits among the options 1, 2, 3, or 4 indicated in the paragraph.\n\nSentence: Once every box had the same dimensions and the same corner fittings, a crane that had never seen a particular ship could lift its cargo without anyone opening anything.\n\nParagraph: The steel box that carries most of the world's goods was not, in itself, much of an invention. ___(1)___. Crates and boxes had been loaded onto ships for centuries, and a larger, stronger crate was an obvious idea that several shipping lines had tried before the 1950s. ___(2)___. What changed the trade was not the box but an agreement about its size. ___(3)___. That agreement was resisted for years by lines that had already built their own boxes and did not want to scrap them. Ports found that the work shifted from hundreds of men on the quay to a handful of crane operators, and cities whose harbours could not fit the new cranes lost their trade to those that could. ___(4)___.",
+   "options": [
+    "Option 4",
+    "Option 1",
+    "Option 2",
+    "Option 3"
+   ],
+   "answer": 3,
+   "explanations": [
+    "Incorrect. The working arrives at option D, not option A.",
+    "Incorrect. The working arrives at option D, not option B.",
+    "Incorrect. The working arrives at option D, not option C.",
+    "Correct. Flow: the box itself is no invention → crates are old → the real change was an agreement on size → what the agreement made possible → resistance to it → ports and cities transformed. Correct = 3. 'An agreement about its size' is immediately cashed out by 'Once every box had the same dimensions and the same corner fittings', and 'That agreement was resisted' then picks the agreement back up after its payoff has been stated.  2: strong runner-up but premature → the paragraph has not yet said that an agreement existed; a sentence about every box sharing dimensions would explain a standard one sentence before the paragraph reveals that a standard, not the box, was the change.  1: premature → nothing about sizes or cranes has been raised; the paragraph is still saying the box itself was unremarkable.  4: too late → the crane's effect on quays and harbours has already been described, so the sentence would explain a consequence after the consequence."
+   ],
+   "solution": "Flow: the box itself is no invention → crates are old → the real change was an agreement on size → what the agreement made possible → resistance to it → ports and cities transformed. Correct = 3. 'An agreement about its size' is immediately cashed out by 'Once every box had the same dimensions and the same corner fittings', and 'That agreement was resisted' then picks the agreement back up after its payoff has been stated.  2: strong runner-up but premature → the paragraph has not yet said that an agreement existed; a sentence about every box sharing dimensions would explain a standard one sentence before the paragraph reveals that a standard, not the box, was the change.  1: premature → nothing about sizes or cranes has been raised; the paragraph is still saying the box itself was unremarkable.  4: too late → the crane's effect on quays and harbours has already been described, so the sentence would explain a consequence after the consequence."
+  },
+  {
+   "type": "para_completion",
+   "prompt": "The given sentence is missing in the paragraph below. Decide where it best fits among the options 1, 2, 3, or 4 indicated in the paragraph.\n\nSentence: The tale, so far as anyone can now find, has no foundation at all.\n\nParagraph: When Britain finally adopted the reformed calendar in 1752, a hundred and seventy years after most of Catholic Europe, eleven days were dropped from September: the 2nd was followed by the 14th. ___(1)___. Schoolbooks for two centuries afterwards told of mobs in the streets demanding their eleven days back. ___(2)___. It rests on a single election print in which a slogan about the days appears on a placard, among a dozen other grievances, and on nothing else. ___(3)___. What the records do show is quieter and more interesting: landlords and tenants arguing about whether a quarter's rent was due on the old date or the new, and workers asking whether a lost eleven days meant eleven days' lost pay. The people, in other words, were not confused about what a calendar was; they were worried about what a contract was. ___(4)___. The myth of the riot survived because it flattered a later age's sense of how much cleverer it had become.",
+   "options": [
+    "Option 4",
+    "Option 2",
+    "Option 1",
+    "Option 3"
+   ],
+   "answer": 1,
+   "explanations": [
+    "Incorrect. The working arrives at option B, not option A.",
+    "Correct. Flow: the 1752 calendar change → the schoolbook tale of mobs → the tale has no foundation → its one flimsy source → what the records actually show → contracts, not calendars → why the myth survived. Correct = 2. 'The tale' is the schoolbook story just told, and 'It rests on a single election print' needs the tale as the antecedent of 'It' and the denial as the claim it supports.  3: strong runner-up but redundant → once the paragraph has said the story rests on one placard 'and on nothing else', a sentence announcing that it has no foundation adds nothing, and 'It rests' would then have to reach back past the given sentence to find 'schoolbooks'.  1: premature → no tale has been told yet for 'The tale' to refer to.  4: too late → the paragraph has moved from the tale's truth to what the records show, and the closing sentence explains the myth's survival, which needs the 'in other words' sentence directly before it.",
+    "Incorrect. The working arrives at option B, not option C.",
+    "Incorrect. The working arrives at option B, not option D."
+   ],
+   "solution": "Flow: the 1752 calendar change → the schoolbook tale of mobs → the tale has no foundation → its one flimsy source → what the records actually show → contracts, not calendars → why the myth survived. Correct = 2. 'The tale' is the schoolbook story just told, and 'It rests on a single election print' needs the tale as the antecedent of 'It' and the denial as the claim it supports.  3: strong runner-up but redundant → once the paragraph has said the story rests on one placard 'and on nothing else', a sentence announcing that it has no foundation adds nothing, and 'It rests' would then have to reach back past the given sentence to find 'schoolbooks'.  1: premature → no tale has been told yet for 'The tale' to refer to.  4: too late → the paragraph has moved from the tale's truth to what the records show, and the closing sentence explains the myth's survival, which needs the 'in other words' sentence directly before it."
+  }
+ ],
+ "source": "Bank /Practice VARC"
+}

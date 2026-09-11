@@ -6,9 +6,10 @@
  * an anti-plagiarism similarity check against the knowledge base, and an
  * independent re-solve pass that verifies QA/DI answers.
  */
-import { config, type Section } from "../config";
+import { config, type Section, type QaTopic } from "../config";
 import { chatJSON } from "../llm";
 import { sampleExemplars, maxSimilarityToKb, LEAK_THRESHOLD } from "../kb";
+import { events } from "../db";
 import { fetchAeonArticle } from "./aeon";
 import {
   vaPrompt,
@@ -116,7 +117,48 @@ function cleanQuestionText(s: string): string {
   return r;
 }
 
+/** TITA routing by subtype. Currently EMPTY: both VA TITA candidates were
+ * tried and reverted - the writer ignores no-options briefs and emits MCQ
+ * shapes anyway (para_jumble returns 4 candidate orderings, odd_one_out
+ * returns digit options), so the briefs now specify the MCQ shapes it
+ * actually produces (see prompts.ts). A question is still TITA when the
+ * writer itself flags "format": "tita" (QA_TITA_ADDENDUM), which the writer
+ * does follow for QA. */
+const ALWAYS_TITA_SUBTYPES = new Set<string>([]);
+
+function normalizeTitaQuestion(raw: any, type: string): GenQuestion | null {
+  if (!raw || typeof raw !== "object") return null;
+  const prompt = cleanQuestionText(
+    String(raw.prompt ?? raw.question ?? raw.text ?? "").trim(),
+  );
+  if (prompt.length < 5) return null;
+  let answer = String(raw.answer ?? raw.correct ?? "").trim();
+  if (!answer || answer.length > 50) return null;
+  if (type === "para_jumble") {
+    // The writer often decorates the ordering ("3-1-4-2", "3, 1, 4, 2",
+    // "order: 3142") - strip everything but digits, then require a true
+    // permutation of 1234. A decorated-but-right key used to be discarded.
+    answer = answer.replace(/[^1-4]/g, "");
+    if (!/^[1-4]{4}$/.test(answer) || new Set(answer).size !== 4) return null;
+  }
+  const solution = cleanQuestionText(
+    String(raw.solution ?? raw.working ?? raw.reasoning ?? "").trim(),
+  );
+  return {
+    id: nextId("q"),
+    type,
+    format: "tita",
+    prompt,
+    options: [],
+    answer,
+    explanations: [],
+    solution,
+  };
+}
+
 function normalizeQuestion(raw: any, type: string): GenQuestion | null {
+  const wantsTita = ALWAYS_TITA_SUBTYPES.has(type) || (raw && typeof raw === "object" && raw.format === "tita");
+  if (wantsTita) return normalizeTitaQuestion(raw, type);
   if (!raw || typeof raw !== "object") return null;
   const prompt = cleanQuestionText(
     String(raw.prompt ?? raw.question ?? raw.text ?? "").trim(),
@@ -143,28 +185,33 @@ function normalizeQuestion(raw: any, type: string): GenQuestion | null {
   const solution = cleanQuestionText(
     String(raw.solution ?? raw.working ?? raw.reasoning ?? "").trim(),
   );
-  // Sanity check: if the solution text names a single option letter clearly
-  // and it disagrees with `answer`, trust the solution working (the LLM more
-  // often emits the right letter inside its prose than in the JSON field).
+  // Three-signal coherence vote. The key can come from three places that must
+  // agree: the `answer` field (A), the one "Correct."-prefixed explanation
+  // (E), and the letter the solution working arrives at (S). Seen live: the
+  // writer sometimes mislabels explanations (A's text discusses C) while the
+  // solution picks C - trusting any single signal ships a scrambled key, and
+  // the old override chain did exactly that. Now: E must be exactly one
+  // (the rubric requires one "Correct." prefix); E+S agreeing against A means
+  // a classic off-by-one in the letter field, trust them; ANY other
+  // disagreement means the explanation block is scrambled - discard, don't guess.
   const lettered = /\b(?:answer|correct option|hence|therefore)\s*(?:is|:)?\s*\(?([A-D])\)?/i.exec(
     solution,
   );
-  let finalAnswer = answer;
-  if (lettered) {
-    const fromSol = lettered[1].toUpperCase().charCodeAt(0) - 65;
-    if (fromSol !== answer) finalAnswer = fromSol;
-  }
-  // Strongest cross-check: per-option explanations. Writers reliably prefix the
-  // correct option's explanation with "Correct" and the others with "Incorrect".
-  // If EXACTLY ONE explanation is so labelled and it disagrees with the current
-  // answer, trust it. This catches the off-by-one / 1-based-index key bug where
-  // the stored `answer` lands one option past the truly-correct one.
+  const solSignal = lettered ? lettered[1].toUpperCase().charCodeAt(0) - 65 : null;
   const correctByExp = explanations.reduce<number[]>((acc, e, i) => {
     if (/^\s*correct\b/i.test(e)) acc.push(i);
     return acc;
   }, []);
-  if (correctByExp.length === 1 && correctByExp[0] !== finalAnswer) {
-    finalAnswer = correctByExp[0];
+  if (correctByExp.length !== 1) return null;
+  const expSignal = correctByExp[0];
+  let finalAnswer: number;
+  if (solSignal === null) {
+    if (expSignal !== answer) return null;
+    finalAnswer = answer;
+  } else if (expSignal === solSignal) {
+    finalAnswer = expSignal;
+  } else {
+    return null;
   }
   return {
     id: nextId("q"),
@@ -177,10 +224,71 @@ function normalizeQuestion(raw: any, type: string): GenQuestion | null {
   };
 }
 
+/** Deterministic junk filter for writer output. Catches the failure shapes the
+ * writer actually produces (confirmed live): empty explanations, leaked
+ * self-correction ("Oops", "Wait compute:"), solutions that admit the answer
+ * isn't among the options, and solutions cut off mid-derivation. None of
+ * these can ever survive the judge, so dropping them here (with a warning)
+ * lets the unit retry instead of wasting a full judge round. Returns the
+ * reason, or null when the question looks sane. */
+const LEAK_MARKERS =
+  /\b(oops|wait[,.]|hmm|actually[,.]|let me (recalculate|redo|recheck|recompute)|i (made|make) a mistake|my (mistake|error)|correction:|not (an|among the|one of the) option|closest option|scaling error|none of the (options|above)|no (valid|correct) option|doesn'?t match|does not match)\b/i;
+
+function sanityRejectReason(q: GenQuestion): string | null {
+  if (!q.prompt || q.prompt.length < 10) return "empty prompt";
+  if (q.format !== "tita") {
+    if (q.options.length !== 4 || q.options.some((o) => !o || o.length < 1))
+      return "missing options";
+    if (
+      q.explanations.length !== 4 ||
+      q.explanations.some((e) => !e || e.trim().length < 10)
+    )
+      return "empty/thin explanation";
+  } else if (!String(q.answer).trim()) {
+    return "empty TITA answer";
+  }
+  if (!q.solution || q.solution.trim().length < 60)
+    return "missing/thin solution";
+  const text = `${q.solution}\n${q.explanations.join("\n")}`;
+  const leak = LEAK_MARKERS.exec(text);
+  if (leak) return `reasoning-leak/admission ("${leak[0].slice(0, 40)}")`;
+  // A complete solution names the answer at the end ("Answer A", "answer is
+  // option C", "Hence option A is correct"). A solution with no such close
+  // was cut off mid-derivation (seen live: "...radius 22.5 → A=4"). TITA
+  // solutions state a typed value instead of a letter, so accept the answer
+  // string itself appearing in the working (e.g. the "3142" ordering).
+  const statesAnswer =
+    q.format === "tita"
+      ? /answ/i.test(q.solution) || q.solution.includes(String(q.answer))
+      : /answ/i.test(q.solution) ||
+        /(therefore|hence|thus)[^.]{0,40}[A-D]\)?/i.test(q.solution);
+  if (!statesAnswer) return "solution never states the answer (truncated?)";
+  return null;
+}
+
 // ---- standalone-question sections (VA, QA) --------------------------------
 interface Plan {
   subtype: string;
   count: number;
+  /** Of `count` questions, this many should be TITA (real CAT QA is a mix of
+   * MCQ and TITA within the same section - about 8 of 22, ~36%). 0/undefined
+   * for a step that's entirely MCQ (the VA default). */
+  titaCount?: number;
+}
+
+/** The judge's own rejection reasons from this section's last few attempts,
+ * formatted as an explicit "do not repeat these" block prepended to the next
+ * generation prompt. Without this, every attempt starts from zero and the
+ * writer keeps making the exact same mistakes the judge already flagged. */
+async function avoidPastMistakesBlock(section: Section): Promise<string> {
+  const notes = await events.recentRejectionNotes(section, 3).catch(() => []);
+  if (notes.length === 0) return "";
+  return (
+    `\n\nA PREVIOUS ATTEMPT FOR THIS SECTION WAS REJECTED FOR THESE EXACT ` +
+    `REASONS - fix all of them, they must not repeat:\n` +
+    notes.map((n) => `- ${n}`).join("\n") +
+    `\n`
+  );
 }
 
 /** Sleep between Groq calls to stay under free-tier RPM/TPM limits.
@@ -196,9 +304,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function genQuestionStep(
   section: Section,
   step: Plan,
-  promptFn: (subtype: string, count: number, ex: any[]) => string,
+  promptFn: (subtype: string, count: number, ex: any[], titaCount?: number) => string,
   warnings: string[],
   model?: string,
+  temperature = 0.85,
 ): Promise<GenQuestion[]> {
   const items: GenQuestion[] = [];
   try {
@@ -206,9 +315,10 @@ async function genQuestionStep(
       subtype: step.subtype,
       limit: 3,
     });
+    const avoid = await avoidPastMistakesBlock(section);
     const data = await chatJSON<{ questions?: any[] }>(
-      promptFn(step.subtype, step.count, exemplars),
-      { temperature: 0.85, model },
+      promptFn(step.subtype, step.count, exemplars, step.titaCount) + avoid,
+      { temperature, model },
     );
     const raw = Array.isArray(data?.questions) ? data.questions : [];
     let kept = 0;
@@ -217,6 +327,11 @@ async function genQuestionStep(
       const norm = normalizeQuestion(q, step.subtype);
       if (!norm) {
         warnings.push(`malformed ${step.subtype} question discarded`);
+        continue;
+      }
+      const insane = sanityRejectReason(norm);
+      if (insane) {
+        warnings.push(`${step.subtype} question failed sanity check and was discarded (${insane})`);
         continue;
       }
       if ((await maxSimilarityToKb(norm.prompt, section)) > LEAK_THRESHOLD) {
@@ -239,15 +354,25 @@ async function genQuestionStep(
 async function genQuestions(
   section: Section,
   plan: Plan[],
-  promptFn: (subtype: string, count: number, ex: any[]) => string,
+  promptFn: (subtype: string, count: number, ex: any[], titaCount?: number) => string,
   warnings: string[],
 ): Promise<GenQuestion[]> {
-  const items: GenQuestion[] = [];
-  for (const [stepIdx, step] of plan.entries()) {
-    if (stepIdx > 0) await sleep(PACE_MS);
-    items.push(...(await genQuestionStep(section, step, promptFn, warnings)));
-  }
-  return items;
+  // Steps are independent (different subtypes, no shared state) - run them
+  // concurrently. Confirmed via timing (LLM_DEBUG_DUMP-adjacent instrumentation)
+  // that 5 sequential writer calls summed to 400s+ on Groq's on_demand tier,
+  // well past any reasonable per-set budget, while each individual call only
+  // takes single-digit to low tens of seconds most of the time - the old
+  // PACE_MS stagger was serializing work that didn't need to be serial. The
+  // 4-key round-robin in groqChat naturally spreads concurrent calls across
+  // keys instead of hammering one.
+  // QA writes at a cooler temperature: at 0.85 the writer's arithmetic slips
+  // and it flails on broken setups instead of redoing them; 0.6 keeps variety
+  // while making careful step-by-step working much more reliable.
+  const temperature = section === "QA" ? 0.6 : 0.85;
+  const results = await Promise.all(
+    plan.map((step) => genQuestionStep(section, step, promptFn, warnings, undefined, temperature)),
+  );
+  return results.flat();
 }
 
 /** Re-solve a question independently; returns true if the answer holds.
@@ -258,13 +383,23 @@ async function verifyAnswer(
   context?: string,
   model?: string,
 ): Promise<boolean> {
+  // This re-solve path assumes a 4-option MCQ (picks a 0-3 index) - it
+  // doesn't apply to a TITA question's typed answer, so skip and trust the
+  // writer's own answer key instead of miscomparing against garbage.
+  if (q.format === "tita") return true;
   try {
     const prompt =
       context && context.trim() ? `${context.trim()}\n\n${q.prompt}` : q.prompt;
-    const v = await chatJSON<{ answer?: unknown }>(
+    const v = await chatJSON<{ answer?: unknown; issue?: unknown }>(
       verifyPrompt(prompt, q.options),
       { temperature: 0, model },
     );
+    // The verifier may report no-match (its computed answer fits none of the
+    // options) or ambiguous (several options defensible) instead of an index.
+    // Either is a hard drop: a shipped key its own re-solve disowns is exactly
+    // the "solution contradicts answer" junk the judge keeps rejecting.
+    if (v && typeof v.issue === "string" && v.issue.trim().length > 0)
+      return false;
     const verified = coerceAnswer(v?.answer, 4);
     return verified === null || verified === q.answer;
   } catch {
@@ -541,7 +676,8 @@ async function genRCUnit(
   }
   try {
     const ex = await sampleExemplars("RC", { subtype: "rc", limit: 1 });
-    const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex), {
+    const avoid = await avoidPastMistakesBlock("RC");
+    const data = await chatJSON<any>(rcPrompt(got.passage, got.source, ex) + avoid, {
       temperature: 0.7,
       model,
     });
@@ -586,7 +722,8 @@ async function genContextUnit(
 ): Promise<GenSubSet | null> {
   try {
     const ex = await sampleExemplars(section, { limit: 2 });
-    const data = await chatJSON<any>(promptFn(ex), { temperature: 0.8, model });
+    const avoid = await avoidPastMistakesBlock(section);
+    const data = await chatJSON<any>(promptFn(ex) + avoid, { temperature: 0.8, model });
     const set = normalizeSet(data, section.toLowerCase(), label, "", "mock-derived", warnings);
     if (set.questions.length) return set;
     warnings.push(`${section} set had no valid questions`);
@@ -636,16 +773,22 @@ async function verifyDiSet(
 }
 
 // ---- public entry point ---------------------------------------------------
+// The 4 real CAT VA genres: para_jumble (TITA), summary, odd_one_out,
+// para_completion (insert a missing sentence into a blank WITHIN the
+// passage - not "finish the final sentence", which is a different, wrong
+// task the writer kept confusing this with).
 const VA_PLAN: Plan[] = [
   { subtype: "para_jumble", count: 3 },
-  { subtype: "para_completion", count: 3 },
+  { subtype: "summary", count: 3 },
   { subtype: "odd_one_out", count: 2 },
-  { subtype: "summary", count: 2 },
+  { subtype: "para_completion", count: 2 },
 ];
+// Real CAT QA is ~36% TITA (8 of 22), not all MCQ - mix one TITA question
+// into arithmetic and algebra, the two highest-weighted topics.
 const QA_PLAN: Plan[] = [
   { subtype: "geometry", count: 2 },
-  { subtype: "algebra", count: 2 },
-  { subtype: "arithmetic", count: 3 },
+  { subtype: "algebra", count: 2, titaCount: 1 },
+  { subtype: "arithmetic", count: 3, titaCount: 1 },
   { subtype: "number_system", count: 2 },
   { subtype: "modern_math", count: 1 },
 ];
@@ -657,6 +800,14 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
     model:
       config.llm.provider === "groq"
         ? config.llm.groqModel
+        : config.llm.provider === "zai"
+        ? config.llm.zaiModel
+        : config.llm.provider === "deepseek"
+        ? config.llm.deepseekModel
+        : config.llm.provider === "openrouter"
+        ? config.llm.openrouterModel
+        : config.llm.provider === "gemini"
+        ? config.llm.geminiModel
         : config.llm.ollamaModel,
     warnings,
   };
@@ -668,12 +819,16 @@ export async function generateSet(section: Section): Promise<GeneratedSet> {
 
   if (section === "QA") {
     const items = await genQuestions("QA", QA_PLAN, qaPrompt, warnings);
-    const verified: GenQuestion[] = [];
-    for (const [vi, q] of items.entries()) {
-      if (vi > 0) await sleep(500);
-      if (await verifyAnswer(q)) verified.push(q);
-      else warnings.push(`QA question failed answer verification and was dropped`);
-    }
+    // Each question's answer-verification is independent of the others, so
+    // run them concurrently instead of one at a time - confirmed via timing
+    // that a single verify call can take 150s+ under load, and eight of
+    // those back to back was blowing the whole per-set budget for no reason.
+    const oks = await Promise.all(items.map((q) => verifyAnswer(q)));
+    const verified = items.filter((_, vi) => {
+      if (oks[vi]) return true;
+      warnings.push(`QA question failed answer verification and was dropped`);
+      return false;
+    });
     return { section, kind: "questions", items: verified, meta };
   }
 
@@ -709,6 +864,73 @@ export const SECTION_UNITS: Record<Section, number> = {
   LR: 2, // 2 reasoning sets
 };
 
+/** A topic drill is 10 MCQ questions of ONE QA topic, built as 2 units of 5
+ * (each unit fits a serverless time cap). All-MCQ by design: TITA belongs to
+ * full mixed sets, and per-topic answer-verification only handles MCQ. */
+export const TOPIC_UNITS = 2;
+export const TOPIC_UNIT_SIZE = 5;
+
+/** Generate a full topic drill in one go (local/dev path - the incremental
+ * builder calls generateUnit per unit instead). */
+export async function generateTopicSet(
+  topic: QaTopic,
+  model?: string,
+): Promise<GeneratedSet> {
+  const warnings: string[] = [];
+  const steps: Plan[] = [
+    { subtype: topic, count: TOPIC_UNIT_SIZE },
+    { subtype: topic, count: TOPIC_UNIT_SIZE },
+  ];
+  const results = await Promise.all(
+    steps.map((step) => genQuestionStep("QA", step, qaPrompt, warnings, model, 0.6)),
+  );
+  const items = results.flat();
+  const oks = await Promise.all(items.map((q) => verifyAnswer(q, undefined)));
+  const verified = items.filter((_, vi) => {
+    if (oks[vi]) return true;
+    warnings.push(`QA question failed answer verification and was dropped`);
+    return false;
+  });
+  return {
+    section: "QA",
+    kind: "questions",
+    items: verified,
+    meta: {
+      generatedAt: new Date().toISOString(),
+      model:
+        model ??
+        (config.llm.provider === "groq"
+          ? config.llm.groqModel
+          : config.llm.provider === "zai"
+          ? config.llm.zaiModel
+          : config.llm.provider === "deepseek"
+          ? config.llm.deepseekModel
+          : config.llm.provider === "openrouter"
+          ? config.llm.openrouterModel
+          : config.llm.provider === "gemini"
+          ? config.llm.geminiModel
+          : config.llm.ollamaModel),
+      warnings,
+    },
+  };
+}
+
+/** Expected item count for the `unitIndex`-th standalone unit (VA/QA/drills).
+ * The builder uses it to tell a FULL unit from a partial one: partial units
+ * re-roll like empty ones instead of advancing short (short units are what
+ * kept assembling sub-size sets that died pre-judge). Null for context-set
+ * sections (RC/DI/LR use a per-sub-set question minimum instead). */
+export function unitExpectedCount(
+  section: Section,
+  unitIndex: number,
+  topic?: QaTopic,
+): number | null {
+  if (topic) return TOPIC_UNIT_SIZE;
+  if (section === "VA") return VA_PLAN[unitIndex]?.count ?? null;
+  if (section === "QA") return QA_PLAN[unitIndex]?.count ?? null;
+  return null;
+}
+
 /** "questions" sections accumulate `items`; "sets" sections accumulate `sets`. */
 export function sectionKind(section: Section): "questions" | "sets" {
   return section === "VA" || section === "QA" ? "questions" : "sets";
@@ -724,24 +946,45 @@ export async function generateUnit(
   accumulated: { items?: GenQuestion[]; sets?: GenSubSet[] },
   warnings: string[],
   model?: string,
+  topic?: QaTopic,
 ): Promise<{ items?: GenQuestion[]; set?: GenSubSet }> {
-  if (section === "VA") {
-    return { items: await genQuestionStep("VA", VA_PLAN[unitIndex], vaPrompt, warnings, model) };
-  }
-  if (section === "QA") {
-    const raw = await genQuestionStep("QA", QA_PLAN[unitIndex], qaPrompt, warnings, model);
+  // Topic drills (QA only): every unit is TOPIC_UNIT_SIZE MCQ questions of
+  // the one topic. Verified like normal QA units; sanity drops stick, and a
+  // flaky verifier never empties the unit on its own.
+  if (topic) {
+    const raw = await genQuestionStep(
+      "QA",
+      { subtype: topic, count: TOPIC_UNIT_SIZE },
+      qaPrompt,
+      warnings,
+      model,
+      0.6,
+    );
     const verified: GenQuestion[] = [];
     for (const [vi, q] of raw.entries()) {
       if (vi > 0) await sleep(500);
       if (await verifyAnswer(q, undefined, model)) verified.push(q);
       else warnings.push("QA question failed answer verification and was dropped");
     }
-    // Don't let a weak verifier empty or over-prune a unit (which starved the
-    // 10-question total below the size guard). Keep the pruned set only if it
-    // dropped at most one question and isn't empty; otherwise keep the raw unit
-    // and let the judge gate answer-correctness.
-    const items =
-      verified.length > 0 && raw.length - verified.length <= 1 ? verified : raw;
+    return { items: verified.length > 0 ? verified : raw };
+  }
+  if (section === "VA") {
+    return { items: await genQuestionStep("VA", VA_PLAN[unitIndex], vaPrompt, warnings, model) };
+  }
+  if (section === "QA") {
+    const raw = await genQuestionStep("QA", QA_PLAN[unitIndex], qaPrompt, warnings, model, 0.6);
+    const verified: GenQuestion[] = [];
+    for (const [vi, q] of raw.entries()) {
+      if (vi > 0) await sleep(500);
+      if (await verifyAnswer(q, undefined, model)) verified.push(q);
+      else warnings.push("QA question failed answer verification and was dropped");
+    }
+    // Verifier drops are high-signal now (explicit no-match/ambiguous or a
+    // confident disagree), so they stick - resurrecting them is what kept
+    // pooling keys the writer's own re-solve disowned. Only guard against a
+    // flaky verifier emptying the whole unit: then keep the raw (already
+    // sanity-filtered) unit and let the size guard + judge decide.
+    const items = verified.length > 0 ? verified : raw;
     return { items };
   }
   if (section === "RC") {

@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { config, SECTIONS, type Section } from "@/lib/config";
-import { sets } from "@/lib/db";
-import { generateSet } from "@/lib/generate";
-
-// On Groq, a set generates in 10-30s; Hobby max is 300s.
-export const maxDuration = 300;
+import { config, SECTIONS, QA_TOPICS, type Section, type QaTopic } from "@/lib/config";
+import { generateOneForPool } from "@/lib/generate/pool";
 
 /**
  * Worker-only endpoint: generate ONE set for the given section and add it to
- * the pool. Authenticated with the shared WORKER_TOKEN.
+ * the pool (judge-gated - see generateOneForPool). Authenticated with the
+ * shared WORKER_TOKEN.
  */
 export async function POST(req: Request) {
   const auth = req.headers.get("authorization") || "";
@@ -20,21 +17,31 @@ export async function POST(req: Request) {
   if (!section || !SECTIONS.includes(section)) {
     return NextResponse.json({ error: "Bad section." }, { status: 400 });
   }
-  try {
-    const generated = await generateSet(section);
-    const id = await sets.insert(section, generated, "worker");
-    return NextResponse.json({
-      id,
-      section,
-      warnings: generated.meta.warnings,
-    });
-  } catch (e) {
-    return NextResponse.json(
-      {
-        error:
-          "Generation failed: " + (e instanceof Error ? e.message : String(e)),
-      },
-      { status: 502 },
-    );
+  const topicParam = (url.searchParams.get("topic") || "").toLowerCase();
+  let topic: QaTopic | undefined;
+  if (topicParam) {
+    if (section !== "QA" || !(QA_TOPICS as readonly string[]).includes(topicParam)) {
+      return NextResponse.json({ error: "Bad topic (QA drills only)." }, { status: 400 });
+    }
+    topic = topicParam as QaTopic;
   }
+
+  const result = await generateOneForPool(section, "worker", { debug: true, topic });
+  if (!result.accepted) {
+    return NextResponse.json({
+      rejected: true,
+      section,
+      ...(topic ? { topic } : {}),
+      score: result.score,
+      notes: result.notes,
+      warnings: result.warnings,
+    });
+  }
+  return NextResponse.json({
+    id: result.id,
+    section,
+    ...(topic ? { topic } : {}),
+    score: result.score,
+    warnings: result.warnings,
+  });
 }

@@ -6,8 +6,12 @@ import {
   validateUsername,
   validatePassword,
 } from "@/lib/auth";
+import { checkRateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
+  const rl = checkRateLimit(`register:${clientIp(req)}`, 5, 60 * 60_000);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSec);
+
   let body: { username?: unknown; password?: unknown };
   try {
     body = await req.json();

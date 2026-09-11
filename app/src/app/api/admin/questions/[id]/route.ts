@@ -4,12 +4,17 @@ import { sets } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** Validate a question object enough to keep the practice/review pages safe. */
+/** Validate a question object enough to keep the practice/review pages safe.
+ * TITA questions (format: "tita" - para_jumble, some QA questions) have a
+ * different valid shape: no options, a typed string answer. */
 function badQuestion(q: unknown): boolean {
   if (!q || typeof q !== "object") return true;
   const o = q as Record<string, unknown>;
+  if (typeof o.prompt !== "string") return true;
+  if (o.format === "tita") {
+    return typeof o.answer !== "string" || o.answer.trim().length === 0;
+  }
   return (
-    typeof o.prompt !== "string" ||
     !Array.isArray(o.options) ||
     o.options.length !== 4 ||
     !Number.isInteger(o.answer) ||
@@ -46,6 +51,19 @@ function validatePayload(p: unknown): string | null {
 function parseId(raw: string): number | null {
   const id = parseInt(raw, 10);
   return Number.isFinite(id) ? id : null;
+}
+
+/** Admin-only: approve a 'pending' set into the live pool, after review. */
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const user = await currentUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Admin only." }, { status: 403 });
+  }
+  const id = parseId(params.id);
+  if (id === null) return NextResponse.json({ error: "Bad id." }, { status: 400 });
+
+  await sets.approve(id);
+  return NextResponse.json({ ok: true });
 }
 
 /** Admin-only: replace a set's payload (structured editor save). */

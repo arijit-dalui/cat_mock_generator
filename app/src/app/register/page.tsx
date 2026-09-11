@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ThemeToggle from "../components/ThemeToggle";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -36,9 +37,12 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <div className="card p-8">
-        <h1 className="text-2xl font-bold text-slate-900">Create your account</h1>
+    <main className="app-shell min-h-screen px-6 py-6">
+      <div className="mx-auto flex max-w-md justify-end"><ThemeToggle /></div>
+      <div className="mx-auto flex min-h-[calc(100dvh-6rem)] max-w-md flex-col justify-center">
+      <div className="card p-8 sm:p-10">
+        <p className="pill">Start your practice log</p>
+        <h1 className="display-type mt-3 text-4xl font-bold text-slate-900">Create your account</h1>
         <p className="mt-1 text-sm text-slate-500">
           Pick a unique username to start practising.
         </p>
@@ -75,6 +79,13 @@ export default function RegisterPage() {
             Log in
           </Link>
         </p>
+        <p className="mt-2 text-xs text-slate-400">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="text-brand hover:underline">Terms</Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="text-brand hover:underline">Privacy Policy</Link>.
+        </p>
+      </div>
       </div>
     </main>
   );
